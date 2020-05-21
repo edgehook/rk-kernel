@@ -463,6 +463,10 @@ static int rockchip_i2s_dai_probe(struct snd_soc_dai *dai)
 {
 	struct rk_i2s_dev *i2s = snd_soc_dai_get_drvdata(dai);
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	clk_prepare_enable(i2s->hclk);
+	clk_prepare_enable(i2s->mclk);
+#endif
 	dai->capture_dma_data = &i2s->capture_dma_data;
 	dai->playback_dma_data = &i2s->playback_dma_data;
 
@@ -641,17 +645,23 @@ static int rockchip_i2s_probe(struct platform_device *pdev)
 	i2s->reset_m = devm_reset_control_get(&pdev->dev, "reset-m");
 	i2s->reset_h = devm_reset_control_get(&pdev->dev, "reset-h");
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	clk_disable_unprepare(i2s->mclk);
+	clk_disable_unprepare(i2s->hclk);
+#endif
 	/* try to prepare related clocks */
 	i2s->hclk = devm_clk_get(&pdev->dev, "i2s_hclk");
 	if (IS_ERR(i2s->hclk)) {
 		dev_err(&pdev->dev, "Can't retrieve i2s bus clock\n");
 		return PTR_ERR(i2s->hclk);
 	}
+#ifndef CONFIG_ARCH_ADVANTECH
 	ret = clk_prepare_enable(i2s->hclk);
 	if (ret) {
 		dev_err(i2s->dev, "hclock enable failed %d\n", ret);
 		return ret;
 	}
+#endif
 
 	i2s->mclk = devm_clk_get(&pdev->dev, "i2s_clk");
 	if (IS_ERR(i2s->mclk)) {
@@ -770,6 +780,19 @@ static int rockchip_i2s_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_ARCH_ADVANTECH
+static void rockchip_i2s_shutdown(struct platform_device *pdev)
+{
+	struct rk_i2s_dev *i2s = dev_get_drvdata(&pdev->dev);
+	pm_runtime_disable(&pdev->dev);
+	if (!pm_runtime_status_suspended(&pdev->dev))
+		i2s_runtime_suspend(&pdev->dev);
+
+	clk_disable_unprepare(i2s->mclk);
+	clk_disable_unprepare(i2s->hclk);
+}
+#endif
+
 #ifdef CONFIG_PM_SLEEP
 static int rockchip_i2s_suspend(struct device *dev)
 {
@@ -804,13 +827,33 @@ static const struct dev_pm_ops rockchip_i2s_pm_ops = {
 static struct platform_driver rockchip_i2s_driver = {
 	.probe = rockchip_i2s_probe,
 	.remove = rockchip_i2s_remove,
+#ifdef CONFIG_ARCH_ADVANTECH
+	.shutdown = rockchip_i2s_shutdown,
+#endif
+
 	.driver = {
 		.name = DRV_NAME,
 		.of_match_table = of_match_ptr(rockchip_i2s_match),
 		.pm = &rockchip_i2s_pm_ops,
 	},
 };
+
+#ifdef CONFIG_ARCH_ADVANTECH
+static int __init rockchip_i2s_driver_init(void)
+{
+	return platform_driver_register(&rockchip_i2s_driver);
+}
+
+static void __exit rockchip_i2s_driver_exit(void)
+{
+	platform_driver_unregister(&rockchip_i2s_driver);
+}
+
+late_initcall(rockchip_i2s_driver_init);
+module_exit(rockchip_i2s_driver_exit);
+#else
 module_platform_driver(rockchip_i2s_driver);
+#endif
 
 MODULE_DESCRIPTION("ROCKCHIP IIS ASoC Interface");
 MODULE_AUTHOR("jianqun <jay.xu@rock-chips.com>");
