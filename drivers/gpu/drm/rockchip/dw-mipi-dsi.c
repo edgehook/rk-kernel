@@ -16,6 +16,9 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
+#ifdef CONFIG_ROCKCHIP_DW_MIPI_DSI_2_LVDS
+#include <linux/gpio/consumer.h>
+#endif
 #include <linux/mfd/syscon.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_crtc.h>
@@ -281,7 +284,15 @@ struct dw_mipi_dsi {
 	struct regmap *regmap;
 	struct clk *pclk;
 	struct clk *h2p_clk;
+#ifdef CONFIG_ROCKCHIP_DW_MIPI_DSI_2_LVDS
+	struct gpio_desc *reset_gpio;
+	struct gpio_desc *enable_gpio;
+#endif
 	int irq;
+#ifdef CONFIG_ARCH_ADVANTECH
+	struct regulator *power_supply;
+	struct regulator *power_io_supply;
+#endif
 	struct dw_mipi_dsi *master;
 	struct dw_mipi_dsi *slave;
 	struct mutex mutex;
@@ -659,6 +670,69 @@ static void dw_mipi_dsi_phy_pll_init(struct dw_mipi_dsi *dsi)
 	regmap_write(dphy->regmap, 0x18, FEEDBACK_DIV_LO(m));
 	regmap_write(dphy->regmap, 0x18, FEEDBACK_DIV_HI(m >> 5));
 }
+
+#ifdef CONFIG_ROCKCHIP_DW_MIPI_DSI_2_LVDS
+static void dsi_external_bradge_power_on(struct dw_mipi_dsi *dsi)
+{
+#ifdef CONFIG_ARCH_ADVANTECH
+	if(!IS_ERR(dsi->power_io_supply)) {
+		regulator_enable(dsi->power_io_supply);
+		usleep_range(1000, 2000);
+	}
+
+	if(!IS_ERR(dsi->power_supply)) {
+		regulator_enable(dsi->power_supply);
+		usleep_range(1000, 2000);
+	}
+#endif
+    if (dsi->enable_gpio) {
+        gpiod_direction_output(dsi->enable_gpio, 1);
+#ifdef CONFIG_ARCH_ADVANTECH
+        //usleep_range(10000, 20000);
+        msleep(10);
+#else
+		usleep_range(1000, 2000);
+#endif
+        }
+    if (dsi->reset_gpio) {
+        gpiod_direction_output(dsi->reset_gpio, 0);
+        usleep_range(1000, 2000);
+        gpiod_direction_output(dsi->reset_gpio, 1);
+#ifndef CONFIG_ARCH_ADVANTECH
+        usleep_range(1000, 2000);
+        gpiod_direction_output(dsi->reset_gpio, 0);
+        usleep_range(1000, 2000);
+#endif
+        }
+}
+
+static void dsi_external_bradge_power_off(struct dw_mipi_dsi *dsi)
+{
+#ifdef CONFIG_ARCH_ADVANTECH
+	if (dsi->reset_gpio)
+	{
+		gpiod_direction_output(dsi->reset_gpio, 0);
+		msleep(1);
+	}
+#else
+    if (dsi->reset_gpio)
+        gpiod_direction_output(dsi->reset_gpio, 1);
+#endif
+
+    if (dsi->enable_gpio)
+        gpiod_direction_output(dsi->enable_gpio, 0);
+
+#ifdef CONFIG_ARCH_ADVANTECH
+	if(!IS_ERR(dsi->power_supply)) {
+		regulator_disable(dsi->power_supply);
+	}
+	msleep(1);
+	if(!IS_ERR(dsi->power_io_supply)) {
+		regulator_disable(dsi->power_io_supply);
+	}
+#endif
+}
+#endif
 
 static void dw_mipi_dsi_phy_init(struct dw_mipi_dsi *dsi)
 {
@@ -1149,6 +1223,9 @@ static void dw_mipi_dsi_post_disable(struct dw_mipi_dsi *dsi)
 
 	mutex_unlock(&dsi->mutex);
 
+#ifdef CONFIG_ROCKCHIP_DW_MIPI_DSI_2_LVDS
+	dsi_external_bradge_power_off(dsi);
+#endif
 	if (dsi->master)
 		dw_mipi_dsi_post_disable(dsi->master);
 }
@@ -1205,6 +1282,9 @@ static void dw_mipi_dsi_pre_enable(struct dw_mipi_dsi *dsi)
 	reset_control_deassert(dsi->rst);
 	udelay(10);
 
+#ifdef CONFIG_ROCKCHIP_DW_MIPI_DSI_2_LVDS
+	dsi_external_bradge_power_on(dsi);
+#endif
 	dw_mipi_dsi_host_init(dsi);
 	mipi_dphy_init(dsi);
 	mipi_dphy_power_on(dsi);
@@ -1959,6 +2039,26 @@ static int dw_mipi_dsi_probe(struct platform_device *pdev)
 	dsi->dev = dev;
 	dsi->pdata = of_device_get_match_data(dev);
 	platform_set_drvdata(pdev, dsi);
+
+#ifdef CONFIG_ARCH_ADVANTECH
+	dsi->power_supply = devm_regulator_get(dev, "power");
+	dsi->power_io_supply = devm_regulator_get(dev, "power-io");
+#endif
+#ifdef CONFIG_ROCKCHIP_DW_MIPI_DSI_2_LVDS
+	dsi->enable_gpio = devm_gpiod_get_optional(dev, "enable", 0);
+	if (IS_ERR(dsi->enable_gpio)) {
+	ret = PTR_ERR(dsi->enable_gpio);
+	dev_err(dev, "failed to request enable GPIO: %d\n", ret);
+	return ret;
+	}
+
+	dsi->reset_gpio = devm_gpiod_get_optional(dev, "reset", 0);
+	if (IS_ERR(dsi->reset_gpio)) {
+	ret = PTR_ERR(dsi->reset_gpio);
+	dev_err(dev, "failed to request reset GPIO: %d\n", ret);
+	return ret;
+	}
+#endif
 
 	ret = dw_mipi_dsi_parse_dt(dsi);
 	if (ret) {
