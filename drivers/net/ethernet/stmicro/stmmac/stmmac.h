@@ -33,6 +33,9 @@
 #include "common.h"
 #include <linux/ptp_clock_kernel.h>
 #include <linux/reset.h>
+#ifdef CONFIG_ARCH_ADVANTECH
+#include <linux/workqueue.h>
+#endif
 
 struct stmmac_resources {
 	void __iomem *addr;
@@ -130,6 +133,10 @@ struct stmmac_priv {
 	struct dentry *dbgfs_dir;
 	struct dentry *dbgfs_rings_status;
 	struct dentry *dbgfs_dma_cap;
+#endif
+#ifdef CONFIG_ARCH_ADVANTECH
+	struct delayed_work work;
+	int exit;
 #endif
 };
 

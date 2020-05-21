@@ -2834,6 +2834,25 @@ static int stmmac_hw_init(struct stmmac_priv *priv)
 	return 0;
 }
 
+#ifdef CONFIG_ARCH_ADVANTECH
+#define REALTEK_8211F_PHY_LED	0x8910
+
+static void stmmac_mdio_work_func(struct work_struct *work)
+{
+	struct stmmac_priv *stmmac =
+		container_of(work, struct stmmac_priv, work);
+	int val;
+
+	phy_write(stmmac->phydev, 0x1f, 0x0d04);
+	val = phy_read(stmmac->phydev, 0x10);
+	if(val != REALTEK_8211F_PHY_LED)
+		phy_write(stmmac->phydev, 0x10, REALTEK_8211F_PHY_LED);
+	phy_write(stmmac->phydev, 0x1f, 0x0000);
+	if(!stmmac->exit)
+		mod_delayed_work(system_wq, work, msecs_to_jiffies(20));
+}
+#endif
+
 /**
  * stmmac_dvr_probe
  * @device: device pointer
@@ -2851,6 +2870,10 @@ int stmmac_dvr_probe(struct device *device,
 	int ret = 0;
 	struct net_device *ndev = NULL;
 	struct stmmac_priv *priv;
+#ifdef CONFIG_ARCH_ADVANTECH
+	int phy_id;
+	int val;
+#endif
 
 	ndev = alloc_etherdev(sizeof(struct stmmac_priv));
 	if (!ndev)
@@ -2930,6 +2953,10 @@ int stmmac_dvr_probe(struct device *device,
 	if (ret)
 		goto error_hw_init;
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	priv->exit=1;
+#endif
+
 	stmmac_check_ether_addr(priv);
 
 	ndev->netdev_ops = &stmmac_netdev_ops;
@@ -2985,6 +3012,41 @@ int stmmac_dvr_probe(struct device *device,
 			goto error_mdio_register;
 		}
 	}
+
+#ifdef CONFIG_ARCH_ADVANTECH
+	/* check for attached phy */
+	for (phy_id = 0; (phy_id < PHY_MAX_ADDR); phy_id++) {
+		if ((priv->mii->phy_mask & (1 << phy_id)))
+			continue;
+		if (priv->mii->phy_map[phy_id] == NULL)
+			continue;
+		if (priv->mii->phy_map[phy_id]->phy_id == 0)
+			continue;
+		break;
+	}
+	if (phy_id < PHY_MAX_ADDR) {
+		priv->mii->write(priv->mii, phy_id, 0x1f, 0x0d08);
+		val = priv->mii->read(priv->mii, phy_id, 0x11);
+		val |= (0x1 << 8);//TX delay
+		priv->mii->write(priv->mii, phy_id, 0x11, val);
+		priv->mii->write(priv->mii, phy_id, 0x1f, 0x0000);
+		barrier();
+
+		/*Change PHY LED status*/
+		priv->mii->write(priv->mii, phy_id, 0x1f, 0x0d04);
+		priv->mii->write(priv->mii, phy_id, 0x10, REALTEK_8211F_PHY_LED);
+		val = priv->mii->read(priv->mii, phy_id, 0x11);
+		val &= ~(0x7<<1);
+		priv->mii->write(priv->mii, phy_id, 0x11, val);
+		priv->mii->write(priv->mii, phy_id, 0x1f, 0x0000);
+		barrier();
+
+		priv->exit=0;
+		priv->phydev = priv->mii->phy_map[phy_id];
+		INIT_DELAYED_WORK(&priv->work, stmmac_mdio_work_func);
+		mod_delayed_work(system_wq, &priv->work, msecs_to_jiffies(60));
+	}
+#endif
 
 	ret = register_netdev(ndev);
 	if (ret) {

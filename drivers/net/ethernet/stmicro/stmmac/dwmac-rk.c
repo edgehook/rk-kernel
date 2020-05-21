@@ -1600,6 +1600,21 @@ out:
 				addr[3], addr[4], addr[5]);
 }
 
+#ifdef CONFIG_ARCH_ADVANTECH
+#define RTL8211F_PHY_ID		0x001cc916
+
+static int rtl8211f_phy_fixup(struct phy_device *phydev)
+{
+	if (phydev->interface == PHY_INTERFACE_MODE_RGMII){
+		phy_write(phydev, 0x1f, 0x0d04);
+		phy_write(phydev, 0x10, 0x8910);
+		phy_write(phydev, 0x1f, 0x0000);
+	}
+
+	return 0;
+}
+#endif
+
 static int rk_gmac_probe(struct platform_device *pdev)
 {
 	struct plat_stmmacenet_data *plat_dat;
@@ -1620,6 +1635,15 @@ static int rk_gmac_probe(struct platform_device *pdev)
 	plat_dat = stmmac_probe_config_dt(pdev, &stmmac_res.mac);
 	if (IS_ERR(plat_dat))
 		return PTR_ERR(plat_dat);
+
+#ifdef CONFIG_ARCH_ADVANTECH
+	/* register the PHY board fixup (for TI RTL8211F) */
+	ret = phy_register_fixup_for_uid(RTL8211F_PHY_ID, 0xfffffff0,
+					 rtl8211f_phy_fixup);
+	/* we can live without it, so just issue a warning */
+	if (ret)
+		dev_warn(&pdev->dev, "Cannot register PHY board fixup.\n");
+#endif
 
 	plat_dat->has_gmac = true;
 	plat_dat->fix_mac_speed = rk_fix_speed;
