@@ -687,7 +687,7 @@
 
 // dp
 &cdn_dp {
-	status = "disabled";
+	status = "okay";
 	extcon = <&vpd0>;
 	phys = <&tcphy0_dp>;
 	dp_vop_sel = <1>;

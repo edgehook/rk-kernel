@@ -1247,11 +1247,13 @@ static int tcphy_get_mode(struct rockchip_typec_phy *tcphy)
 
 	mode = MODE_DFP_USB;
 	id = EXTCON_USB_HOST;
+	printk("%s:%d ufp=%d,dp=%d\n",__func__,__LINE__,ufp,dp);
 
 	if (ufp) {
 		mode = MODE_UFP_USB;
 		id = EXTCON_USB;
-	} else if (dp) {
+	}
+	if (dp) {
 		mode = MODE_DFP_DP;
 		id = EXTCON_DISP_DP;
 
