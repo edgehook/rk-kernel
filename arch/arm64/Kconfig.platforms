@@ -63,6 +63,12 @@ config ARCH_ROCKCHIP
 	  This enables support for the ARMv8 based Rockchip chipsets,
 	  like the RK3368.
 
+config ARCH_ADVANTECH
+	bool "Support Advantech board"
+	depends on ARCH_ROCKCHIP
+	help
+	  Support Advantech boards series,such as rsb-4710, ...
+
 config ARCH_SEATTLE
 	bool "AMD Seattle SoC Family"
 	help
