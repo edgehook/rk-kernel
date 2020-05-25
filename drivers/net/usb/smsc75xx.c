@@ -765,6 +765,25 @@ static int smsc75xx_ioctl(struct net_device *netdev, struct ifreq *rq, int cmd)
 	return generic_mii_ioctl(&dev->mii, if_mii(rq), cmd, NULL);
 }
 
+#ifdef CONFIG_ARCH_ADVANTECH
+static unsigned char g_mac_addr[ETH_ALEN]={0};
+
+static int __init setup_usblan_addr(char *buf)
+{
+	int i=0;
+	
+	if (!buf)
+		return -EINVAL;
+
+	for(i=0;i<ETH_ALEN;i++)
+		g_mac_addr[i] = simple_strtol(buf+i*3, NULL, 16);
+	
+	return 0;
+}
+
+early_param("usblan_addr", setup_usblan_addr);
+#endif
+
 static void smsc75xx_init_mac_address(struct usbnet *dev)
 {
 	/* try reading mac address from EEPROM */
@@ -778,6 +797,11 @@ static void smsc75xx_init_mac_address(struct usbnet *dev)
 		}
 	}
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	if (is_valid_ether_addr(g_mac_addr))
+		memcpy(dev->net->dev_addr,g_mac_addr,ETH_ALEN);
+	else
+#endif
 	/* no eeprom, or eeprom values are invalid. generate random MAC */
 	eth_hw_addr_random(dev->net);
 	netif_dbg(dev, ifup, dev->net, "MAC address set to eth_random_addr\n");
