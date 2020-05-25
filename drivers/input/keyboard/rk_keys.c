@@ -70,6 +70,9 @@ struct rk_keys_button {
 	int active_low;		/* gpio only */
 	int wakeup;		/* gpio only */
 	struct timer_list timer;
+#ifdef CONFIG_ARCH_ADVANTECH
+	u32 polling_time; /* polling release button time*/
+#endif
 };
 
 struct rk_keys_drvdata {
@@ -138,7 +141,11 @@ static void keys_timer(unsigned long _data)
 	}
 
 	if (state)
+#ifdef CONFIG_ARCH_ADVANTECH
+		mod_timer(&button->timer, jiffies + button->polling_time);
+#else
 		mod_timer(&button->timer, jiffies + DEBOUNCE_JIFFIES);
+#endif
 }
 
 static irqreturn_t keys_isr(int irq, void *dev_id)
@@ -262,6 +269,14 @@ static int rk_keys_parse_dt(struct rk_keys_drvdata *pdata,
 	pdata->chan = chan;
 
 	for_each_child_of_node(node, child_node) {
+#ifdef CONFIG_ARCH_ADVANTECH
+		if (of_property_read_u32(child_node, "polling-release-time", &code)) {
+			dev_err(&pdev->dev,
+				"Missing polling-release-time property in the DT.\n");
+			pdata->button[i].polling_time = DEBOUNCE_JIFFIES;
+		} else
+			pdata->button[i].polling_time = msecs_to_jiffies(code);
+#endif
 		if (of_property_read_u32(child_node, "linux,code", &code)) {
 			dev_err(&pdev->dev,
 				"Missing linux,code property in the DT.\n");
