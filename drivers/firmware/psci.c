@@ -232,8 +232,34 @@ static int get_set_conduit_method(struct device_node *np)
 	return 0;
 }
 
+#ifdef CONFIG_ARCH_ADVANTECH
+extern void pm_adv_reboot(void);
+static int isneed_pm_adv_reboot(const char *cmd)
+{
+	if(!cmd)
+		return 1;
+
+	if(strcmp(cmd, "recovery") == 0)
+		return 0;
+
+	if(strcmp(cmd, "bootloader") == 0)
+		return 0;
+
+	if(strcmp(cmd, "loader") == 0)
+		return 0;
+
+	return 1;
+}
+#endif
+
 static void psci_sys_reset(enum reboot_mode reboot_mode, const char *cmd)
 {
+#ifdef CONFIG_ARCH_ADVANTECH
+		if(isneed_pm_adv_reboot(cmd)){
+			pm_adv_reboot();
+		}
+#endif
+
 	invoke_psci_fn(PSCI_0_2_FN_SYSTEM_RESET, 0, 0, 0);
 }
 
