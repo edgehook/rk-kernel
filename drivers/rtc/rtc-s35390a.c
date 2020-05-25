@@ -399,12 +399,45 @@ static int s35390a_rtc_set_time(struct device *dev, struct rtc_time *tm)
 	return s35390a_set_datetime(to_i2c_client(dev), tm);
 }
 
+#ifdef CONFIG_ARCH_ADVANTECH
+static int s35390a_rtc_irq_enable(struct device *dev, unsigned int enabled)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct s35390a	*s35390a = i2c_get_clientdata(client);
+	char sts = 0;
+	int err;
+
+	/* disable interrupt */
+	err = s35390a_set_reg(s35390a, S35390A_CMD_STATUS2, &sts, sizeof(sts));
+	if (err < 0)
+		return err;
+
+	/* clear pending interrupt, if any */
+	err = s35390a_get_reg(s35390a, S35390A_CMD_STATUS1, &sts, sizeof(sts));
+	if (err < 0)
+		return err;
+
+	if (enabled)
+		sts = S35390A_INT2_MODE_ALARM;
+	else
+		sts = S35390A_INT2_MODE_NOINTR;
+
+	/* This chip expects the bits of each byte to be in reverse order */
+	sts = bitrev8(sts);
+
+	/* set interupt mode*/
+	return s35390a_set_reg(s35390a, S35390A_CMD_STATUS2, &sts, sizeof(sts));
+}
+#endif
+
 static const struct rtc_class_ops s35390a_rtc_ops = {
 	.read_time	= s35390a_rtc_read_time,
 	.set_time	= s35390a_rtc_set_time,
 	.set_alarm	= s35390a_rtc_set_alarm,
 	.read_alarm	= s35390a_rtc_read_alarm,
-
+#ifdef CONFIG_ARCH_ADVANTECH
+	.alarm_irq_enable = s35390a_rtc_irq_enable,
+#endif
 };
 
 static struct i2c_driver s35390a_driver;
@@ -476,7 +509,11 @@ static int s35390a_probe(struct i2c_client *client,
 	if (err_reset > 0 || s35390a_get_datetime(client, &tm) < 0)
 		dev_warn(&client->dev, "clock needs to be set\n");
 
+#ifdef CONFIG_ARCH_ADVANTECH
+    device_init_wakeup(&client->dev, 1);
+#else
 	device_set_wakeup_capable(&client->dev, 1);
+#endif
 
 	s35390a->rtc = devm_rtc_device_register(&client->dev,
 					s35390a_driver.driver.name,
