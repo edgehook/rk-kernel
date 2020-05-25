@@ -535,6 +535,9 @@ static int mmc_decode_ext_csd(struct mmc_card *card, u8 *ext_csd)
 
 		card->ext_csd.rel_param = ext_csd[EXT_CSD_WR_REL_PARAM];
 		card->ext_csd.rst_n_function = ext_csd[EXT_CSD_RST_N_FUNCTION];
+#ifdef CONFIG_ARCH_ADVANTECH
+		card->ext_csd.write_reliability = ext_csd[EXT_CSD_WRITE_RELIABLIITY];
+#endif
 
 		/*
 		 * RPMB regions are defined in multiples of 128K.
@@ -1596,6 +1599,12 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		mmc_set_erase_size(card);
 	}
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	if (card->ext_csd.write_reliability !=0x1f) {
+		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
+				EXT_CSD_WRITE_RELIABLIITY, 0x1f,card->ext_csd.generic_cmd6_time);
+	}
+#endif
 	/*
 	 * If enhanced_area_en is TRUE, host needs to enable ERASE_GRP_DEF
 	 * bit.  This bit will be lost every time after a reset or power off.
