@@ -61,6 +61,10 @@ static int of_parse_display_timing(const struct device_node *np,
 {
 	u32 val = 0;
 	int ret = 0;
+#ifdef CONFIG_ARCH_ADVANTECH
+	int name_length;
+#endif
+
 #if defined(CONFIG_FB_ROCKCHIP)
 	struct property *prop;
 	int length;
@@ -108,6 +112,14 @@ static int of_parse_display_timing(const struct device_node *np,
 		dt->flags |= DISPLAY_FLAGS_DOUBLESCAN;
 	if (of_property_read_bool(np, "doubleclk"))
 		dt->flags |= DISPLAY_FLAGS_DOUBLECLK;
+
+#ifdef CONFIG_ARCH_ADVANTECH
+	name_length = strlen(np->name);
+	dt->name= kzalloc(name_length+1, GFP_KERNEL);
+	if (dt->name)
+		memcpy(dt->name,np->name,name_length);
+#endif
+
 #if defined(CONFIG_FB_ROCKCHIP)
 	if (!of_property_read_u32(np, "swap-rg", &val))
 		dt->flags |= val ? DISPLAY_FLAGS_SWAP_RG : 0;
@@ -207,7 +219,11 @@ struct display_timings *of_get_display_timings(struct device_node *np)
 	if (!np)
 		return NULL;
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	timings_np = of_parse_phandle(np, "display-timings", 0);
+#else
 	timings_np = of_get_child_by_name(np, "display-timings");
+#endif
 	if (!timings_np) {
 		pr_err("%s: could not find display-timings node\n",
 			of_node_full_name(np));

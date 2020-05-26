@@ -2144,6 +2144,18 @@ static int dw_mipi_dsi_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_ARCH_ADVANTECH
+static void dw_mipi_dsi_shutdown(struct platform_device *pdev)
+{
+	struct dw_mipi_dsi *dsi = dev_get_drvdata(&pdev->dev);
+
+	if (dsi)
+		dsi_external_bradge_power_off(dsi);
+
+	drm_panel_unprepare(dsi->panel);
+}
+#endif
+
 static int __maybe_unused dw_mipi_dsi_runtime_suspend(struct device *dev)
 {
 	struct dw_mipi_dsi *dsi = dev_get_drvdata(dev);
@@ -2333,6 +2345,9 @@ MODULE_DEVICE_TABLE(of, dw_mipi_dsi_dt_ids);
 static struct platform_driver dw_mipi_dsi_driver = {
 	.probe		= dw_mipi_dsi_probe,
 	.remove		= dw_mipi_dsi_remove,
+#ifdef CONFIG_ARCH_ADVANTECH
+	.shutdown   = dw_mipi_dsi_shutdown,
+#endif
 	.driver		= {
 		.of_match_table = dw_mipi_dsi_dt_ids,
 		.pm = &dw_mipi_dsi_pm_ops,

@@ -23,6 +23,10 @@
 #include <linux/pwm_backlight.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
+#ifdef CONFIG_ARCH_ADVANTECH
+#include <linux/of_gpio.h>
+#include <linux/delay.h>
+#endif
 
 struct pwm_bl_data {
 	struct pwm_device	*pwm;
@@ -68,9 +72,16 @@ static void pwm_backlight_power_off(struct pwm_bl_data *pb)
 
 	pwm_config(pb->pwm, 0, pb->period);
 	pwm_disable(pb->pwm);
-
+#ifndef CONFIG_ARCH_ADVANTECH
+	if (pb->enable_gpio)
+	{
+		gpiod_set_value(pb->enable_gpio, 0);
+		msleep(10);	
+	}
+#else
 	if (pb->enable_gpio)
 		gpiod_set_value(pb->enable_gpio, 0);
+#endif
 
 	regulator_disable(pb->power_supply);
 	pb->enabled = false;
@@ -282,7 +293,11 @@ static int pwm_backlight_probe(struct platform_device *pdev)
 		    gpiod_get_value(pb->enable_gpio) == 0)
 			initial_blank = FB_BLANK_POWERDOWN;
 		else
+		#ifdef CONFIG_ARCH_ADVANTECH
+			gpiod_direction_output(pb->enable_gpio, 0);
+		#else
 			gpiod_direction_output(pb->enable_gpio, 1);
+		#endif
 	}
 
 	pb->power_supply = devm_regulator_get(&pdev->dev, "power");
@@ -346,7 +361,9 @@ static int pwm_backlight_probe(struct platform_device *pdev)
 
 	bl->props.brightness = data->dft_brightness;
 	bl->props.power = initial_blank;
+#ifndef CONFIG_ARCH_ADVANTECH
 	backlight_update_status(bl);
+#endif
 
 	platform_set_drvdata(pdev, bl);
 	return 0;
@@ -373,6 +390,7 @@ static int pwm_backlight_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifndef CONFIG_ARCH_ADVANTECH
 static void pwm_backlight_shutdown(struct platform_device *pdev)
 {
 	struct backlight_device *bl = platform_get_drvdata(pdev);
@@ -380,6 +398,7 @@ static void pwm_backlight_shutdown(struct platform_device *pdev)
 
 	pwm_backlight_power_off(pb);
 }
+#endif
 
 #ifdef CONFIG_PM_SLEEP
 static int pwm_backlight_suspend(struct device *dev)
@@ -425,7 +444,9 @@ static struct platform_driver pwm_backlight_driver = {
 	},
 	.probe		= pwm_backlight_probe,
 	.remove		= pwm_backlight_remove,
+#ifndef CONFIG_ARCH_ADVANTECH
 	.shutdown	= pwm_backlight_shutdown,
+#endif
 };
 
 module_platform_driver(pwm_backlight_driver);

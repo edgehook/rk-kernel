@@ -619,12 +619,6 @@
 	force-hpd;
 	//hpd-gpios = <&gpio4 28 GPIO_ACTIVE_HIGH>;
 
-	
-#if 1
-	/delete-property/ pinctrl-0;
-	/delete-property/ pinctrl-names;
-#endif
-
 	ports {
 		port@1 {
 			reg = <1>;

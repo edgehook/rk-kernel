@@ -1767,6 +1767,16 @@ static void __init rk3399_clk_init(struct device_node *np)
 	rockchip_register_restart_notifier(ctx, RK3399_GLB_SRST_FST, NULL);
 
 	rockchip_clk_of_add_provider(np, ctx);
+
+// Open HDMI external wave for EMI test
+#ifdef CONFIG_ARCH_ADVANTECH
+	writel_relaxed(0x00080000, rk3399_cru_base + 0xcc);
+	writel_relaxed(0x00070000, rk3399_cru_base + 0xd0);
+	writel_relaxed(0x00010001, rk3399_cru_base + 0xd4);
+	writel_relaxed(0x1f000100, rk3399_cru_base + 0xd0);
+	writel_relaxed(0x00f000f0, rk3399_cru_base + 0xd0);
+	writel_relaxed(0x7f000700, rk3399_cru_base + 0xd4);
+#endif
 }
 CLK_OF_DECLARE(rk3399_cru, "rockchip,rk3399-cru", rk3399_clk_init);
 

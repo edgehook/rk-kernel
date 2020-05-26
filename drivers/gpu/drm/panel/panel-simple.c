@@ -40,6 +40,12 @@
 #include <linux/of_graph.h>
 #include <video/videomode.h>
 
+#ifdef CONFIG_ARCH_ADVANTECH
+#include <dt-bindings/display/rk_fb.h>
+#include <drm/rockchip_drm.h>
+#include "../rockchip/rockchip_drm_drv.h"
+#endif
+
 struct cmd_ctrl_hdr {
 	u8 dtype;	/* data type */
 	u8 wait;	/* ms */
@@ -96,6 +102,9 @@ struct panel_desc {
 	} delay;
 
 	u32 bus_format;
+#ifdef CONFIG_ARCH_ADVANTECH
+	unsigned int type;
+#endif
 };
 
 struct panel_simple {
@@ -372,6 +381,51 @@ static inline int panel_simple_dsi_send_cmds(struct panel_simple *panel,
 }
 #endif
 
+#ifdef CONFIG_ARCH_ADVANTECH
+static int panel_simple_get_cmds(struct panel_simple *panel,struct device_node *node)
+{
+	const void *data;
+	int len;
+	int err;
+
+	if(!node)
+		return 0;
+
+	data = of_get_property(node, "panel-init-sequence", &len);
+	if (data) {
+		panel->on_cmds = devm_kzalloc(panel->dev,
+					      sizeof(*panel->on_cmds),
+					      GFP_KERNEL);
+		if (!panel->on_cmds)
+			return -ENOMEM;
+
+		err = panel_simple_parse_cmds(panel->dev, data, len,
+					      panel->on_cmds);
+		if (err) {
+			dev_err(panel->dev, "failed to parse panel init sequence\n");
+			return err;
+		}
+	}
+
+	data = of_get_property(node, "panel-exit-sequence",
+			       &len);
+	if (data) {
+		panel->off_cmds = devm_kzalloc(panel->dev,
+					       sizeof(*panel->off_cmds),
+					       GFP_KERNEL);
+		if (!panel->off_cmds)
+			return -ENOMEM;
+
+		err = panel_simple_parse_cmds(panel->dev, data, len,
+					      panel->off_cmds);
+		if (err) {
+			dev_err(panel->dev, "failed to parse panel exit sequence\n");
+			return err;
+		}
+	}
+	return 0;
+}
+#else
 static int panel_simple_get_cmds(struct panel_simple *panel)
 {
 	const void *data;
@@ -413,6 +467,7 @@ static int panel_simple_get_cmds(struct panel_simple *panel)
 	}
 	return 0;
 }
+#endif
 
 static int panel_simple_get_fixed_modes(struct panel_simple *panel)
 {
@@ -469,6 +524,77 @@ static int panel_simple_get_fixed_modes(struct panel_simple *panel)
 	return num;
 }
 
+#ifdef CONFIG_ARCH_ADVANTECH
+extern char* rockchip_drm_get_screen_name(char* buf);
+
+static int panel_simple_of_get_adv_mode(struct panel_simple *panel)
+{
+	struct drm_connector *connector = panel->base.connector;
+	struct drm_device *drm = panel->base.drm;
+	struct drm_display_mode *mode;
+	struct device_node *timings_np;
+	int ret;
+	unsigned int i;
+	struct display_timings *disp;
+	char* screen_name;
+	int native_index;
+
+	timings_np = of_parse_phandle(panel->dev->of_node,
+					  "display-timings", 0);
+	if (!timings_np) {
+		dev_err(panel->dev, "%s: failed to find display-timings node\n", of_node_full_name(panel->dev->of_node));
+		return 0;
+	}
+	of_node_put(timings_np);
+
+	disp = of_get_display_timings(panel->dev->of_node);
+	if (!disp) {
+		pr_err("%s: no timings specified\n", of_node_full_name(panel->dev->of_node));
+		return 0;
+	}
+
+	if(panel->desc->type == SCREEN_LVDS)
+		screen_name = rockchip_drm_get_screen_name("lvds");
+	else if(panel->desc->type == SCREEN_EDP)
+		screen_name = rockchip_drm_get_screen_name("edp");
+
+	if(screen_name){
+		for (i = 0; i <disp->num_timings; i++){
+			if(strlen(disp->timings[i]->name) != strlen(screen_name))
+				continue;
+
+			if(!memcmp(disp->timings[i]->name,screen_name,strlen(screen_name)))
+				break;
+		}
+
+		if(i < disp->num_timings){
+			native_index = i;
+		}else{
+			native_index = disp->native_mode;
+		}
+	}else{
+		native_index = disp->native_mode;
+	}
+
+	mode = drm_mode_create(drm);
+	if (!mode){
+		return 0;
+	}
+
+	ret = of_get_drm_display_mode(panel->dev->of_node, mode, native_index);
+	if (ret) {
+		dev_err(panel->dev, "failed to find dts display timings\n");
+		drm_mode_destroy(drm, mode);
+		return 0;
+	}
+
+	drm_mode_set_name(mode);
+	mode->type |= DRM_MODE_TYPE_DEFAULT;
+	drm_mode_probed_add(connector, mode);
+
+	return 1;
+}
+#else
 static int panel_simple_of_get_native_mode(struct panel_simple *panel)
 {
 	struct drm_connector *connector = panel->base.connector;
@@ -503,6 +629,7 @@ static int panel_simple_of_get_native_mode(struct panel_simple *panel)
 
 	return 1;
 }
+#endif
 
 static int panel_simple_regulator_enable(struct drm_panel *panel)
 {
@@ -597,6 +724,11 @@ static int panel_simple_unprepare(struct drm_panel *panel)
 
 	if (!p->prepared)
 		return 0;
+
+#ifdef CONFIG_ARCH_ADVANTECH
+	if (p->desc && p->desc->delay.unprepare)
+		panel_simple_sleep(p->desc->delay.unprepare);
+#endif
 
 	if (p->off_cmds) {
 		if (p->dsi)
@@ -697,8 +829,12 @@ static int panel_simple_get_modes(struct drm_panel *panel)
 	struct panel_simple *p = to_panel_simple(panel);
 	int num = 0;
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	num += panel_simple_of_get_adv_mode(p);
+#else
 	/* add device node plane modes */
 	num += panel_simple_of_get_native_mode(p);
+#endif
 
 	/* add hard-coded panel modes */
 	num += panel_simple_get_fixed_modes(p);
@@ -800,6 +936,13 @@ static int panel_simple_probe(struct device *dev, const struct panel_desc *desc)
 	const char *cmd_type;
 	u32 val;
 	int err;
+#ifdef CONFIG_ARCH_ADVANTECH
+	struct device_node *timings_np=NULL;
+	struct device_node *timing_np=NULL;
+	char *screen_name=NULL;
+	//struct display_timings *disp;
+	//int i;
+#endif
 
 	panel = devm_kzalloc(dev, sizeof(*panel), GFP_KERNEL);
 	if (!panel)
@@ -831,12 +974,33 @@ static int panel_simple_probe(struct device *dev, const struct panel_desc *desc)
 	if (!of_property_read_u32(dev->of_node, "height-mm", &val))
 		of_desc->size.height = val;
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	if (!of_property_read_u32(dev->of_node, "panel_type", &val))
+		of_desc->type = val;
+
+	if(of_desc->type == SCREEN_LVDS)
+		screen_name = rockchip_drm_get_screen_name("lvds");
+	else if(of_desc->type == SCREEN_EDP)
+		screen_name = rockchip_drm_get_screen_name("edp");
+
+	if(screen_name){
+		timings_np = of_parse_phandle(dev->of_node, "display-timings", 0);
+		if (timings_np) {
+			timing_np = of_get_child_by_name(timings_np, screen_name);
+		}
+	}
+#endif
+
 	panel->enabled = false;
 	panel->prepared = false;
 	panel->desc = of_desc;
 	panel->dev = dev;
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	err = panel_simple_get_cmds(panel,timing_np);
+#else
 	err = panel_simple_get_cmds(panel);
+#endif
 	if (err) {
 		dev_err(dev, "failed to get init cmd: %d\n", err);
 		return err;
@@ -989,6 +1153,7 @@ static void panel_simple_shutdown(struct device *dev)
 
 	panel_simple_disable(&panel->base);
 
+#ifndef CONFIG_ARCH_ADVANTECH
 	if (panel->prepared) {
 		if (panel->reset_gpio)
 			gpiod_direction_output(panel->reset_gpio, 1);
@@ -998,6 +1163,7 @@ static void panel_simple_shutdown(struct device *dev)
 
 		panel_simple_regulator_disable(&panel->base);
 	}
+#endif
 }
 
 static const struct drm_display_mode ampire_am800480r3tmqwa1h_mode = {
@@ -2496,7 +2662,24 @@ static int panel_simple_dsi_remove(struct mipi_dsi_device *dsi)
 
 static void panel_simple_dsi_shutdown(struct mipi_dsi_device *dsi)
 {
+#ifdef CONFIG_ARCH_ADVANTECH
+	struct panel_simple *panel = dev_get_drvdata(&dsi->dev);
+	struct drm_device *drm = panel->base.drm;
+	struct drm_crtc *crtc;
+	struct rockchip_drm_private *priv;
+#endif
 	panel_simple_shutdown(&dsi->dev);
+
+#ifdef CONFIG_ARCH_ADVANTECH
+	priv = drm->dev_private;
+	drm_for_each_crtc(crtc, drm) {
+		int pipe = drm_crtc_index(crtc);
+
+		if (priv->crtc_funcs[pipe] &&
+		    priv->crtc_funcs[pipe]->crtc_close)
+			priv->crtc_funcs[pipe]->crtc_close(crtc);
+	}
+#endif
 }
 
 static struct mipi_dsi_driver panel_simple_dsi_driver = {

@@ -231,4 +231,8 @@ int rockchip_drm_wait_line_flag(struct drm_crtc *crtc, unsigned int line_num,
 int rockchip_drm_register_subdrv(struct drm_rockchip_subdrv *subdrv);
 int rockchip_drm_unregister_subdrv(struct drm_rockchip_subdrv *subdrv);
 
+#ifdef CONFIG_ARCH_ADVANTECH
+char* rockchip_drm_get_screen_name(char* buf);
+#endif
+
 #endif /* _ROCKCHIP_DRM_DRV_H_ */

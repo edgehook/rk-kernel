@@ -918,6 +918,47 @@ int rockchip_drm_crtc_send_mcu_cmd(struct drm_device *drm_dev,
 	return 0;
 }
 
+#ifdef CONFIG_ARCH_ADVANTECH
+static char lcd_prmry_screen[30]={0};
+static char lcd_extend_screen[30]={0};
+
+char* rockchip_drm_get_screen_name(char* buf)
+{
+	if(! buf)
+		return NULL;
+
+	if(!memcmp(lcd_prmry_screen,buf,strlen(buf)))
+		return lcd_prmry_screen;
+	else if(!memcmp(lcd_extend_screen,buf,strlen(buf)))
+		return lcd_extend_screen;
+	else
+		return NULL;
+}
+
+static int __init setup_prmry_screen(char *buf)
+{
+	u32 len;
+
+	len = (strlen(buf) > (sizeof(lcd_prmry_screen)-1)) ? (sizeof(lcd_prmry_screen)-1) : strlen(buf);
+	memcpy(lcd_prmry_screen,buf,len);
+
+	return 0;
+}
+
+static int __init setup_extend_screen(char *buf)
+{
+	u32 len;
+
+	len = (strlen(buf) > (sizeof(lcd_extend_screen)-1)) ? (sizeof(lcd_extend_screen)-1) : strlen(buf);
+	memcpy(lcd_extend_screen,buf,len);
+
+	return 0;
+}
+
+early_param("prmry_screen", setup_prmry_screen);
+early_param("extend_screen", setup_extend_screen);
+#endif
+
 /*
  * Attach a (component) device to the shared drm dma mapping from master drm
  * device.  This is used by the VOPs to map GEM buffers to a common DMA
@@ -1954,6 +1995,7 @@ static void rockchip_drm_platform_shutdown(struct platform_device *pdev)
 		return;
 	}
 
+#ifndef CONFIG_ARCH_ADVANTECH
 	priv = drm->dev_private;
 	drm_for_each_crtc(crtc, drm) {
 		int pipe = drm_crtc_index(crtc);
@@ -1962,6 +2004,7 @@ static void rockchip_drm_platform_shutdown(struct platform_device *pdev)
 		    priv->crtc_funcs[pipe]->crtc_close)
 			priv->crtc_funcs[pipe]->crtc_close(crtc);
 	}
+#endif
 }
 
 static const struct of_device_id rockchip_drm_dt_ids[] = {
