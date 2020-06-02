@@ -563,6 +563,14 @@ config RTC_DRV_S35390A
 	  This driver can also be built as a module. If so the module
 	  will be called rtc-s35390a.
 
+config RTC_DRV_PT7C4337
+	tristate "PT7C4337"
+	help
+	  If you say yes here you will get support for the PT7C4337.
+
+	  This driver can also be built as a module. If so the module
+	  will be called rtc-pt7c4337.
+
 config RTC_DRV_FM3130
 	tristate "Ramtron FM3130"
 	help

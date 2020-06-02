@@ -1047,9 +1047,9 @@
 		rockchip,camera-module-mipi-dphy-index = <0>;
 	};
 
-	rtc0: rtc@30  {
-		compatible = "s35390a";
-		reg = <0x30>;
+	rtc0: rtc@68  {
+		compatible = "pt7c4337";
+		reg = <0x68>;
 		status = "okay";
 	};
 
