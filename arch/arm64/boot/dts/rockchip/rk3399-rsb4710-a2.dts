@@ -1012,37 +1012,38 @@
 		pinctrl-0 = <&i2s_8ch_mclk &codec_avdd &codec_micvdd &codec_spkvdd>;
 	};
 
-	camera0: camera-module@36 {
-		status = "disabled";
-		compatible = "omnivision,ov8858-v4l2-i2c-subdev";
-		reg = < 0x36 >;
-		device_type = "v4l2-i2c-subdev";
-
-		clocks = <&cru SCLK_CIF_OUT>;
-		clock-names = "clk_cif_out";
-
-		pinctrl-names = "rockchip,camera_default";
-		pinctrl-0 = <&cam0_default_pins>;
-		//pinctrl-1 = <&cam0_sleep_pins>; 
-
-		rockchip,pd-gpio = <&gpio1 23 GPIO_ACTIVE_LOW>;
-		rockchip,rst-gpio = <&gpio2 27 GPIO_ACTIVE_HIGH>;
-		rockchip,camera-module-mclk-name = "clk_cif_out";
+	vm149c: vm149c@0c {
+		compatible = "silicon touch,vm149c";
+		status = "okay";
+		reg = <0x0c>;
+		rockchip,camera-module-index = <0>;
 		rockchip,camera-module-facing = "back";
-		rockchip,camera-module-name = "cmk-cb0695-fv1";
-		rockchip,camera-module-len-name = "lg9569a2";
-		rockchip,camera-module-fov-h = "66.0";
-		rockchip,camera-module-fov-v = "50.1";
-		rockchip,camera-module-orientation = <0>;
-		rockchip,camera-module-iq-flip = <0>;
-		rockchip,camera-module-iq-mirror = <0>;
-		rockchip,camera-module-flip = <0>;
-		rockchip,camera-module-mirror = <0>;
+	};
 
-		/* resolution.w, resolution.h, defrect.left, defrect.top, defrect.w, defrect.h */
-		rockchip,camera-module-defrect0 = <3264 2448 0 0 3264 2448>;
-		rockchip,camera-module-flash-support = <0>;
-		rockchip,camera-module-mipi-dphy-index = <0>;
+	ov8858: ov8858@36 {
+		compatible = "ovti,ov8858";
+		status = "okay";
+		reg = <0x36>;
+		clocks = <&cru SCLK_CIF_OUT>;
+		clock-names = "xvclk";
+
+		reset-gpios = <&gpio2 27 GPIO_ACTIVE_HIGH>;
+		pwdn-gpios = <&gpio1 23 GPIO_ACTIVE_LOW>;
+		pinctrl-names = "rockchip,camera_default";
+		pinctrl-0 = <&cif_clkout &cam0_default_pins>;
+		rockchip,camera-module-index = <0>;
+		rockchip,camera-module-facing = "back";
+		rockchip,camera-module-name = "CameraKing";
+		rockchip,camera-module-lens-name = "Largan-9569A2";
+
+		lens-focus = <&vm149c>;
+
+		port {
+			ucam_out0: endpoint {
+				remote-endpoint = <&mipi_in_ucam0>;
+				data-lanes = <1 2>;
+			};
+		};
 	};
 
 	rtc0: rtc@68  {
@@ -1353,7 +1354,6 @@
 	status = "okay";
 };
 
-#if 0
 &mipi_dphy_rx0 {
 	status = "okay";
 
@@ -1418,9 +1418,7 @@
 		};
 	};
 };
-#endif
 
-#if 0
 &rkisp1_0 {
 	status = "okay";
 
@@ -1448,7 +1446,6 @@
 		};
 	};
 };
-#endif
 
 &dmac_bus {
 	iram = <&iram>;
@@ -1752,6 +1749,15 @@
 		clk32k_in: clk32k-in {
 			rockchip,pins =
 				<0 0 RK_FUNC_2 &pcfg_pull_down>;
+		};
+	};
+
+	isp {
+
+		cif_clkout: cif-clkout {
+		rockchip,pins =
+			/*cif_clkout*/
+			<3 15 RK_FUNC_3 &pcfg_pull_none>;
 		};
 	};
 
