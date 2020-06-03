@@ -121,8 +121,6 @@
 		reg = <0x0 0xff8d0000 0x0 0x20000>; /* 128k */
 	};
 
-	/delete-node/ uboot-charge;
-	/delete-node/ rockchip-key;
 	rk_key: rockchip-key {
 		compatible = "rockchip,key";
 		status = "okay";
@@ -1134,6 +1132,11 @@
 	gpio1830-supply = <&vcc_3v0>;		/* gpio1833_gpio4cd_ms */
 };
 
+&pmu_io_domains {
+	status = "okay";
+	pmu1830-supply = <&vcc_3v0>;
+};
+
 &pcie_phy {
 	status = "okay";
 };
@@ -1144,11 +1147,6 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie_clkreqn>;
 	status = "okay";
-};
-
-&pmu_io_domains {
-	status = "okay";
-	pmu1830-supply = <&vcc_3v0>;
 };
 
 &pwm0 {
@@ -1310,15 +1308,6 @@
 	status = "okay";
 };
 
-#if 0
-&pcie0 {
-	ep-gpios = <&gpio2 4 GPIO_ACTIVE_HIGH>;
-	num-lanes = <4>;
-	pinctrl-names = "default";
-	pinctrl-0 = <&pcie_clkreqn>;
-};
-#endif
-
 &rockchip_suspend {
 	status = "okay";
 	rockchip,sleep-debug-en = <1>;
@@ -1430,14 +1419,6 @@
 	};
 };
 #endif
-
-&pcie_phy {
-	status = "okay";
-};
-
-&pcie0 {
-	status = "okay";
-};
 
 #if 0
 &rkisp1_0 {
