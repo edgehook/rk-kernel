@@ -63,7 +63,7 @@
 
 / {
 	model = "RSB-4710 AKS0000000000 V10000";
-	compatible = "rockchip,rk3399-excavator-linux", "rockchip,rk3399-rsb4710-a2", "rockchip,rk3399";
+	compatible = "rockchip,rk3399-rsb4710-a2", "rockchip,rk3399";
 
 	aliases {
 		edp = &edp;
@@ -317,7 +317,6 @@
 		regulator-uboot-logo;
 		status = "disabled";
 	};
-
 
 	//dsi vdd core
 	dsi_vdd_core: dsi-vdd-core {
@@ -670,7 +669,6 @@
 		<000000000 0x0000 0x0000 0x0000>;
 };
 
-//*
 &hdmi_in_vopb {
 	status = "okay";
 };
@@ -678,7 +676,6 @@
 &hdmi_in_vopl {
 	status = "disabled";
 };
-//*/
 
 // dp
 &cdn_dp {
@@ -763,10 +760,10 @@
 		reg = <0x40>;
 		vin-supply = <&vcc3v3_sys>;
 		regulator-compatible = "fan53555-reg";
+		regulator-name = "vdd_cpu_b";
 		pinctrl-names = "default";
 		pinctrl-0 = <&vsel1_gpio>;
 		vsel-gpios = <&gpio1 17 GPIO_ACTIVE_HIGH>;
-		regulator-name = "vdd_cpu_b";
 		regulator-min-microvolt = <712500>;
 		regulator-max-microvolt = <1500000>;
 		regulator-ramp-delay = <1000>;
@@ -784,10 +781,10 @@
 		reg = <0x41>;
 		vin-supply = <&vcc3v3_sys>;
 		regulator-compatible = "fan53555-reg";
+		regulator-name = "vdd_gpu";
 		pinctrl-names = "default";
 		pinctrl-0 = <&vsel2_gpio>;
 		vsel-gpios = <&gpio1 14 GPIO_ACTIVE_HIGH>;
-		regulator-name = "vdd_gpu";
 		regulator-min-microvolt = <712500>;
 		regulator-max-microvolt = <1500000>;
 		regulator-ramp-delay = <1000>;
@@ -1051,7 +1048,6 @@
 		reg = <0x68>;
 		status = "okay";
 	};
-
 };
 
 &i2c4 {
@@ -1236,19 +1232,6 @@
 	status = "okay";
 };
 
-&tsadc {
-	/*/delete-property/ pinctrl-names;
-	/delete-property/ pinctrl-0;
-	/delete-property/ pinctrl-1;
-	/delete-property/ pinctrl-2;*/
-	/* tshut mode 0:CRU 1:GPIO */
-	rockchip,hw-tshut-mode = <0>;
-	/* tshut polarity 0:LOW 1:HIGH */
-	rockchip,hw-tshut-polarity = <1>;
-	rockchip,hw-tshut-temp = <120000>;
-	status = "okay";
-};
-
 &u2phy0 {
 	status = "okay";
 	rockchip,u2phy-tuning;
@@ -1266,7 +1249,6 @@
 
 &u2phy1 {
 	status = "okay";
-
 
 	u2phy1_host: host-port {
 		phy-supply = <&vcc5v0_host>;
@@ -1307,35 +1289,6 @@
 
 &usb_host1_ohci {
 	status = "okay";
-};
-
-&rockchip_suspend {
-	status = "okay";
-	rockchip,sleep-debug-en = <1>;
-	rockchip,sleep-mode-config = <
-		(0
-		| RKPM_SLP_ARMPD
-		| RKPM_SLP_PERILPPD
-		| RKPM_SLP_DDR_RET
-		| RKPM_SLP_PLLPD
-		| RKPM_SLP_CENTER_PD
-		| RKPM_SLP_AP_PWROFF
-		)
-		>;
-	rockchip,wakeup-config = <
-		(0
-		| RKPM_GPIO_WKUP_EN
-		| RKPM_PWM_WKUP_EN
-		)
-		>;
-		rockchip,pwm-regulator-config = <
-		(0
-		| PWM2_REGULATOR_EN
-		)
-		>;
-		rockchip,power-ctrl =
-		<&gpio1 17 GPIO_ACTIVE_HIGH>,
-		<&gpio1 14 GPIO_ACTIVE_HIGH>;
 };
 
 &iep {
@@ -1445,6 +1398,48 @@
 			remote-endpoint = <&dphy_tx1rx1_out>;
 		};
 	};
+};
+
+&rockchip_suspend {
+	status = "okay";
+	rockchip,sleep-debug-en = <1>;
+	rockchip,sleep-mode-config = <
+		(0
+		| RKPM_SLP_ARMPD
+		| RKPM_SLP_PERILPPD
+		| RKPM_SLP_DDR_RET
+		| RKPM_SLP_PLLPD
+		| RKPM_SLP_CENTER_PD
+		| RKPM_SLP_AP_PWROFF
+		)
+		>;
+	rockchip,wakeup-config = <
+		(0
+		| RKPM_GPIO_WKUP_EN
+		| RKPM_PWM_WKUP_EN
+		)
+		>;
+		rockchip,pwm-regulator-config = <
+		(0
+		| PWM2_REGULATOR_EN
+		)
+		>;
+		rockchip,power-ctrl =
+		<&gpio1 17 GPIO_ACTIVE_HIGH>,
+		<&gpio1 14 GPIO_ACTIVE_HIGH>;
+};
+
+&tsadc {
+	/*/delete-property/ pinctrl-names;
+	/delete-property/ pinctrl-0;
+	/delete-property/ pinctrl-1;
+	/delete-property/ pinctrl-2;*/
+	/* tshut mode 0:CRU 1:GPIO */
+	rockchip,hw-tshut-mode = <0>;
+	/* tshut polarity 0:LOW 1:HIGH */
+	rockchip,hw-tshut-polarity = <1>;
+	rockchip,hw-tshut-temp = <120000>;
+	status = "okay";
 };
 
 &dmac_bus {
