@@ -75,7 +75,8 @@ static int misc_adv_gpio_probe(struct platform_device *pdev)
 		timing_interval = 50;
 	if(timing_interval)
 	    mdelay(timing_interval);
-	gpio_direction_output(minipcie_reset_gpio, !minipcie_reset_active);
+	if (gpio_is_valid(minipcie_reset_gpio))
+		gpio_direction_output(minipcie_reset_gpio, !minipcie_reset_active);
 
 	m2_reset_gpio = of_get_named_gpio_flags(np, "m2-reset-gpio", 0, &flags);
 	if (gpio_is_valid(m2_reset_gpio))
@@ -103,7 +104,8 @@ static int misc_adv_gpio_probe(struct platform_device *pdev)
 
 	if(timing_interval)
 	    	mdelay(timing_interval);
-	gpio_direction_output(m2_reset_gpio, !m2_reset_active);
+	if (gpio_is_valid(m2_reset_gpio))
+		gpio_direction_output(m2_reset_gpio, !m2_reset_active);
 
 	pm_reset_gpio = of_get_named_gpio_flags(np,"system-reset-gpio",0,&flags);
 	if(gpio_is_valid(pm_reset_gpio)) {
