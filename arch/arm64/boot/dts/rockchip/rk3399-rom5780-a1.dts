@@ -136,7 +136,6 @@
 		compatible = "pwm-backlight";
 		enable-gpios = <&gpio2 6 GPIO_ACTIVE_HIGH>;
 		power-supply = <&edp_bkl_vdd>;
-		power-gpios = <&gpio3 30 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&edp_bkl_en>;
 		pwms = <&pwm0 0 25000 0>;
@@ -240,14 +239,11 @@
 	edp_bkl_vdd: edp-bkl-vdd {
 		compatible = "regulator-fixed";
 		regulator-name = "edp_bkl_vdd";
-		pinctrl-names = "default";
-		pinctrl-0 = <&edp_bkl_vdd_pin>;
-		gpio = <&gpio3 30 GPIO_ACTIVE_HIGH>;
-		startup-delay-us = <10000>;
-		enable-active-high;
-		//regulator-always-on;
+		regulator-always-on;
 		regulator-boot-on;
 		regulator-uboot-logo;
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
 		status = "disabled";
 	};
 
@@ -1277,6 +1273,22 @@
 		};
 	};
 
+	edp {
+		edp_hpd: edp-hpd {
+			rockchip,pins =
+				<4 28 RK_FUNC_GPIO &pcfg_pull_none>;
+		};
+	};
+
+	edp-panel {
+		edp_vdd_pwr: edp-vdd-pwr {
+			rockchip,pins = <2 4 RK_FUNC_GPIO &pcfg_pull_down>;
+		};
+		edp_bkl_en: edp-bkl-en {
+			rockchip,pins = <2 6 RK_FUNC_GPIO &pcfg_pull_down>;
+		};
+	};
+
 	dsi-phy {
 		dsi_pwr_vdd_core_h: dsi-pwr-vdd-core-h {
 			rockchip,pins = <1 4 RK_FUNC_GPIO &pcfg_pull_down>;
@@ -1307,6 +1319,20 @@
 	vdp0 {
 		dp_det: dp-det {
 			rockchip,pins = <4 25 RK_FUNC_GPIO &pcfg_pull_none>;
+		};
+	};
+
+	i2s0 {
+		i2s0_8ch_bus_1: i2s0-8ch-bus-1 {
+			rockchip,pins =
+				<3 24 RK_FUNC_1 &pcfg_pull_none>,
+				<3 25 RK_FUNC_1 &pcfg_pull_none>,
+				<3 26 RK_FUNC_1 &pcfg_pull_none>,
+				<3 27 RK_FUNC_1 &pcfg_pull_none>,
+				<3 28 RK_FUNC_1 &pcfg_pull_none>,
+				<3 29 RK_FUNC_1 &pcfg_pull_none>,
+				<3 30 RK_FUNC_1 &pcfg_pull_none>,
+				<3 31 RK_FUNC_1 &pcfg_pull_none>;
 		};
 	};
 
