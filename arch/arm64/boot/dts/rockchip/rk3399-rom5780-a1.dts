@@ -90,7 +90,6 @@
 
 		edp_vcc = &edp_vcc;
 		edp_bkl_vdd = &edp_bkl_vdd;
-		dsi_vcc = &dsi_vdd_core;
 		lvds_pwr_vcc = &lvds_pwr_vcc;
 		lvds_bkl_vcc = &lvds_bkl_vcc;
 
@@ -295,20 +294,6 @@
 		status = "disabled";
 	};
 
-	//dsi vdd core
-	dsi_vdd_core: dsi-vdd-core {
-		compatible = "regulator-fixed";
-		regulator-name = "dsi_vdd_core";
-		pinctrl-names = "default";
-		pinctrl-0 = <&dsi_pwr_vdd_core_h>;
-		gpio = <&gpio1 4 GPIO_ACTIVE_HIGH>;
-		enable-active-high;
-		regulator-always-on;
-		regulator-boot-on;
-		regulator-uboot-logo;
-		status = "disabled";
-	};
-
 	vpd0: virtual-pd0 {
 		compatible = "linux,extcon-pd-virtual";
 		dp-det-gpios = <&gpio4 25 GPIO_ACTIVE_LOW>; //GPIO4_D1 - DP_HOTPLUG
@@ -443,6 +428,17 @@
 		status = "okay";
 	};
 
+	vcc1v2_hub_lvds: vcc1v2-hub-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc1v2_hub_lvds";
+		enable-active-high;
+		regulator-always-on;
+		regulator-boot-on;
+		gpio = <&gpio1 4 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&vcc1v2_en>;
+	};
+
 	vcc1v8_sata: vcc1v8-sata-regulator {
 		compatible = "regulator-fixed";
 		enable-active-high;
@@ -569,9 +565,8 @@
 &dsi {
 	pinctrl-names = "default";
 	pinctrl-0 = <&dsi_enable_h &dsi_reset_l>;
-	power-supply = <&dsi_vdd_core>;
+	power-supply = <&vcc1v2_hub_lvds>;
 	power-io-supply = <&vcc_1v8>;
-	power-gpios =<&gpio1 4 GPIO_ACTIVE_HIGH>;
 	enable-gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
 	reset-gpios = <&gpio1 24 GPIO_ACTIVE_HIGH>;
 	status = "disabled";
@@ -1204,7 +1199,7 @@
 
 &pinctrl {
 	pinctrl-names = "default";
-	pinctrl-0 = <&usb_hub_rst>;//, <&usb1v2_en>;
+	pinctrl-0 = <&usb_hub_rst>;
 	pmic {
 		pmic_int_l: pmic-int-l {
 			rockchip,pins =
@@ -1263,7 +1258,7 @@
 	};
 
 	usb_hub {
-		usb1v2_en: usb1v2-en {
+		vcc1v2_en: vcc1v2-en {
 			rockchip,pins =
 				<1 4 RK_FUNC_GPIO &pcfg_pull_up>; // GPIO1_A4 / VCC_1V2_EN
 		};
