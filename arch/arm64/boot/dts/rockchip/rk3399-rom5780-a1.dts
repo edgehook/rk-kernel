@@ -123,8 +123,8 @@
 		compatible = "misc-adv-gpio";
 		status = "okay";
 		pinctrl-names = "default";
-		pinctrl-0 = <&m2_pwr_h  &m2_reset_l >;
-		m2-pwr-gpio = <&gpio4 21 GPIO_ACTIVE_HIGH>;
+		pinctrl-0 = <&m2_reset_l>;
+		/*m2-pwr-gpio = <&gpio4 21 GPIO_ACTIVE_HIGH>;*/
 		m2-reset-gpio = <&gpio2 28 GPIO_ACTIVE_LOW>;
 		timing-interval = <100>;
 	};
@@ -353,7 +353,7 @@
 	wireless-wlan {
 		compatible = "wlan-platdata";
 		rockchip,grf = <&grf>;
-		wifi_chip_type = "rtl8723bs";
+		wifi_chip_type = "";
 		sdio_vref = <1800>;
 		WIFI,host_wake_irq = <&gpio0 3 GPIO_ACTIVE_HIGH>;
 		status = "okay";
@@ -369,9 +369,7 @@
 		pinctrl-0 = <&uart0_rts>;
 		pinctrl-1 = <&uart0_gpios>;
 		/* BT,power_gpio  = <&gpio3 19 GPIO_ACTIVE_HIGH>; */
-		BT,reset_gpio    = <&pca953x 0 GPIO_ACTIVE_LOW>;
-		BT,wake_gpio     = <&gpio2 26 GPIO_ACTIVE_HIGH>;
-		BT,wake_host_irq = <&gpio0 4 GPIO_ACTIVE_HIGH>;
+		BT,reset_gpio    = <&pca953x 0 GPIO_ACTIVE_HIGH>;
 		status = "okay";
 	};
 
@@ -900,10 +898,6 @@
 
 &i2c7 {
 	status = "okay";
-	/*i2c-scl-rising-time-ns = <168>;
-	i2c-scl-falling-time-ns = <4>;*/
-	/*i2c-scl-rising-time-ns = <345>;*/
-	/*i2c-scl-falling-time-ns = <11>;*/
 	clock-frequency = <400000>;
 	pca9545: mux@70 {
 		compatible = "pca9545";
@@ -1021,7 +1015,7 @@
 };
 
 &pcie0 {
-	num-lanes = <4>;
+	num-lanes = <1>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie_clkreqn>;
 	status = "okay";
@@ -1350,9 +1344,9 @@
 			};
 	};
 	misc {
-		m2_pwr_h: m2-pwr-h {
-			rockchip,pins = <4 21 RK_FUNC_GPIO &pcfg_pull_none>; 
-		};
+		/*m2_pwr_h: m2-pwr-h {*/
+			/*rockchip,pins = <4 21 RK_FUNC_GPIO &pcfg_pull_none>; */
+		/*};*/
 		m2_reset_l: m2-reset-l {
 			rockchip,pins = <2 28 RK_FUNC_GPIO &pcfg_pull_up>;
 		};
@@ -1366,4 +1360,22 @@
 							/*<0 8  RK_FUNC_GPIO &pcfg_pull_none>;*/
 		/*};*/
 	};
+
+//gpio1_a2,pio1_a3,gpio1_b1,gpio1_b2
+//gpio1_b5,gpio1_c2,gpio1_c4,gpio1_c6
+//gpio1_c7,gpio2_a2,gpio2_a3,gpio4_c5
+		adv_gpios: adv-gpios {
+			rockchip,pins = <1 2   RK_FUNC_GPIO &pcfg_pull_none>, 
+							<1 3   RK_FUNC_GPIO &pcfg_pull_none>, 
+							<1 9   RK_FUNC_GPIO &pcfg_pull_none>, 
+							<1 10  RK_FUNC_GPIO &pcfg_pull_none>, 
+							<1 13  RK_FUNC_GPIO &pcfg_pull_none>, 
+							<1 18  RK_FUNC_GPIO &pcfg_pull_none>, 
+							<1 20  RK_FUNC_GPIO &pcfg_pull_none>, 
+							<1 22  RK_FUNC_GPIO &pcfg_pull_none>, 
+							<1 23  RK_FUNC_GPIO &pcfg_pull_none>, 
+							<2  2  RK_FUNC_GPIO &pcfg_pull_none>, 
+							<2  3  RK_FUNC_GPIO &pcfg_pull_none>, 
+							<4 21  RK_FUNC_GPIO &pcfg_pull_none>;
+		};
 };
