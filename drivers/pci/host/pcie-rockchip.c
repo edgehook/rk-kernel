@@ -240,9 +240,7 @@ struct rockchip_pcie {
 	struct	regulator *vpcie3v3; /* 3.3V power supply */
 	struct	regulator *vpcie1v8; /* 1.8V power supply */
 	struct	regulator *vpcie0v9; /* 0.9V power supply */
-#ifndef CONFIG_ARCH_ADVANTECH
 	struct	gpio_desc *ep_gpio;
-#endif
 	u32	lanes;
 	u8	root_bus_nr;
 	int	link_gen;
@@ -525,9 +523,10 @@ static int rockchip_pcie_init_port(struct rockchip_pcie *rockchip)
 	u32 status;
 	int timeouts = 500;
 
-#ifndef CONFIG_ARCH_ADVANTECH
-	gpiod_set_value(rockchip->ep_gpio, 0);
+#ifdef CONFIG_ARCH_ADVANTECH
+	if (!IS_ERR(rockchip->ep_gpio))
 #endif
+	gpiod_set_value(rockchip->ep_gpio, 0);
 
 	err = reset_control_assert(rockchip->aclk_rst);
 	if (err) {
@@ -663,9 +662,10 @@ static int rockchip_pcie_init_port(struct rockchip_pcie *rockchip)
 	rockchip_pcie_write(rockchip, PCIE_CLIENT_LINK_TRAIN_ENABLE,
 			    PCIE_CLIENT_CONFIG);
 
-#ifndef CONFIG_ARCH_ADVANTECH
-	gpiod_set_value(rockchip->ep_gpio, 1);
+#ifdef CONFIG_ARCH_ADVANTECH
+	if (!IS_ERR(rockchip->ep_gpio))
 #endif
+	gpiod_set_value(rockchip->ep_gpio, 1);
 
 	if (rockchip->wait_ep)
 		timeouts = 10000;
@@ -1015,13 +1015,13 @@ static int rockchip_pcie_parse_dt(struct rockchip_pcie *rockchip)
 		return PTR_ERR(rockchip->aclk_rst);
 	}
 
-#ifndef CONFIG_ARCH_ADVANTECH
 	rockchip->ep_gpio = devm_gpiod_get_optional(dev, "ep", GPIOD_OUT_HIGH);
 	if (IS_ERR(rockchip->ep_gpio)) {
 		dev_err(dev, "invalid ep-gpios property in node\n");
+#ifndef CONFIG_ARCH_ADVANTECH
 		return PTR_ERR(rockchip->ep_gpio);
-	}
 #endif
+	}
 
 	rockchip->aclk_pcie = devm_clk_get(dev, "aclk");
 	if (IS_ERR(rockchip->aclk_pcie)) {
