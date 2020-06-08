@@ -11,7 +11,6 @@
  *  the Free Software Foundation; version 2 of the License.
  */
 
-
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/gpio.h>
@@ -115,6 +114,7 @@ static inline struct pca953x_chip *to_pca(struct gpio_chip *gc)
 	return container_of(gc, struct pca953x_chip, gpio_chip);
 }
 
+#ifdef CONFIG_ARCH_ADVANTECH
 static int pca953x_read_single(struct pca953x_chip *chip, int reg, char *val,
 				int off)
 {
@@ -134,36 +134,14 @@ static int pca953x_read_single(struct pca953x_chip *chip, int reg, char *val,
 		},
 	};
 	ret = __i2c_transfer(adap, msg, 2);
-	/*int bank_shift = fls((chip->gpio_chip.ngpio - 1) / BANK_SZ);*/
-	/*int offset = off / BANK_SZ;*/
 
-	/*ret = i2c_smbus_read_byte_data(chip->client,*/
-				/*(reg << bank_shift) + offset);*/
-	/**val = ret;*/
-
-	/*if (ret < 0) {*/
-		/*dev_err(&chip->client->dev, "failed reading register\n");*/
-		/*return ret;*/
-	/*}*/
-
-	return 0;
+	return ret;
 }
 
 static int pca953x_write_single(struct pca953x_chip *chip, int reg, u32 val,
 				int off)
 {
 	int ret = 0;
-	/*int bank_shift = fls((chip->gpio_chip.ngpio - 1) / BANK_SZ);*/
-	/*int offset = off / BANK_SZ;*/
-
-	/*ret = i2c_smbus_write_byte_data(chip->client,
-					(reg << bank_shift) + offset, val);
-
-	if (ret < 0) {
-		dev_err(&chip->client->dev, "failed writing register\n");
-		return ret;
-	}*/
-
 	struct i2c_adapter *adap = to_i2c_adapter(chip->client->dev.parent);
 	struct i2c_msg msg;
 	char buf[2];
@@ -176,13 +154,12 @@ static int pca953x_write_single(struct pca953x_chip *chip, int reg, u32 val,
 	msg.buf = buf;
 	ret = __i2c_transfer(adap, &msg, 1);
 
-	return 0;
+	return ret;
 }
 
 static int pca953x_write_regs(struct pca953x_chip *chip, int reg, u8 *val)
 {
 	int ret = 0;
-
 	struct i2c_adapter *adap = to_i2c_adapter(chip->client->dev.parent);
 	struct i2c_msg msg;
 	char buf[2];
@@ -195,7 +172,72 @@ static int pca953x_write_regs(struct pca953x_chip *chip, int reg, u8 *val)
 	msg.buf = buf;
 	ret = __i2c_transfer(adap, &msg, 1);
 
-/*
+	return ret;
+}
+
+static int pca953x_read_regs(struct pca953x_chip *chip, int reg, u8 *val)
+{
+	int ret;
+	struct i2c_adapter *adap = to_i2c_adapter(chip->client->dev.parent);
+	char buf = (char)reg;
+	struct i2c_msg msg[2] = {
+		{.addr = chip->client->addr,
+		 .flags = 0,
+		 .len = 1,
+		 .buf = &buf,
+		},
+		{.addr = chip->client->addr,
+		 .flags = 1,
+		 .len = 1,
+		 .buf = val,
+		},
+	};
+	ret = __i2c_transfer(adap, msg, 2);
+
+	return ret;
+}
+#else
+static int pca953x_read_single(struct pca953x_chip *chip, int reg, u32 *val,
+				int off)
+{
+	int ret;
+	int bank_shift = fls((chip->gpio_chip.ngpio - 1) / BANK_SZ);
+	int offset = off / BANK_SZ;
+
+	ret = i2c_smbus_read_byte_data(chip->client,
+				(reg << bank_shift) + offset);
+	*val = ret;
+
+	if (ret < 0) {
+		dev_err(&chip->client->dev, "failed reading register\n");
+		return ret;
+	}
+
+	return 0;
+}
+
+static int pca953x_write_single(struct pca953x_chip *chip, int reg, u32 val,
+				int off)
+{
+	int ret = 0;
+	int bank_shift = fls((chip->gpio_chip.ngpio - 1) / BANK_SZ);
+	int offset = off / BANK_SZ;
+
+	ret = i2c_smbus_write_byte_data(chip->client,
+					(reg << bank_shift) + offset, val);
+
+	if (ret < 0) {
+		dev_err(&chip->client->dev, "failed writing register\n");
+		return ret;
+	}
+
+	return 0;
+}
+
+static int pca953x_write_regs(struct pca953x_chip *chip, int reg, u8 *val)
+{
+	int ret = 0;
+
 	if (chip->gpio_chip.ngpio <= 8)
 		ret = i2c_smbus_write_byte_data(chip->client, reg, *val);
 	else if (chip->gpio_chip.ngpio >= 24) {
@@ -225,7 +267,7 @@ static int pca953x_write_regs(struct pca953x_chip *chip, int reg, u8 *val)
 		dev_err(&chip->client->dev, "failed writing register\n");
 		return ret;
 	}
-*/
+
 	return 0;
 }
 
@@ -233,23 +275,7 @@ static int pca953x_read_regs(struct pca953x_chip *chip, int reg, u8 *val)
 {
 	int ret;
 
-	struct i2c_adapter *adap = to_i2c_adapter(chip->client->dev.parent);
-	char buf = (char)reg;
-	struct i2c_msg msg[2] = {
-		{.addr = chip->client->addr,
-		 .flags = 0,
-		 .len = 1,
-		 .buf = &buf,
-		},
-		{.addr = chip->client->addr,
-		 .flags = 1,
-		 .len = 1,
-		 .buf = val,
-		},
-	};
-	ret = __i2c_transfer(adap, msg, 2);
-
-	/*if (chip->gpio_chip.ngpio <= 8) {
+	if (chip->gpio_chip.ngpio <= 8) {
 		ret = i2c_smbus_read_byte_data(chip->client, reg);
 		*val = ret;
 	} else if (chip->gpio_chip.ngpio >= 24) {
@@ -266,10 +292,11 @@ static int pca953x_read_regs(struct pca953x_chip *chip, int reg, u8 *val)
 	if (ret < 0) {
 		dev_err(&chip->client->dev, "failed reading register\n");
 		return ret;
-	}*/
+	}
 
 	return 0;
 }
+#endif
 
 static int pca953x_gpio_direction_input(struct gpio_chip *gc, unsigned off)
 {
@@ -353,7 +380,11 @@ exit:
 static int pca953x_gpio_get_value(struct gpio_chip *gc, unsigned off)
 {
 	struct pca953x_chip *chip = to_pca(gc);
+#ifdef CONFIG_ARCH_ADVANTECH
 	char reg_val;
+#else
+	u32 reg_val;
+#endif
 	int ret, offset = 0;
 
 	mutex_lock(&chip->i2c_lock);
@@ -374,6 +405,7 @@ static int pca953x_gpio_get_value(struct gpio_chip *gc, unsigned off)
 		 */
 		return 0;
 	}
+
 	return (reg_val & (1u << (off % BANK_SZ))) ? 1 : 0;
 }
 
@@ -418,7 +450,11 @@ static void pca953x_setup_gpio(struct pca953x_chip *chip, int gpios)
 	gc->direction_output = pca953x_gpio_direction_output;
 	gc->get = pca953x_gpio_get_value;
 	gc->set = pca953x_gpio_set_value;
+#ifdef CONFIG_ARCH_ADVANTECH
 	gc->can_sleep = false;
+#else
+	gc->can_sleep = true;
+#endif
 
 	gc->base = chip->gpio_start;
 	gc->ngpio = gpios;
@@ -663,7 +699,7 @@ static int device_pca953x_init(struct pca953x_chip *chip, u32 invert)
 {
 	int ret;
 	u8 val[MAX_BANK];
-	u8 data=0;
+
 	ret = pca953x_read_regs(chip, PCA953X_OUTPUT, chip->reg_output);
 	if (ret)
 		goto out;
@@ -679,12 +715,7 @@ static int device_pca953x_init(struct pca953x_chip *chip, u32 invert)
 	else
 		memset(val, 0, NBANK(chip));
 
-	data=0xff;	
-	ret = pca953x_write_regs(chip, PCA953X_DIRECTION, &data);
-	ret = pca953x_write_regs(chip, PCA953X_OUTPUT, &data);
-	
 	ret = pca953x_write_regs(chip, PCA953X_INVERT, val);
-
 out:
 	return ret;
 }
