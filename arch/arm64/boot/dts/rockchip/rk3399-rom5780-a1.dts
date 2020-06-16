@@ -123,7 +123,7 @@
 		compatible = "misc-adv-gpio";
 		status = "okay";
 		pinctrl-names = "default";
-		pinctrl-0 = <&m2_reset_l >;
+		pinctrl-0 = <&m2_reset_l>;
 		m2-reset-gpio = <&gpio2 28 GPIO_ACTIVE_LOW>;
 		timing-interval = <100>;
 	};
@@ -908,7 +908,7 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			reg = <2>;
-			 pca953x: pca953x@70 {
+			pca953x: pca953x@70 {
 				compatible = "pca9538";
 				reg = <0x70>;
 				pinctrl-names = "default";
@@ -1012,6 +1012,7 @@
 };
 
 &pcie0 {
+	//ep-gpios = <&gpio2 28 GPIO_ACTIVE_HIGH>;
 	num-lanes = <1>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie_clkreqn>;
@@ -1054,6 +1055,20 @@
 	pinctrl-0 = <&sdmmc_clk &sdmmc_cmd &sdmmc_cd &sdmmc_bus4 &sdio_pwr_en>;
 	card-detect-delay = <800>;
 	status = "okay";
+};
+
+&spi5 {
+	status = "okay";
+	max-freq = <48000000>;
+
+	m25p80@0 {
+		compatible = "jedec,spi-nor";
+		spi-max-frequency = <24000000>;
+		reg = <0>;
+		//spi-cpol;
+		//spi-cpha;
+	};
+
 };
 
 &saradc {
@@ -1191,6 +1206,7 @@
 &pinctrl {
 	pinctrl-names = "default";
 	pinctrl-0 = <&usb_hub_rst &adv_gpios>;
+	status = "okay";
 	pmic {
 		pmic_int_l: pmic-int-l {
 			rockchip,pins =
@@ -1322,14 +1338,13 @@
 		};
 	};
 
-     pcie {
-		wireless-bluetooth {
-			uart0_gpios: uart0-gpios {
-				rockchip,pins =
-					<2 19 RK_FUNC_GPIO &pcfg_pull_none>;
-			};
+	wireless-bluetooth {
+		uart0_gpios: uart0-gpios {
+			rockchip,pins =
+				<2 19 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};
+
 	misc {
 		m2_reset_l: m2-reset-l {
 			rockchip,pins = <2 28 RK_FUNC_GPIO &pcfg_pull_up>;
