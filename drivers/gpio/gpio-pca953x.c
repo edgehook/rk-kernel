@@ -115,86 +115,86 @@ static inline struct pca953x_chip *to_pca(struct gpio_chip *gc)
 }
 
 #ifdef CONFIG_ARCH_ADVANTECH
-static int pca953x_read_single(struct pca953x_chip *chip, int reg, char *val,
+static int pca953x_read_single(struct pca953x_chip *chip, int reg, u8 *val,
 				int off)
 {
-	int ret;
-	struct i2c_adapter *adap = to_i2c_adapter(chip->client->dev.parent);
 	char buf = (char)reg;
+	struct i2c_client *client = chip->client;
 	struct i2c_msg msg[2] = {
-		{.addr = chip->client->addr,
+		{.addr = client->addr,
 		 .flags = 0,
 		 .len = 1,
 		 .buf = &buf,
 		},
-		{.addr = chip->client->addr,
-		 .flags = 1,
+		{.addr = client->addr,
+		 .flags = I2C_M_RD,
 		 .len = 1,
 		 .buf = val,
 		},
 	};
-	ret = __i2c_transfer(adap, msg, 2);
+	if((i2c_transfer(client->adapter, msg, 2)) != 2)
+		return -EIO;
 
-	return ret;
+	return 0;
 }
 
-static int pca953x_write_single(struct pca953x_chip *chip, int reg, u32 val,
+static int pca953x_write_single(struct pca953x_chip *chip, int reg, u8 val,
 				int off)
 {
-	int ret = 0;
-	struct i2c_adapter *adap = to_i2c_adapter(chip->client->dev.parent);
+	struct i2c_client *client = chip->client;
 	struct i2c_msg msg;
 	char buf[2];
 
-	msg.addr = chip->client->addr;
+	msg.addr = client->addr;
 	msg.flags = 0;
 	msg.len = 2;
 	buf[0] = reg;
 	buf[1] = val;
 	msg.buf = buf;
-	ret = __i2c_transfer(adap, &msg, 1);
+	if ((i2c_transfer(client->adapter, &msg, 1)) != 1)
+		return -EIO;
 
-	return ret;
+	return 0;
 }
 
 static int pca953x_write_regs(struct pca953x_chip *chip, int reg, u8 *val)
 {
-	int ret = 0;
-	struct i2c_adapter *adap = to_i2c_adapter(chip->client->dev.parent);
+	struct i2c_client *client = chip->client;
 	struct i2c_msg msg;
 	char buf[2];
 
-	msg.addr = chip->client->addr;
+	msg.addr = client->addr;
 	msg.flags = 0;
 	msg.len = 2;
 	buf[0] = reg;
 	buf[1] = *val;
 	msg.buf = buf;
-	ret = __i2c_transfer(adap, &msg, 1);
+	if ((i2c_transfer(client->adapter, &msg, 1)) != 1)
+		return -EIO;
 
-	return ret;
+	return 0;
 }
 
 static int pca953x_read_regs(struct pca953x_chip *chip, int reg, u8 *val)
 {
-	int ret;
-	struct i2c_adapter *adap = to_i2c_adapter(chip->client->dev.parent);
+	struct i2c_client *client = chip->client;
 	char buf = (char)reg;
 	struct i2c_msg msg[2] = {
-		{.addr = chip->client->addr,
+		{.addr = client->addr,
 		 .flags = 0,
 		 .len = 1,
 		 .buf = &buf,
 		},
-		{.addr = chip->client->addr,
-		 .flags = 1,
+		{.addr = client->addr,
+		 .flags = I2C_M_RD,
 		 .len = 1,
 		 .buf = val,
 		},
 	};
-	ret = __i2c_transfer(adap, msg, 2);
+	if((i2c_transfer(client->adapter, msg, 2)) != 2)
+		return -EIO;
 
-	return ret;
+	return 0;
 }
 #else
 static int pca953x_read_single(struct pca953x_chip *chip, int reg, u32 *val,
@@ -381,7 +381,7 @@ static int pca953x_gpio_get_value(struct gpio_chip *gc, unsigned off)
 {
 	struct pca953x_chip *chip = to_pca(gc);
 #ifdef CONFIG_ARCH_ADVANTECH
-	char reg_val;
+	u8 reg_val;
 #else
 	u32 reg_val;
 #endif
