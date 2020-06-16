@@ -113,12 +113,6 @@
 				  0 1 2 3 4 5 6 7 8 9 >;
 	};
 
-	/* first 64k(0xff8c0000~0xff8d0000) for ddr and suspend */
-	iram: sram@ff8d0000 {
-		compatible = "mmio-sram";
-		reg = <0x0 0xff8d0000 0x0 0x20000>; /* 128k */
-	};
-
 	misc-adv-gpio {
 		compatible = "misc-adv-gpio";
 		status = "okay";
@@ -1178,6 +1172,10 @@
 	/* tshut polarity 0:LOW 1:HIGH */
 	rockchip,hw-tshut-polarity = <1>;
 	rockchip,hw-tshut-temp = <120000>;
+	status = "okay";
+};
+
+&dfi {
 	status = "okay";
 };
 
