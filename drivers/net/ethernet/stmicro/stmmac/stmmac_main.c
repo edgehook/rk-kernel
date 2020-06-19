@@ -1795,6 +1795,10 @@ static int stmmac_open(struct net_device *dev)
 	struct stmmac_priv *priv = netdev_priv(dev);
 	int ret;
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	priv->exit=1;
+#endif
+
 	if (priv->pcs != STMMAC_PCS_RGMII && priv->pcs != STMMAC_PCS_TBI &&
 	    priv->pcs != STMMAC_PCS_RTBI) {
 		ret = stmmac_init_phy(dev);
@@ -2952,10 +2956,6 @@ int stmmac_dvr_probe(struct device *device,
 	ret = stmmac_hw_init(priv);
 	if (ret)
 		goto error_hw_init;
-
-#ifdef CONFIG_ARCH_ADVANTECH
-	priv->exit=1;
-#endif
 
 	stmmac_check_ether_addr(priv);
 
