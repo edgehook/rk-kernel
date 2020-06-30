@@ -336,6 +336,13 @@
 		};
 	};
 
+	dp_sound: dp-sound {
+		status = "okay";
+		compatible = "rockchip,cdndp-sound";
+		rockchip,cpu = <&spdif>;
+		rockchip,codec = <&cdn_dp 1>;
+	};
+
 	clkin_gmac: external-gmac-clock {
 		compatible = "fixed-clock";
 		clock-frequency = <125000000>;
@@ -606,6 +613,12 @@
 	status = "okay";
 };
 
+&spdif {
+	status = "okay";
+	/delete-property/ pinctrl-names;
+	/delete-property/ pinctrl-0;
+};
+
 &i2c0 {
 	status = "okay";
 	i2c-scl-rising-time-ns = <345>;
@@ -661,7 +674,7 @@
 		interrupt-parent = <&gpio1>;
 		interrupts = <21 IRQ_TYPE_LEVEL_LOW>;
 		pinctrl-names = "default";
-		pinctrl-0 = <&pmic_int_l &pmic_dvs2>;
+		pinctrl-0 = <&pmic_int_l &clk32k_in>;
 		rockchip,system-power-controller;
 		wakeup-source;
 		#clock-cells = <1>;
@@ -1211,11 +1224,6 @@
 				<1 21 RK_FUNC_GPIO &pcfg_pull_up>;
 		};
 
-		pmic_dvs2: pmic-dvs2 {
-			rockchip,pins =
-				<1 18 RK_FUNC_GPIO &pcfg_pull_down>;
-		};
-
 		vsel1_gpio: vsel1-gpio {
 			rockchip,pins =
 				<1 17 RK_FUNC_GPIO &pcfg_pull_down>;
@@ -1224,6 +1232,11 @@
 		vsel2_gpio: vsel2-gpio {
 			rockchip,pins =
 			<1 14 RK_FUNC_GPIO &pcfg_pull_down>;
+		};
+
+		clk32k_in: clk32k-in {
+			rockchip,pins =
+				<0 0 RK_FUNC_2 &pcfg_pull_down>;
 		};
 	};
 
@@ -1359,7 +1372,7 @@
 							<1 22  RK_FUNC_GPIO &pcfg_pull_none>, 
 							<1 23  RK_FUNC_GPIO &pcfg_pull_none>, 
 							<2  2  RK_FUNC_GPIO &pcfg_pull_none>, 
-							<2  3  RK_FUNC_GPIO &pcfg_pull_none>, 
+							<2  3  RK_FUNC_GPIO &pcfg_pull_none>,
 							<4 21  RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};
