@@ -69,6 +69,13 @@ config ARCH_ADVANTECH
 	help
 	  Support Advantech boards series,such as rsb-4710, ...
 
+config ARCH_ADVANTECH_CHUANDA
+	bool "Support Advantech custom ChuanDa"
+	depends on ARCH_ADVANTECH
+	default n
+	help
+	  Support rsb-4710 for custom ChuanDa
+
 config ARCH_SEATTLE
 	bool "AMD Seattle SoC Family"
 	help

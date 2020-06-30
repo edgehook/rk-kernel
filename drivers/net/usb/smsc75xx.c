@@ -1512,6 +1512,9 @@ static int smsc75xx_bind(struct usbnet *dev, struct usb_interface *intf)
 		return ret;
 	}
 
+#ifdef CONFIG_ARCH_ADVANTECH_CHUANDA
+	snprintf(dev->net->name, IFNAMSIZ, "eth%d", 5);
+#endif
 	smsc75xx_init_mac_address(dev);
 
 	/* Init all registers */
