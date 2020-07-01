@@ -301,32 +301,12 @@
 		status = "okay";
 	};
 
-	dw_hdmi_audio: dw-hdmi-audio {
-		status = "disabled";
-		compatible = "rockchip,dw-hdmi-audio";
-		#sound-dai-cells = <0>;
-	};
-
 	hdmi_sound: hdmi-sound {
-		status = "disabled";
+		status = "okay";
 		compatible = "simple-audio-card";
 		simple-audio-card,format = "i2s";
 		simple-audio-card,mclk-fs = <256>;
 		simple-audio-card,name = "rockchip,hdmi";
-
-		simple-audio-card,cpu {
-			sound-dai = <&i2s2>;
-		};
-		simple-audio-card,codec {
-			sound-dai = <&dw_hdmi_audio>;
-		};
-	};
-
-	hdmi_codec: hdmi-codec {
-		compatible = "simple-audio-card";
-		simple-audio-card,format = "i2s";
-		simple-audio-card,mclk-fs = <256>;
-		simple-audio-card,name = "HDMI-CODEC";
 
 		simple-audio-card,cpu {
 			sound-dai = <&i2s2>;
@@ -400,6 +380,18 @@
 		regulator-boot-on;
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
+	};
+
+	vcc_sd: vcc-sd {
+		compatible = "regulator-fixed";
+		enable-active-high;
+		gpio = <&gpio0 9 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&sdio_pwr_en>;
+		regulator-name = "vcc_sd";
+		regulator-min-microvolt = <3000000>;
+		regulator-max-microvolt = <3000000>;
+		regulator-boot-on;
 	};
 
 	vcc_phy: vcc-phy-regulator {
@@ -775,12 +767,12 @@
 				};
 			};
 
-			vcc_sd: LDO_REG4 {
+			vccio_sd: LDO_REG4 {
 				regulator-always-on;
 				regulator-boot-on;
 				regulator-min-microvolt = <1800000>;
 				regulator-max-microvolt = <3000000>;
-				regulator-name = "vcc_sd";
+				regulator-name = "vccio_sd";
 				regulator-state-mem {
 					regulator-on-in-suspend;
 					regulator-suspend-microvolt = <3000000>;
@@ -905,7 +897,7 @@
 &i2c7 {
 	status = "okay";
 	clock-frequency = <400000>;
-	pca9545: mux@70 {
+	pca9545: mux@73 {
 		compatible = "pca9545";
 		reg = <0x73>;
 		#address-cells = <1>;
@@ -1005,7 +997,7 @@
 	status = "okay";
 	bt656-supply = <&vcc_1v8>;			/* bt656_gpio2ab_ms */
 	audio-supply = <&vcc1v8_dvp>;		/* audio_gpio3d4a_ms */
-	sdmmc-supply = <&vcc_sd>;			/* sdmmc_gpio4b_ms */
+	sdmmc-supply = <&vccio_sd>;			/* sdmmc_gpio4b_ms */
 	gpio1830-supply = <&vcc_1v8>;		/* gpio1833_gpio4cd_ms */
 };
 
@@ -1049,18 +1041,19 @@
 };
 
 &sdmmc {
-	clock-frequency = <100000000>;
-	clock-freq-min-max = <100000 100000000>;
+	clock-frequency = <150000000>;
+	clock-freq-min-max = <100000 150000000>;
 	supports-sd;
 	bus-width = <4>;
 	cap-mmc-highspeed;
 	cap-sd-highspeed;
 	disable-wp;
 	num-slots = <1>;
-	vqmmc-supply = <&vcc_sd>;
+	//sd-uhs-sdr104;
+	vmmc-supply = <&vcc_sd>;
+	vqmmc-supply = <&vccio_sd>;
 	pinctrl-names = "default";
-	pinctrl-0 = <&sdmmc_clk &sdmmc_cmd &sdmmc_cd &sdmmc_bus4 &sdio_pwr_en>;
-	card-detect-delay = <800>;
+	pinctrl-0 = <&sdmmc_clk &sdmmc_cmd &sdmmc_cd &sdmmc_bus4>;
 	status = "okay";
 };
 
@@ -1181,7 +1174,7 @@
 
 &tsadc {
 	/* tshut mode 0:CRU 1:GPIO */
-	rockchip,hw-tshut-mode = <1>;
+	rockchip,hw-tshut-mode = <0>;
 	/* tshut polarity 0:LOW 1:HIGH */
 	rockchip,hw-tshut-polarity = <1>;
 	rockchip,hw-tshut-temp = <120000>;
@@ -1190,6 +1183,232 @@
 
 &dfi {
 	status = "okay";
+};
+
+&dmc {
+	status = "okay";
+	center-supply = <&vdd_center>;
+	system-status-freq = <
+		/*system status         freq(KHz)*/
+		SYS_STATUS_NORMAL       856000
+		SYS_STATUS_REBOOT       416000
+		SYS_STATUS_SUSPEND      416000
+		SYS_STATUS_VIDEO_1080P  416000
+		SYS_STATUS_VIDEO_4K     856000
+		SYS_STATUS_VIDEO_4K_10B 856000
+		SYS_STATUS_PERFORMANCE  856000
+		SYS_STATUS_BOOST        856000
+		SYS_STATUS_DUALVIEW     856000
+		SYS_STATUS_ISP          856000
+	>;
+	vop-bw-dmc-freq = <
+	/* min_bw(MB/s) max_bw(MB/s) freq(KHz) */
+		0       577      416000
+		578     99999    856000
+	>;
+	auto-min-freq = <416000>;
+	auto-freq-en = <0>;
+};
+
+&cluster0_opp {
+	opp-408000000 {
+		opp-microvolt = <840000 840000 1250000>;
+		opp-microvolt-L0 = <840000 840000 1250000>;
+		opp-microvolt-L1 = <840000 840000 1250000>;
+		opp-microvolt-L2 = <840000 840000 1250000>;
+		opp-microvolt-L3 = <840000 840000 1250000>;
+		status = "disabled";
+	};
+	opp-600000000 {
+		opp-microvolt = <840000 840000 1250000>;
+		opp-microvolt-L0 = <840000 840000 1250000>;
+		opp-microvolt-L1 = <840000 840000 1250000>;
+		opp-microvolt-L2 = <840000 840000 1250000>;
+		opp-microvolt-L3 = <840000 840000 1250000>;
+		status = "disabled";
+	};
+	opp-816000000 {
+		opp-microvolt = <850000 850000 1250000>;
+		opp-microvolt-L0 = <850000 850000 1250000>;
+		opp-microvolt-L1 = <850000 850000 1250000>;
+		opp-microvolt-L2 = <800000 800000 1250000>;
+		opp-microvolt-L3 = <800000 800000 1250000>;
+		status = "disabled";
+	};
+	opp-1008000000 {
+		opp-microvolt = <925000 925000 1250000>;
+		opp-microvolt-L0 = <925000 925000 1250000>;
+		opp-microvolt-L1 = <900000 900000 1250000>;
+		opp-microvolt-L2 = <875000 875000 1250000>;
+		opp-microvolt-L3 = <850000 850000 1250000>;
+	};
+	opp-1200000000 {
+		opp-microvolt = <1000000 1000000 1250000>;
+		opp-microvolt-L0 = <1000000 1000000 1250000>;
+		opp-microvolt-L1 = <975000 975000 1250000>;
+		opp-microvolt-L2 = <950000 950000 1250000>;
+		opp-microvolt-L3 = <925000 925000 1250000>;
+	};
+	opp-1416000000 {
+		opp-microvolt = <1125000 1125000 1250000>;
+		opp-microvolt-L0 = <1125000 1125000 1250000>;
+		opp-microvolt-L1 = <1100000 1100000 1250000>;
+		opp-microvolt-L2 = <1075000 1075000 1250000>;
+		opp-microvolt-L3 = <1050000 1050000 1250000>;
+	};
+};
+
+&cluster1_opp {
+	opp-408000000 {
+		opp-microvolt = <840000 840000 1250000>;
+		opp-microvolt-L0 = <840000 840000 1250000>;
+		opp-microvolt-L1 = <840000 840000 1250000>;
+		opp-microvolt-L2 = <840000 840000 1250000>;
+		opp-microvolt-L3 = <840000 840000 1250000>;
+		status = "disabled";
+	};
+	opp-600000000 {
+		opp-microvolt = <840000 840000 1250000>;
+		opp-microvolt-L0 = <840000 840000 1250000>;
+		opp-microvolt-L1 = <840000 840000 1250000>;
+		opp-microvolt-L2 = <840000 840000 1250000>;
+		opp-microvolt-L3 = <840000 840000 1250000>;
+		status = "disabled";
+	};
+	opp-816000000 {
+		opp-microvolt = <855000 855000 1250000>;
+		opp-microvolt-L0 = <855000 855000 1250000>;
+		opp-microvolt-L1 = <855000 855000 1250000>;
+		opp-microvolt-L2 = <800000 800000 1250000>;
+		opp-microvolt-L3 = <800000 800000 1250000>;
+		status = "disabled";
+	};
+	opp-1008000000 {
+		opp-microvolt = <875000 875000 1250000>;
+		opp-microvolt-L0 = <875000 875000 1250000>;
+		opp-microvolt-L1 = <850000 850000 1250000>;
+		opp-microvolt-L2 = <850000 850000 1250000>;
+		opp-microvolt-L3 = <850000 850000 1250000>;
+	};
+	opp-1200000000 {
+		opp-microvolt = <950000 950000 1250000>;
+		opp-microvolt-L0 = <950000 950000 1250000>;
+		opp-microvolt-L1 = <925000 925000 1250000>;
+		opp-microvolt-L2 = <900000 900000 1250000>;
+		opp-microvolt-L3 = <875000 875000 1250000>;
+	};
+	opp-1416000000 {
+		opp-microvolt = <1025000 1025000 1250000>;
+		opp-microvolt-L0 = <1025000 1025000 1250000>;
+		opp-microvolt-L1 = <1000000 1000000 1250000>;
+		opp-microvolt-L2 = <1000000 1000000 1250000>;
+		opp-microvolt-L3 = <975000 975000 1250000>;
+	};
+	opp-1608000000 {
+		opp-microvolt = <1100000 1100000 1250000>;
+		opp-microvolt-L0 = <1100000 1100000 1250000>;
+		opp-microvolt-L1 = <1075000 1075000 1250000>;
+		opp-microvolt-L2 = <1050000 1050000 1250000>;
+		opp-microvolt-L3 = <1025000 1025000 1250000>;
+	};
+	opp-1800000000 {
+		opp-microvolt = <1200000 1200000 1250000>;
+		opp-microvolt-L0 = <1200000 1200000 1250000>;
+		opp-microvolt-L1 = <1175000 1175000 1250000>;
+		opp-microvolt-L2 = <1150000 1150000 1250000>;
+		opp-microvolt-L3 = <1125000 1125000 1250000>;
+	};
+};
+
+&gpu_opp_table {
+	opp-200000000 {
+		opp-microvolt = <830000>;
+		opp-microvolt-L0 = <830000>;
+		opp-microvolt-L1 = <830000>;
+		opp-microvolt-L2 = <830000>;
+		opp-microvolt-L3 = <830000>;
+	};
+	opp-300000000 {
+		opp-microvolt = <830000>;
+		opp-microvolt-L0 = <830000>;
+		opp-microvolt-L1 = <830000>;
+		opp-microvolt-L2 = <830000>;
+		opp-microvolt-L3 = <830000>;
+	};
+	opp-400000000 {
+		opp-microvolt = <855000>;
+		opp-microvolt-L0 = <855000>;
+		opp-microvolt-L1 = <855000>;
+		opp-microvolt-L2 = <800000>;
+		opp-microvolt-L3 = <800000>;
+	};
+	opp-600000000 {
+		opp-microvolt = <955000>;
+		opp-microvolt-L0 = <955000>;
+		opp-microvolt-L1 = <955000>;
+		opp-microvolt-L2 = <900000>;
+		opp-microvolt-L3 = <900000>;
+	};
+	opp-800000000 {
+		opp-microvolt = <1100000>;
+		opp-microvolt-L0 = <1100000>;
+		opp-microvolt-L1 = <1075000>;
+		opp-microvolt-L2 = <1050000>;
+		opp-microvolt-L3 = <1025000>;
+	};
+};
+
+&dmc_opp_table {
+	compatible = "operating-points-v2";
+
+	opp-200000000 {
+		opp-hz = /bits/ 64 <200000000>;
+		opp-microvolt = <900000>;
+		status = "disabled";
+	};
+	opp-300000000 {
+		opp-hz = /bits/ 64 <300000000>;
+		opp-microvolt = <900000>;
+		status = "disabled";
+	};
+	opp-400000000 {
+		opp-hz = /bits/ 64 <400000000>;
+		opp-microvolt = <900000>;
+		status = "disabled";
+	};
+	opp-416000000 {
+		opp-hz = /bits/ 64 <416000000>;
+		opp-microvolt = <900000>;
+	};
+	opp-528000000 {
+		opp-hz = /bits/ 64 <528000000>;
+		opp-microvolt = <900000>;
+		status = "disabled";
+	};
+	opp-600000000 {
+		opp-hz = /bits/ 64 <600000000>;
+		opp-microvolt = <900000>;
+		status = "disabled";
+	};
+	opp-800000000 {
+		opp-hz = /bits/ 64 <800000000>;
+		opp-microvolt = <900000>;
+		status = "disabled";
+	};
+	opp-856000000 {
+		opp-hz = /bits/ 64 <856000000>;
+		opp-microvolt = <900000>;
+	};
+	opp-928000000 {
+		opp-hz = /bits/ 64 <928000000>;
+		opp-microvolt = <900000>;
+		status = "disabled";
+	};
+	opp-1056000000 {
+		opp-hz = /bits/ 64 <1056000000>;
+		opp-microvolt = <900000>;
+		status = "disabled";
+	};
 };
 
 &thermal_zones{
