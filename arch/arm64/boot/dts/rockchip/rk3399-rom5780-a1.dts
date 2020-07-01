@@ -336,7 +336,7 @@
 		wifi_chip_type = "rtl8723bs";
 		sdio_vref = <1800>;
 		WIFI,host_wake_irq = <&gpio0 3 GPIO_ACTIVE_HIGH>;
-		status = "disabled";
+		status = "okay";
 	};
 
 	wireless-bluetooth {
