@@ -897,7 +897,11 @@ static int __init pca953x_init(void)
 /* register after i2c postcore initcall and before
  * subsys initcalls that may rely on these GPIOs
  */
+#ifdef CONFIG_ARCH_ADVANTECH
+arch_initcall(pca953x_init);
+#else
 subsys_initcall(pca953x_init);
+#endif
 
 static void __exit pca953x_exit(void)
 {
