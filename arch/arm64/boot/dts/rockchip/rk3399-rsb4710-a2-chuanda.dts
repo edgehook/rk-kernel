@@ -384,7 +384,7 @@
 	};
 	
 	hdmi_sound: hdmi-sound {
-		status = "disable";
+		status = "disabled";
 		compatible = "simple-audio-card";
 		simple-audio-card,format = "i2s";
 		simple-audio-card,mclk-fs = <256>;
@@ -1716,6 +1716,9 @@
 		<2 25 RK_FUNC_1 &pcfg_pull_none_20ma>;
 };
 
+&watchdog{
+    status = "disabled";
+};
 
 &pinctrl {
 	pmic {

@@ -1704,11 +1704,12 @@
 		};
 	};
 
-	watchdog@ff848000 {
+	watchdog: watchdog@ff848000 {
 		compatible = "snps,dw-wdt";
 		reg = <0x0 0xff848000 0x0 0x100>;
 		clocks = <&cru PCLK_WDT>;
 		interrupts = <GIC_SPI 120 IRQ_TYPE_LEVEL_HIGH 0>;
+		status = "okay";
 	};
 
 	rktimer: rktimer@ff850000 {
