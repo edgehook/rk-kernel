@@ -370,8 +370,13 @@ static int snd_usb_audio_create(struct usb_interface *intf,
 		return -ENXIO;
 	}
 
+#ifdef CONFIG_ARCH_ADVANTECH_CHUANDA
+	err = snd_card_new(&intf->dev, 1, id[idx], THIS_MODULE,
+			   0, &card);
+#else
 	err = snd_card_new(&intf->dev, index[idx], id[idx], THIS_MODULE,
 			   0, &card);
+#endif
 	if (err < 0) {
 		dev_err(&dev->dev, "cannot create card instance %d\n", idx);
 		return err;
