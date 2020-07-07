@@ -541,7 +541,7 @@
 		rs485_mode_table = <0 1 1>;
 
 		port2{
-			mode = <0>; /*0 RS232 1 RS485*/
+			mode = <1>; /*0 RS232 1 RS485*/
 			sel0_gpio = <&gpio0 6  GPIO_ACTIVE_HIGH>;
 			sel1_gpio = <&gpio0 12 GPIO_ACTIVE_LOW>;
 			term_gpio = <&gpio0 13 GPIO_ACTIVE_HIGH>;
