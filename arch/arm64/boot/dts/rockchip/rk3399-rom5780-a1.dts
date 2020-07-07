@@ -1057,6 +1057,19 @@
 	status = "okay";
 };
 
+&spi2 {
+	status = "okay";
+	max-freq = <48000000>;
+
+	m25p80@0 {
+		compatible = "jedec,spi-nor";
+		spi-max-frequency = <24000000>;
+		reg = <0>;
+		//spi-cpol;
+		//spi-cpha;
+	};
+};
+
 &spi5 {
 	status = "okay";
 	max-freq = <48000000>;
