@@ -1454,6 +1454,7 @@
 	pcfg_pull_up_18ma: pcfg-pull-up-18ma {
 		bias-pull-up;
 		drive-strength = <18>;
+	};
 
 	pcfg_pull_none_26ma: pcfg-pull-none-26ma {
 		bias-disable;
