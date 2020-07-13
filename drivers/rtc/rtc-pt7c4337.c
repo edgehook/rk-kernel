@@ -114,7 +114,7 @@ static int pt7c4337_init(struct pt7c4337 *pt7c4337, char *status)
 	ret = pt7c4337_get_reg(pt7c4337, PT7C4337_BYTE_HOURS, status, 1);
 	if (ret < 0)
 		return ret;
-	*status &= ~PT7C4337_HOURS_24H;
+	*status |= PT7C4337_HOURS_24H;
 	buf[0] = PT7C4337_BYTE_HOURS;
 	buf[1] = *status;
 	ret = pt7c4337_set_reg(pt7c4337, buf, 2);
@@ -132,7 +132,7 @@ static char pt7c4337_hr2reg(struct pt7c4337 *pt7c4337, int hour)
 	if (hour < 12)
 		return bin2bcd(hour);
 
-	return 0x20 | bin2bcd(hour - 12);
+	return 0x40 | bin2bcd(hour - 12);
 }
 
 static int pt7c4337_reg2hr(struct pt7c4337 *pt7c4337, char reg)
@@ -143,7 +143,7 @@ static int pt7c4337_reg2hr(struct pt7c4337 *pt7c4337, char reg)
 		return bcd2bin(reg & 0x3f);
 
 	hour = bcd2bin(reg & 0x1f);
-	if (reg & 0x20)
+	if (reg & 0x40)
 		hour += 12;
 
 	return hour;
