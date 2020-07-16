@@ -66,8 +66,10 @@ static struct {
 	struct clk		*clk;
 	unsigned long		rate;
 	unsigned long		in_use;
+#ifndef CONFIG_ARCH_ADVANTECH
 	unsigned long		next_heartbeat;
 	struct timer_list	timer;
+#endif
 	int			expect_close;
 	struct notifier_block	restart_handler;
 	struct reset_control	*rst;
@@ -98,10 +100,12 @@ static int dw_wdt_get_top(void)
 	return dw_wdt_top_in_seconds(top);
 }
 
+#ifndef CONFIG_ARCH_ADVANTECH
 static inline void dw_wdt_set_next_heartbeat(void)
 {
 	dw_wdt.next_heartbeat = jiffies + dw_wdt_get_top() * HZ;
 }
+#endif
 
 static void dw_wdt_keepalive(void)
 {
@@ -139,7 +143,9 @@ static int dw_wdt_set_top(unsigned top_s)
 	 */
 	dw_wdt_keepalive();
 
+#ifndef CONFIG_ARCH_ADVANTECH
 	dw_wdt_set_next_heartbeat();
+#endif
 
 	return dw_wdt_top_in_seconds(top_val);
 }
@@ -171,6 +177,7 @@ static int dw_wdt_restart_handle(struct notifier_block *this,
 	return NOTIFY_DONE;
 }
 
+#ifndef CONFIG_ARCH_ADVANTECH
 static void dw_wdt_ping(unsigned long data)
 {
 	if (time_before(jiffies, dw_wdt.next_heartbeat) ||
@@ -180,6 +187,7 @@ static void dw_wdt_ping(unsigned long data)
 	} else
 		pr_crit("keepalive missed, machine will reset\n");
 }
+#endif
 
 static int dw_wdt_open(struct inode *inode, struct file *filp)
 {
@@ -198,7 +206,9 @@ static int dw_wdt_open(struct inode *inode, struct file *filp)
 		dw_wdt_arm_system_reset();
 	}
 
+#ifndef CONFIG_ARCH_ADVANTECH
 	dw_wdt_set_next_heartbeat();
+#endif
 
 	return nonseekable_open(inode, filp);
 }
@@ -227,9 +237,13 @@ static ssize_t dw_wdt_write(struct file *filp, const char __user *buf,
 		}
 	}
 
+#ifndef CONFIG_ARCH_ADVANTECH
 	dw_wdt_set_next_heartbeat();
 	dw_wdt_keepalive();
 	mod_timer(&dw_wdt.timer, jiffies + WDT_TIMEOUT);
+#else
+	dw_wdt_keepalive();
+#endif
 
 	return len;
 }
@@ -261,7 +275,11 @@ static long dw_wdt_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		return put_user(0, (int __user *)arg);
 
 	case WDIOC_KEEPALIVE:
+#ifndef CONFIG_ARCH_ADVANTECH
 		dw_wdt_set_next_heartbeat();
+#else
+		dw_wdt_keepalive();
+#endif
 		return 0;
 
 	case WDIOC_SETTIMEOUT:
@@ -289,7 +307,9 @@ static int dw_wdt_release(struct inode *inode, struct file *filp)
 	clear_bit(0, &dw_wdt.in_use);
 
 	if (!dw_wdt.expect_close) {
+#ifndef CONFIG_ARCH_ADVANTECH
 		del_timer(&dw_wdt.timer);
+#endif
 
 		if (!nowayout)
 			pr_crit("unexpected close, system will reboot soon\n");
@@ -391,9 +411,11 @@ static int dw_wdt_drv_probe(struct platform_device *pdev)
 	if (ret)
 		pr_warn("cannot register restart handler\n");
 
+#ifndef CONFIG_ARCH_ADVANTECH
 	dw_wdt_set_next_heartbeat();
 	setup_timer(&dw_wdt.timer, dw_wdt_ping, 0);
 	mod_timer(&dw_wdt.timer, jiffies + WDT_TIMEOUT);
+#endif
 
 	return 0;
 
