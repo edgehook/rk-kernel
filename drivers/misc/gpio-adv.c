@@ -24,6 +24,7 @@ static bool pm_reset_gpio_active;
 void pm_adv_reboot(void)
 {
 	if(gpio_is_valid(pm_reset_gpio)) {
+		printk("%s enter \n", __func__);
 		gpio_direction_output(pm_reset_gpio,!pm_reset_gpio_active);
 		mdelay(5);
 		gpio_direction_output(pm_reset_gpio,pm_reset_gpio_active);
