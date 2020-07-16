@@ -364,7 +364,7 @@
 
 	vcc_otg_vbus: otg-vbus-regulator {
 		compatible = "regulator-fixed";
-		gpio = <&gpio2 1 GPIO_ACTIVE_HIGH>;
+		gpio = <&gpio0 3 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&otg_vbus_drv>;
 		regulator-name = "vcc_otg_vbus";
@@ -418,9 +418,9 @@
 		status = "okay";
 	};
 
-	vcc1v2_hub_lvds: vcc1v2-hub-regulator {
+	vcc1v2_lvds: vcc1v2-lvds-regulator {
 		compatible = "regulator-fixed";
-		regulator-name = "vcc1v2_hub_lvds";
+		regulator-name = "vcc1v2_lvds";
 		enable-active-high;
 		regulator-always-on;
 		regulator-boot-on;
@@ -555,7 +555,7 @@
 &dsi {
 	pinctrl-names = "default";
 	pinctrl-0 = <&dsi_enable_h &dsi_reset_l>;
-	power-supply = <&vcc1v2_hub_lvds>;
+	power-supply = <&vcc1v2_lvds>;
 	power-io-supply = <&vcc_1v8>;
 	enable-gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
 	reset-gpios = <&gpio1 24 GPIO_ACTIVE_HIGH>;
@@ -858,6 +858,21 @@
 	i2c-scl-rising-time-ns = <300>;
 	i2c-scl-falling-time-ns = <15>;
 
+	adv-wdt-i2c@29 {
+		compatible = "adv-wdt-i2c";
+		pinctrl-names = "rockchip,camera_default";
+		pinctrl-0 = <&wdt_en &wdt_ping>;
+		reg = <0x29>;
+		wdt-ping = <&gpio0 1 GPIO_ACTIVE_HIGH>;
+		wdt-en = <&gpio0 6 GPIO_ACTIVE_HIGH>;
+	};
+};
+
+&i2c1 {
+	status = "okay";
+	i2c-scl-rising-time-ns = <300>;
+	i2c-scl-falling-time-ns = <15>;
+
 	vm149c: vm149c@0c {
 		compatible = "silicon touch,vm149c";
 		status = "okay";
@@ -928,6 +943,10 @@
 	status = "okay";
 	i2c-scl-rising-time-ns = <475>;
 	i2c-scl-falling-time-ns = <26>;
+};
+
+&watchdog{
+    status = "disabled";
 };
 
 &i2s0 {
@@ -1449,7 +1468,7 @@
 
 &pinctrl {
 	pinctrl-names = "default";
-	pinctrl-0 = <&usb_hub_rst &adv_gpios>;
+	pinctrl-0 = <&adv_gpios>;
 	status = "okay";
 
 	pcfg_pull_up_18ma: pcfg-pull-up-18ma {
@@ -1533,18 +1552,7 @@
 		};
 		otg_vbus_drv: otg-vbus-drv {
 			rockchip,pins =
-				<2 1 RK_FUNC_GPIO &pcfg_pull_none>; // GPIO2_A1 / USB0_EN_OC_1V8#
-		};
-	};
-
-	usb_hub {
-		vcc1v2_en: vcc1v2-en {
-			rockchip,pins =
-				<1 4 RK_FUNC_GPIO &pcfg_pull_up>; // GPIO1_A4 / VCC_1V2_EN
-		};
-		usb_hub_rst: usb-hub-rst {
-			rockchip,pins =
-				<4 26 RK_FUNC_GPIO &pcfg_pull_up>; // GPIO4_D2 / USBHUB_RST_1V8
+				<0 3 RK_FUNC_GPIO &pcfg_pull_none>; // GPIO0_A3 / USB0_EN_OC_1V8#
 		};
 	};
 
@@ -1576,6 +1584,9 @@
 		};
 		dsi_reset_l: dsi-reset-l {
 			rockchip,pins = <1 24 RK_FUNC_GPIO &pcfg_pull_down>;
+		};
+		vcc1v2_en: vcc1v2-en {
+			rockchip,pins =	<1 4 RK_FUNC_GPIO &pcfg_pull_up>; // GPIO1_A4 / VCC_1V2_EN
 		};
 	};
 
@@ -1615,6 +1626,16 @@
 		uart0_gpios: uart0-gpios {
 			rockchip,pins =
 				<2 19 RK_FUNC_GPIO &pcfg_pull_none>;
+		};
+	};
+
+	wdt {
+		wdt_en: wdt-en {
+			rockchip,pins = <0 6 RK_FUNC_GPIO &pcfg_pull_none>;
+		};
+
+		wdt_ping: wdt-ping {
+			rockchip,pins = <0 1 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};
 

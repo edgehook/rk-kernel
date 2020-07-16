@@ -578,6 +578,13 @@ config LPC18XX_WATCHDOG
 	  To compile this driver as a module, choose M here: the
 	  module will be called lpc18xx_wdt.
 
+config MSP430_WDT
+	tristate "Advantech MSP430 System level Watchdog"
+	default n
+	help
+	 System level Watchdog driver for the built-in hardware in Advantech ARM platform.
+	 Say 'Y or 'M' here to enable the driver.
+
 # AVR32 Architecture
 
 config AT32AP700X_WDT
