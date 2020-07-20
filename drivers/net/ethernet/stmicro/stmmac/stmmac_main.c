@@ -3027,14 +3027,14 @@ int stmmac_dvr_probe(struct device *device,
 	if (phy_id < PHY_MAX_ADDR) {
 		priv->mii->write(priv->mii, phy_id, 0x1f, 0x0d08);
 		val = priv->mii->read(priv->mii, phy_id, 0x11);
-		val &= ~(0x1 << 8);//TX delay
+		val |= (0x1 << 8);//TX delay
 		priv->mii->write(priv->mii, phy_id, 0x11, val);
 		priv->mii->write(priv->mii, phy_id, 0x1f, 0x0000);
 		barrier();
 
 		priv->mii->write(priv->mii, phy_id, 0x1f, 0x0d08);
 		val = priv->mii->read(priv->mii, phy_id, 0x15);
-		val &= ~(0x1 << 3);//RX delay
+		val |= (0x1 << 3);//RX delay
 		priv->mii->write(priv->mii, phy_id, 0x15, val);
 		priv->mii->write(priv->mii, phy_id, 0x1f, 0x0000);
 		barrier();

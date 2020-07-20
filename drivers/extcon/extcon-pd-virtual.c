@@ -367,6 +367,8 @@ static void vpd_extcon_init(struct virtual_pd *vpd)
 		vpd_extcon_notify_set(vpd);
 		vpd->plug_state=1;
 	}
+
+	spin_lock_init(&vpd->irq_lock);
 }
 
 static int vpd_extcon_probe(struct platform_device *pdev)
