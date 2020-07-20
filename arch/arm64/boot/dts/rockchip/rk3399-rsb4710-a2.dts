@@ -738,6 +738,7 @@
 	assigned-clock-parents = <&clkin_gmac>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&rgmii_pins &rgmii_phy_reset>;
+	enable_phy_delay = <0>;
 	tx_delay = <0x27>;
 	rx_delay = <0x1e>;
 	status = "okay";

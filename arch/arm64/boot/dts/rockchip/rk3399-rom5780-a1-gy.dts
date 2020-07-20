@@ -604,6 +604,7 @@
 	assigned-clock-parents = <&clkin_gmac>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&rgmii_26ma_pins &rgmii_phy_reset>;
+	enable_phy_delay = <1>;
 	tx_delay = <0>;
 	rx_delay = <0>;
 	status = "okay";
@@ -954,11 +955,11 @@
 
 &fiq_debugger {
 	rockchip,baudrate = <115200>;  /* Only 115200 and 1500000 */
-	status = "okay";
+	status = "disabled";
 };
 
 &uart2 {
-	status = "disabled";
+	status = "okay";
 };
 
 &uart4 {

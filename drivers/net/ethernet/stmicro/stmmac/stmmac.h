@@ -137,6 +137,7 @@ struct stmmac_priv {
 #ifdef CONFIG_ARCH_ADVANTECH
 	struct delayed_work work;
 	int exit;
+	int enable_phy_delay;
 #endif
 };
 

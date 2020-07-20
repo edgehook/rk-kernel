@@ -3014,6 +3014,17 @@ int stmmac_dvr_probe(struct device *device,
 	}
 
 #ifdef CONFIG_ARCH_ADVANTECH
+	ret = of_property_read_u32(device->of_node, "enable_phy_delay", &val);
+	if (ret) {
+		priv->enable_phy_delay = 0x1;
+		dev_err(priv->device, "Can not read property: enable_phy_delay.");
+		dev_err(priv->device, "set enable_phy_delay to 0x%x\n",
+			priv->enable_phy_delay);
+	} else {
+		dev_info(priv->device, "enable_phy_delay(0x%x).\n", val);
+		priv->enable_phy_delay = val;
+	}
+
 	/* check for attached phy */
 	for (phy_id = 0; (phy_id < PHY_MAX_ADDR); phy_id++) {
 		if ((priv->mii->phy_mask & (1 << phy_id)))
@@ -3025,19 +3036,35 @@ int stmmac_dvr_probe(struct device *device,
 		break;
 	}
 	if (phy_id < PHY_MAX_ADDR) {
-		priv->mii->write(priv->mii, phy_id, 0x1f, 0x0d08);
-		val = priv->mii->read(priv->mii, phy_id, 0x11);
-		val |= (0x1 << 8);//TX delay
-		priv->mii->write(priv->mii, phy_id, 0x11, val);
-		priv->mii->write(priv->mii, phy_id, 0x1f, 0x0000);
-		barrier();
+		if(priv->enable_phy_delay) {
+			priv->mii->write(priv->mii, phy_id, 0x1f, 0x0d08);
+			val = priv->mii->read(priv->mii, phy_id, 0x11);
+			val |= (0x1 << 8);//TX delay
+			priv->mii->write(priv->mii, phy_id, 0x11, val);
+			priv->mii->write(priv->mii, phy_id, 0x1f, 0x0000);
+			barrier();
 
-		priv->mii->write(priv->mii, phy_id, 0x1f, 0x0d08);
-		val = priv->mii->read(priv->mii, phy_id, 0x15);
-		val |= (0x1 << 3);//RX delay
-		priv->mii->write(priv->mii, phy_id, 0x15, val);
-		priv->mii->write(priv->mii, phy_id, 0x1f, 0x0000);
-		barrier();
+			priv->mii->write(priv->mii, phy_id, 0x1f, 0x0d08);
+			val = priv->mii->read(priv->mii, phy_id, 0x15);
+			val |= (0x1 << 3);//RX delay
+			priv->mii->write(priv->mii, phy_id, 0x15, val);
+			priv->mii->write(priv->mii, phy_id, 0x1f, 0x0000);
+			barrier();
+		} else {
+			priv->mii->write(priv->mii, phy_id, 0x1f, 0x0d08);
+			val = priv->mii->read(priv->mii, phy_id, 0x11);
+			val &= ~(0x1 << 8);//TX delay
+			priv->mii->write(priv->mii, phy_id, 0x11, val);
+			priv->mii->write(priv->mii, phy_id, 0x1f, 0x0000);
+			barrier();
+
+			priv->mii->write(priv->mii, phy_id, 0x1f, 0x0d08);
+			val = priv->mii->read(priv->mii, phy_id, 0x15);
+			val &= ~(0x1 << 3);//RX delay
+			priv->mii->write(priv->mii, phy_id, 0x15, val);
+			priv->mii->write(priv->mii, phy_id, 0x1f, 0x0000);
+			barrier();
+		}
 
 		/*Change PHY LED status*/
 		priv->mii->write(priv->mii, phy_id, 0x1f, 0x0d04);
