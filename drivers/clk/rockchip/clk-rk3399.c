@@ -681,7 +681,11 @@ static struct rockchip_clk_branch rk3399_clk_branches[] __initdata = {
 	COMPOSITE(SCLK_SPDIF_DIV, "clk_spdif_div", mux_pll_src_cpll_gpll_p, 0,
 			RK3399_CLKSEL_CON(32), 7, 1, MFLAGS, 0, 7, DFLAGS,
 			RK3399_CLKGATE_CON(8), 13, GFLAGS),
+#ifdef CONFIG_ARCH_ADVANTECH
+	COMPOSITE_FRACMUX(0, "clk_spdif_frac", "clk_spdif_div", CLK_SET_RATE_PARENT,
+#else
 	COMPOSITE_FRACMUX(0, "clk_spdif_frac", "clk_spdif_div", 0,
+#endif
 			RK3399_CLKSEL_CON(99), 0,
 			RK3399_CLKGATE_CON(8), 14, GFLAGS,
 			&rk3399_spdif_fracmux, RK3399_SPDIF_FRAC_MAX_PRATE),
