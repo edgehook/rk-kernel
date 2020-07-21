@@ -122,8 +122,9 @@
 		status = "okay";
 		pinctrl-names = "default";
 		pinctrl-0 = <&m2_reset_l>;
+		m2-pwr-gpio = <&gpio1 23 GPIO_ACTIVE_LOW>;
 		m2-reset-gpio = <&gpio2 28 GPIO_ACTIVE_LOW>;
-		timing-interval = <100>;
+		timing-interval = <10>;
 	};
 
 	// Backlight edp
@@ -1637,7 +1638,6 @@
 							<1 18  RK_FUNC_GPIO &pcfg_pull_none>, 
 							<1 20  RK_FUNC_GPIO &pcfg_pull_none>, 
 							<1 22  RK_FUNC_GPIO &pcfg_pull_none>, 
-							<1 23  RK_FUNC_GPIO &pcfg_pull_none>, 
 							<2  2  RK_FUNC_GPIO &pcfg_pull_none>, 
 							<2  3  RK_FUNC_GPIO &pcfg_pull_none>,
 							<4 21  RK_FUNC_GPIO &pcfg_pull_none>;
