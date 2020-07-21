@@ -85,10 +85,10 @@ static int misc_adv_gpio_probe(struct platform_device *pdev)
 		m2_reset_active = !(flags & OF_GPIO_ACTIVE_LOW);
 		if(m2_reset_active)
 			gpio_request_one(m2_reset_gpio, 
-                        GPIOF_OUT_INIT_HIGH, "minipcie reset gpio");
+                        GPIOF_OUT_INIT_HIGH, "m2 reset gpio");
 		else
 			gpio_request_one(m2_reset_gpio, 
-                        GPIOF_OUT_INIT_LOW, "minipcie reset gpio");
+                        GPIOF_OUT_INIT_LOW, "m2 reset gpio");
 	}
 
 	m2_pwr_gpio = of_get_named_gpio_flags(np, "m2-pwr-gpio", 0, &flags);
