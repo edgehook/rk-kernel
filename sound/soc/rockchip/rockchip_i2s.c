@@ -22,6 +22,12 @@
 #include <linux/spinlock.h>
 #include <sound/pcm_params.h>
 #include <sound/dmaengine_pcm.h>
+#ifdef CONFIG_ARCH_ADVANTECH
+#include <dt-bindings/gpio/gpio.h>
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
+#include <linux/workqueue.h>
+#endif
 
 #include "rockchip_i2s.h"
 
@@ -57,6 +63,11 @@ struct rk_i2s_dev {
 	const struct rk_i2s_pins *pins;
 	unsigned int bclk_fs;
 	unsigned int clk_trcm;
+#ifdef CONFIG_ARCH_ADVANTECH
+	int amp_mute_gpio;
+	int amp_mute_gpio_active;
+	struct delayed_work work;
+#endif
 };
 
 /* txctrl/rxctrl lock */
@@ -429,10 +440,20 @@ static int rockchip_i2s_trigger(struct snd_pcm_substream *substream,
 			rockchip_snd_rxctrl(i2s, 1);
 		else
 			rockchip_snd_txctrl(i2s, 1);
+#ifdef CONFIG_ARCH_ADVANTECH
+		if (gpio_is_valid(i2s->amp_mute_gpio))
+			mod_delayed_work(system_wq, &i2s->work, msecs_to_jiffies(50));
+#endif
 		break;
 	case SNDRV_PCM_TRIGGER_SUSPEND:
 	case SNDRV_PCM_TRIGGER_STOP:
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
+#ifdef CONFIG_ARCH_ADVANTECH
+		if (gpio_is_valid(i2s->amp_mute_gpio))
+		{
+			gpio_direction_output(i2s->amp_mute_gpio, !i2s->amp_mute_gpio_active);
+		}
+#endif
 		if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
 			rockchip_snd_rxctrl(i2s, 0);
 		else
@@ -614,6 +635,22 @@ static const struct of_device_id rockchip_i2s_match[] = {
 	{},
 };
 
+#ifdef CONFIG_ARCH_ADVANTECH
+static void i2s_mute_work_func(struct work_struct *work)
+{
+	struct rk_i2s_dev *i2s =
+		container_of(work, struct rk_i2s_dev, work);
+	static int first = 1;
+
+	if(first)
+		first = 0;
+	else if(gpio_is_valid(i2s->amp_mute_gpio))
+	{
+		gpio_direction_output(i2s->amp_mute_gpio, i2s->amp_mute_gpio_active);
+	}
+}
+#endif
+
 static int rockchip_i2s_probe(struct platform_device *pdev)
 {
 	struct device_node *node = pdev->dev.of_node;
@@ -624,6 +661,9 @@ static int rockchip_i2s_probe(struct platform_device *pdev)
 	void __iomem *regs;
 	int ret;
 	int val;
+#ifdef CONFIG_ARCH_ADVANTECH
+	enum of_gpio_flags flags;
+#endif
 
 	i2s = devm_kzalloc(&pdev->dev, sizeof(*i2s), GFP_KERNEL);
 	if (!i2s) {
@@ -648,6 +688,23 @@ static int rockchip_i2s_probe(struct platform_device *pdev)
 #ifdef CONFIG_ARCH_ADVANTECH
 	clk_disable_unprepare(i2s->mclk);
 	clk_disable_unprepare(i2s->hclk);
+	i2s->amp_mute_gpio = of_get_named_gpio_flags(node, "amp-mute-gpio", 0, &flags);
+	if (gpio_is_valid(i2s->amp_mute_gpio)) {
+		ret = devm_gpio_request(&pdev->dev, i2s->amp_mute_gpio, "amp-mute-gpio");
+		if(ret){
+			dev_err(&pdev->dev,"amp_mute_gpio request ERROR:%d\n",ret);
+			return ret;
+		}
+		i2s->amp_mute_gpio_active = (flags == GPIO_ACTIVE_HIGH)? 1:0;
+		ret = gpio_direction_output(i2s->amp_mute_gpio, !i2s->amp_mute_gpio_active);
+		if(ret){
+			dev_err(&pdev->dev,"amp_mute_gpio set ERROR:%d\n",ret);
+			return ret;
+		}
+		INIT_DELAYED_WORK(&i2s->work, i2s_mute_work_func);
+	} else {
+		dev_err(&pdev->dev,"Can not read property amp-mute-gpio\n");
+	}
 #endif
 	/* try to prepare related clocks */
 	i2s->hclk = devm_clk_get(&pdev->dev, "i2s_hclk");
@@ -790,6 +847,8 @@ static void rockchip_i2s_shutdown(struct platform_device *pdev)
 
 	clk_disable_unprepare(i2s->mclk);
 	clk_disable_unprepare(i2s->hclk);
+
+	cancel_delayed_work(&i2s->work);
 }
 #endif
 
