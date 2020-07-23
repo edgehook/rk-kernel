@@ -1475,7 +1475,6 @@
 		opp-microvolt-L1 = <840000 840000 1250000>;
 		opp-microvolt-L2 = <840000 840000 1250000>;
 		opp-microvolt-L3 = <840000 840000 1250000>;
-		status = "disabled";
 	};
 	opp-600000000 {
 		opp-microvolt = <840000 840000 1250000>;
@@ -1483,7 +1482,6 @@
 		opp-microvolt-L1 = <840000 840000 1250000>;
 		opp-microvolt-L2 = <840000 840000 1250000>;
 		opp-microvolt-L3 = <840000 840000 1250000>;
-		status = "disabled";
 	};
 	opp-816000000 {
 		opp-microvolt = <850000 850000 1250000>;
@@ -1491,7 +1489,6 @@
 		opp-microvolt-L1 = <850000 850000 1250000>;
 		opp-microvolt-L2 = <800000 800000 1250000>;
 		opp-microvolt-L3 = <800000 800000 1250000>;
-		status = "disabled";
 	};
 	opp-1008000000 {
 		opp-microvolt = <925000 925000 1250000>;
@@ -1523,7 +1520,6 @@
 		opp-microvolt-L1 = <840000 840000 1250000>;
 		opp-microvolt-L2 = <840000 840000 1250000>;
 		opp-microvolt-L3 = <840000 840000 1250000>;
-		status = "disabled";
 	};
 	opp-600000000 {
 		opp-microvolt = <840000 840000 1250000>;
@@ -1531,7 +1527,6 @@
 		opp-microvolt-L1 = <840000 840000 1250000>;
 		opp-microvolt-L2 = <840000 840000 1250000>;
 		opp-microvolt-L3 = <840000 840000 1250000>;
-		status = "disabled";
 	};
 	opp-816000000 {
 		opp-microvolt = <855000 855000 1250000>;
@@ -1539,7 +1534,6 @@
 		opp-microvolt-L1 = <855000 855000 1250000>;
 		opp-microvolt-L2 = <800000 800000 1250000>;
 		opp-microvolt-L3 = <800000 800000 1250000>;
-		status = "disabled";
 	};
 	opp-1008000000 {
 		opp-microvolt = <875000 875000 1250000>;
