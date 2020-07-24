@@ -599,7 +599,7 @@
 	assigned-clocks = <&cru SCLK_RMII_SRC>;
 	assigned-clock-parents = <&clkin_gmac>;
 	pinctrl-names = "default";
-	pinctrl-0 = <&rgmii_26ma_pins &rgmii_phy_reset>;
+	pinctrl-0 = <&rgmii_16ma_pins &rgmii_phy_reset>;
 	enable_phy_delay = <1>;
 	tx_delay = <0>;
 	rx_delay = <0>;
@@ -1232,7 +1232,6 @@
 		opp-microvolt-L1 = <840000 840000 1250000>;
 		opp-microvolt-L2 = <840000 840000 1250000>;
 		opp-microvolt-L3 = <840000 840000 1250000>;
-		status = "disabled";
 	};
 	opp-600000000 {
 		opp-microvolt = <840000 840000 1250000>;
@@ -1240,7 +1239,6 @@
 		opp-microvolt-L1 = <840000 840000 1250000>;
 		opp-microvolt-L2 = <840000 840000 1250000>;
 		opp-microvolt-L3 = <840000 840000 1250000>;
-		status = "disabled";
 	};
 	opp-816000000 {
 		opp-microvolt = <850000 850000 1250000>;
@@ -1248,7 +1246,6 @@
 		opp-microvolt-L1 = <850000 850000 1250000>;
 		opp-microvolt-L2 = <800000 800000 1250000>;
 		opp-microvolt-L3 = <800000 800000 1250000>;
-		status = "disabled";
 	};
 	opp-1008000000 {
 		opp-microvolt = <925000 925000 1250000>;
@@ -1280,7 +1277,6 @@
 		opp-microvolt-L1 = <840000 840000 1250000>;
 		opp-microvolt-L2 = <840000 840000 1250000>;
 		opp-microvolt-L3 = <840000 840000 1250000>;
-		status = "disabled";
 	};
 	opp-600000000 {
 		opp-microvolt = <840000 840000 1250000>;
@@ -1288,7 +1284,6 @@
 		opp-microvolt-L1 = <840000 840000 1250000>;
 		opp-microvolt-L2 = <840000 840000 1250000>;
 		opp-microvolt-L3 = <840000 840000 1250000>;
-		status = "disabled";
 	};
 	opp-816000000 {
 		opp-microvolt = <855000 855000 1250000>;
@@ -1296,7 +1291,6 @@
 		opp-microvolt-L1 = <855000 855000 1250000>;
 		opp-microvolt-L2 = <800000 800000 1250000>;
 		opp-microvolt-L3 = <800000 800000 1250000>;
-		status = "disabled";
 	};
 	opp-1008000000 {
 		opp-microvolt = <875000 875000 1250000>;
@@ -1456,6 +1450,11 @@
 	pcfg_pull_up_18ma: pcfg-pull-up-18ma {
 		bias-pull-up;
 		drive-strength = <18>;
+	};
+
+	pcfg_pull_none_16ma: pcfg-pull-none-16ma {
+		bias-disable;
+		drive-strength = <16>;
 	};
 
 	pcfg_pull_none_26ma: pcfg-pull-none-26ma {
@@ -1641,6 +1640,40 @@
 	};
 
 	gmac {
+		rgmii_16ma_pins: rgmii-16ma-pins {
+			rockchip,pins =
+				/* mac_txclk */
+				<3 17 RK_FUNC_1 &pcfg_pull_none_16ma>,
+				/* mac_rxclk */
+				<3 14 RK_FUNC_1 &pcfg_pull_none>,
+				/* mac_mdio */
+				<3 13 RK_FUNC_1 &pcfg_pull_none>,
+				/* mac_txen */
+				<3 12 RK_FUNC_1 &pcfg_pull_none_13ma>,
+				/* mac_clk */
+				<3 11 RK_FUNC_1 &pcfg_pull_none>,
+				/* mac_rxdv */
+				<3 9 RK_FUNC_1 &pcfg_pull_none>,
+				/* mac_mdc */
+				<3 8 RK_FUNC_1 &pcfg_pull_none>,
+				/* mac_rxd1 */
+				<3 7 RK_FUNC_1 &pcfg_pull_none>,
+				/* mac_rxd0 */
+				<3 6 RK_FUNC_1 &pcfg_pull_none>,
+				/* mac_txd1 */
+				<3 5 RK_FUNC_1 &pcfg_pull_none_13ma>,
+				/* mac_txd0 */
+				<3 4 RK_FUNC_1 &pcfg_pull_none_13ma>,
+				/* mac_rxd3 */
+				<3 3 RK_FUNC_1 &pcfg_pull_none>,
+				/* mac_rxd2 */
+				<3 2 RK_FUNC_1 &pcfg_pull_none>,
+				/* mac_txd3 */
+				<3 1 RK_FUNC_1 &pcfg_pull_none_13ma>,
+				/* mac_txd2 */
+				<3 0 RK_FUNC_1 &pcfg_pull_none_13ma>;
+		};
+
 		rgmii_26ma_pins: rgmii-26ma-pins {
 			rockchip,pins =
 				/* mac_txclk */
