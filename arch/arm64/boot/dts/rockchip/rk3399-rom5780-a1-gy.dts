@@ -1429,12 +1429,12 @@
 	soc_thermal: soc-thermal {
 		trips {
 			threshold: trip-point-0 {
-				temperature = <100000>; /* millicelsius */
+				temperature = <80000>; /* millicelsius */
 				hysteresis = <2000>; /* millicelsius */
 				type = "passive";
 			};
 			target: trip-point-1 {
-				temperature = <110000>; /* millicelsius */
+				temperature = <100000>; /* millicelsius */
 				hysteresis = <2000>; /* millicelsius */
 				type = "passive";
 			};
