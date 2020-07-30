@@ -544,7 +544,7 @@
 &cdn_dp {
 	status = "okay";
 	extcon = <&vpd0>;
-	phys = <&tcphy0_dp>;
+	//phys = <&tcphy0_dp>;
 	dp_vop_sel = <1>;
 };
 
@@ -1143,6 +1143,7 @@
 
 &usbdrd_dwc3_0 {
 	dr_mode = "otg";
+	maximum-speed = "high-speed";
 	status = "okay";
 };
 
