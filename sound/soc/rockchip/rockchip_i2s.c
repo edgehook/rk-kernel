@@ -640,11 +640,8 @@ static void i2s_mute_work_func(struct work_struct *work)
 {
 	struct rk_i2s_dev *i2s =
 		container_of(work, struct rk_i2s_dev, work);
-	static int first = 1;
 
-	if(first)
-		first = 0;
-	else if(gpio_is_valid(i2s->amp_mute_gpio))
+	if(gpio_is_valid(i2s->amp_mute_gpio))
 	{
 		gpio_direction_output(i2s->amp_mute_gpio, i2s->amp_mute_gpio_active);
 	}

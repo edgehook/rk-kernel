@@ -1054,7 +1054,7 @@
 
 &i2s0 {
 	status = "okay";
-	pinctrl-0 = <&i2s0_8ch_bus_1>;
+	pinctrl-0 = <&i2s0_8ch_bus_1 &codec_lout_mute>;
 	rockchip,i2s-broken-burst-len;
 	rockchip,playback-channels = <8>;
 	rockchip,capture-channels = <8>;
@@ -1856,7 +1856,11 @@
 		codec_spkvdd: codec-spkvdd {
 			rockchip,pins = <4 5 RK_FUNC_GPIO &pcfg_pull_down>;
 		};
+		codec_lout_mute: codec-lout-mute {
+			rockchip,pins = <4 3  RK_FUNC_GPIO &pcfg_pull_none>;
+		};
 	};
+
 	i2s0 {
 		i2s0_8ch_bus_1: i2s0-8ch-bus-1 {
 			rockchip,pins =
@@ -1900,7 +1904,6 @@
 		adv_gpios: adv-gpios {
 			rockchip,pins = <2 8  RK_FUNC_GPIO &pcfg_pull_none>,
 							<1 18 RK_FUNC_GPIO &pcfg_pull_none>,
-							<4 3  RK_FUNC_GPIO &pcfg_pull_none>,
 							<3 28 RK_FUNC_GPIO &pcfg_pull_none>,
 							<4 4  RK_FUNC_GPIO &pcfg_pull_none>,
 							<0 8  RK_FUNC_GPIO &pcfg_pull_none>;
