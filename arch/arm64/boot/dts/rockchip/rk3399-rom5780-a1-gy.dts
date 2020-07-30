@@ -951,6 +951,8 @@
 };
 
 &uart0 {
+	dmas = <&dmac_peri 0>, <&dmac_peri 1>;
+	dma-names = "tx", "rx";
 	status = "okay";
 };
 
@@ -964,6 +966,8 @@
 };
 
 &uart4 {
+	dmas = <&dmac_peri 8>, <&dmac_peri 9>;
+	dma-names = "tx", "rx";
 	status = "okay";
 };
 
