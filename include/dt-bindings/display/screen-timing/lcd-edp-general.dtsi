@@ -24,6 +24,27 @@
 			swap-gb = <0>;
 		};
 
+		edp_1920x1200: edp-1920x1200 {
+			screen-type = <SCREEN_EDP>;
+			out-face    = <OUT_P888>;
+			clock-frequency = <156300000>;
+			hactive = <1920>;
+			vactive = <1200>;
+			hback-porch = <88>;
+			hfront-porch = <48>;
+			vback-porch = <26>;
+			vfront-porch = <3>;
+			hsync-len = <44>;
+			vsync-len = <6>;
+			hsync-active = <1>;
+			vsync-active = <0>;
+			de-active = <0>;
+			pixelclk-active = <1>;
+			swap-rb = <0>;
+			swap-rg = <0>;
+			swap-gb = <0>;
+	    };
+
 		edp_1366x768: edp-1366x768 {
 			out-face    = <OUT_P888>;
 			clock-frequency = <85500000>;
