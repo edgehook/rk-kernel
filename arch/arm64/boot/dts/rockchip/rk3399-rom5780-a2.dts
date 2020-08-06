@@ -904,11 +904,11 @@
 };
 
 &i2c2 {
-       status = "okay";
-       s35390a: s35390a@30 {
-                compatible = "sii,s35390a";
-                reg = <0x30>;
-       };
+	status = "okay";
+	s35390a: s35390a@30 {
+		compatible = "sii,s35390a";
+		reg = <0x30>;
+	};
 
 	adv-wdt-i2c@29 {
 		compatible = "adv-wdt-i2c";
