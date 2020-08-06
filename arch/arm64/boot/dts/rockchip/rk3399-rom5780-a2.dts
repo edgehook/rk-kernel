@@ -869,14 +869,6 @@
 	i2c-scl-rising-time-ns = <300>;
 	i2c-scl-falling-time-ns = <15>;
 
-	adv-wdt-i2c@29 {
-		compatible = "adv-wdt-i2c";
-		pinctrl-names = "rockchip,camera_default";
-		pinctrl-0 = <&wdt_en &wdt_ping>;
-		reg = <0x29>;
-		wdt-ping = <&gpio0 1 GPIO_ACTIVE_HIGH>;
-		wdt-en = <&gpio0 6 GPIO_ACTIVE_HIGH>;
-	};
 
 	vm149c: vm149c@0c {
 		compatible = "silicon touch,vm149c";
@@ -917,6 +909,15 @@
                 compatible = "sii,s35390a";
                 reg = <0x30>;
        };
+
+	adv-wdt-i2c@29 {
+		compatible = "adv-wdt-i2c";
+		pinctrl-names = "rockchip,camera_default";
+		pinctrl-0 = <&wdt_en &wdt_ping>;
+		reg = <0x29>;
+		wdt-ping = <&gpio0 1 GPIO_ACTIVE_HIGH>;
+		wdt-en = <&gpio0 6 GPIO_ACTIVE_HIGH>;
+	};
 };
 
 &i2c7 {
