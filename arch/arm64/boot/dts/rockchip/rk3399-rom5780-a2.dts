@@ -113,6 +113,21 @@
 				  0 1 2 3 4 5 6 7 8 9 >;
 	};
 
+	rk_key: rockchip-key {
+		compatible = "rockchip,key";
+		status = "okay";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pmic_pwr_key>;
+
+		power-key {
+			gpios = <&gpio0 5 GPIO_ACTIVE_LOW>;
+			linux,code = <116>;
+			label = "GPIO Power Key";
+			gpio-key,wakeup = <1>;
+			polling-release-time = <1000>;//unit:ms
+		};
+	};
+
 	misc-adv-gpio {
 		compatible = "misc-adv-gpio";
 		status = "okay";
@@ -1613,6 +1628,11 @@
 		pmic_int_l: pmic-int-l {
 			rockchip,pins =
 				<1 21 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+
+		pmic_pwr_key: pmic-pwr-key {
+			rockchip,pins =
+					<0 5 RK_FUNC_GPIO &pcfg_pull_up>;
 		};
 
 		vsel1_gpio: vsel1-gpio {
