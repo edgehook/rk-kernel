@@ -44,9 +44,9 @@ struct pkt_file {
 #define ETH_ALEN	6
 
 extern NDIS_STATUS rtw_xmit_entry(
-	IN _nic_hdl		cnxt,
-	IN NDIS_PACKET		*pkt,
-	IN UINT				flags
+	_nic_hdl		cnxt,
+	NDIS_PACKET		*pkt,
+	u32				flags
 );
 
 #endif /* PLATFORM_WINDOWS */
@@ -68,7 +68,8 @@ struct xmit_frame;
 struct xmit_buf;
 
 extern int _rtw_xmit_entry(_pkt *pkt, _nic_hdl pnetdev);
-extern int rtw_xmit_entry(_pkt *pkt, _nic_hdl pnetdev);
+extern inline netdev_tx_t rtw_xmit_entry(struct sk_buff *pkt,
+					 struct net_device *pnetdev);
 
 #endif /* PLATFORM_LINUX */
 

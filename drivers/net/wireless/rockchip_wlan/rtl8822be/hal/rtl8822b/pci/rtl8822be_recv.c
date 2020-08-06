@@ -49,9 +49,9 @@ static u32 rtl8822be_wait_rxrdy(_adapter *padapter,
 	if (rx_bd == NULL)
 		return _FAIL;
 
-	total_len = (u2Byte)GET_RX_BD_TOTALRXPKTSIZE(rx_bd);
-	first_seg = (u1Byte)GET_RX_BD_FS(rx_bd);
-	last_seg = (u1Byte)GET_RX_BD_LS(rx_bd);
+	total_len = (u16)GET_RX_BD_TOTALRXPKTSIZE(rx_bd);
+	first_seg = (u8)GET_RX_BD_FS(rx_bd);
+	last_seg = (u8)GET_RX_BD_LS(rx_bd);
 
 	buf_desc_debug("RX:%s enter: rx_bd addr = %p, total_len=%d, first_seg=%d, last_seg=%d, read_cnt %d, index %d, address %p\n",
 		       __func__,
@@ -69,9 +69,9 @@ static u32 rtl8822be_wait_rxrdy(_adapter *padapter,
 
 			read_cnt++;
 
-			total_len = (u2Byte)GET_RX_BD_TOTALRXPKTSIZE(rx_bd);
-			first_seg = (u1Byte)GET_RX_BD_FS(rx_bd);
-			last_seg = (u1Byte)GET_RX_BD_LS(rx_bd);
+			total_len = (u16)GET_RX_BD_TOTALRXPKTSIZE(rx_bd);
+			first_seg = (u8)GET_RX_BD_FS(rx_bd);
+			last_seg = (u8)GET_RX_BD_LS(rx_bd);
 
 			if (read_cnt > 10000) {
 				pHalData->RxTag = total_len;
@@ -87,9 +87,9 @@ static u32 rtl8822be_wait_rxrdy(_adapter *padapter,
 	while (total_len == 0) {
 		read_cnt++;
 
-		total_len = (u2Byte) GET_RX_BD_TOTALRXPKTSIZE(rx_bd);
-		first_seg = (u1Byte) GET_RX_BD_FS(rx_bd);
-		last_seg = (u1Byte) GET_RX_BD_LS(rx_bd);
+		total_len = (u16) GET_RX_BD_TOTALRXPKTSIZE(rx_bd);
+		first_seg = (u8) GET_RX_BD_FS(rx_bd);
+		last_seg = (u8) GET_RX_BD_LS(rx_bd);
 
 		if (read_cnt > 20) {
 			status = _FAIL;
@@ -295,7 +295,7 @@ done:
 	}
 }
 
-static void rtl8822be_recv_tasklet(void *priv)
+static void rtl8822be_recv_tasklet(unsigned long priv)
 {
 	_irqL	irqL;
 	_adapter	*padapter = (_adapter *)priv;
@@ -324,7 +324,7 @@ static void rtl8822be_xmit_beacon(PADAPTER Adapter)
 #endif
 }
 
-static void rtl8822be_prepare_bcn_tasklet(void *priv)
+static void rtl8822be_prepare_bcn_tasklet(unsigned long priv)
 {
 	_adapter *padapter = (_adapter *)priv;
 

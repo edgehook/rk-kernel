@@ -24,16 +24,21 @@
 #define DRV_NAME "rtl88x2be"
 
 #define CONFIG_PCI_HCI
-#define CONFIG_PCIE_HCI
 #define PLATFORM_LINUX
 
 /*
  * Wi-Fi Functions Config
  */
-#define CONFIG_80211N_HT
+
 #define CONFIG_RECV_REORDERING_CTRL
+
+#define CONFIG_80211N_HT
 #define CONFIG_80211AC_VHT
-#define CONFIG_IEEE80211_BAND_5GHZ
+#ifdef CONFIG_80211AC_VHT
+	#ifndef CONFIG_80211N_HT
+		#define CONFIG_80211N_HT
+	#endif
+#endif
 
 /*#define CONFIG_IOCTL_CFG80211*/
 #ifdef CONFIG_IOCTL_CFG80211
@@ -51,11 +56,10 @@
 /*#define CONFIG_PWRCTRL*/
 /*#define CONFIG_H2CLBK*/
 #define CONFIG_TRX_BD_ARCH	/* PCI only */
-#define CONFIG_RSSI_PRIORITY
-#define CONFIG_DYNAMIC_SOML
 #define USING_RX_TAG
 
 #define CONFIG_EMBEDDED_FWIMG
+
 #ifdef CONFIG_EMBEDDED_FWIMG
 	#define	LOAD_FW_HEADER_FROM_DRIVER
 #endif
@@ -75,6 +79,7 @@
 	#define CONFIG_IPS
 	#ifdef CONFIG_IPS
 		/*#define CONFIG_IPS_LEVEL_2*/ /* enable this to set default IPS mode to IPS_LEVEL_2 */
+	/*#define CONFIG_FWLPS_IN_IPS*/
 	#endif
 
 	#define CONFIG_LPS
@@ -94,23 +99,14 @@
 
 #endif
 
-#define CONFIG_PCI_ASPM
+/*#define CONFIG_PCI_ASPM*/
 #ifdef CONFIG_PCI_ASPM
-#define CONFIG_PCI_DYNAMIC_ASPM
+#define CONFIG_PCI_DYNAMIC_ASPM_L1_LATENCY
 #endif
 
 #define CONFIG_HIGH_CHAN_SUPER_CALIBRATION
 /*#define SUPPORT_HW_RFOFF_DETECTED*/
 /*#define CONFIG_ANTENNA_DIVERSITY*/
-
-/*#define CONFIG_CONCURRENT_MODE*/
-#ifdef CONFIG_CONCURRENT_MODE
-	/*#define CONFIG_HWPORT_SWAP*/				/* Port0->Sec, Port1->Pri */
-	/*#define CONFIG_RUNTIME_PORT_SWITCH*/
-	/*#define DBG_RUNTIME_PORT_SWITCH*/
-	/*#define CONFIG_ATMEL_RC_PATCH*/
-	/*#define CONFIG_TSF_RESET_OFFLOAD*/			/* For 2 PORT TSF SYNC. */
-#endif
 
 #define CONFIG_AP_MODE
 #ifdef CONFIG_AP_MODE
@@ -172,6 +168,9 @@
 
 #define CONFIG_GLOBAL_UI_PID
 
+/*#define CONFIG_RTW_80211K*/
+#define CONFIG_USER_PRIORITY_COMPLY_RFC4594_DSCP
+
 #define CONFIG_LAYER2_ROAMING
 #define CONFIG_LAYER2_ROAMING_RESUME
 /*#define CONFIG_ADAPTOR_INFO_CACHING_FILE*/ /* now just applied on 8192cu only, should make it general...*/
@@ -186,20 +185,17 @@
 
 #define RTW_NOTCH_FILTER 0 /* 0:Disable, 1:Enable, */
 
-#define CONFIG_TX_MCAST2UNI		/* Support IP multicast->unicast*/
-/*#define CONFIG_CHECK_AC_LIFETIME 1*/	/* Check packet lifetime of 4 ACs. */
-
 #define CONFIG_BEAMFORMING
 
 /*
  * Software feature Related Config
  */
 #define RTW_HALMAC		/* Use HALMAC architecture, necessary for 8822B */
-#define CONFIG_RTW_IOCTL_SET_COUNTRY
 
 /*
  * Interface  Related Config
  */
+#define CONFIG_USB_CONFIG_OFFLOAD_8822B
 
 /*
  * HAL  Related Config
@@ -255,20 +251,15 @@
 #define	RTL8192E_EARLY_MODE_PKT_NUM_10	0
 #endif
 
-/* Try to handle the Beacon error found in some types of TP-LINK APs */
-#define CONFIG_ATTEMPT_TO_FIX_AP_BEACON_ERROR
-
 /*
  * Debug Related Config
  */
 #define DBG	1
-
-#define CONFIG_PROC_DEBUG
-
 #define CONFIG_DBG_COUNTER
-
 #define DBG_CONFIG_ERROR_DETECT
+
 /*
+#define RTW_HALMAC_DBG_POWER_SWITCH
 #define DBG_CONFIG_ERROR_DETECT_INT
 #define DBG_CONFIG_ERROR_RESET
 
@@ -295,7 +286,6 @@
 #define DBG_ROAMING_TEST
 
 #define DBG_HAL_INIT_PROFILING
-#define DBG_TXBD_DESC_DUMP
 
 #define DBG_MEMORY_LEAK	1
 
@@ -304,3 +294,8 @@
 /* RX use 1 urb */
 #define CONFIG_SINGLE_RECV_BUF
 #endif
+
+#define	DBG_TXBD_DESC_DUMP
+#define CONFIG_DYNAMIC_SOML
+
+#define CONFIG_PCI_BCN_POLLING

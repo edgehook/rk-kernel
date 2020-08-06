@@ -1,0 +1,19 @@
+--- include/hal_com_h2c.h
++++ include/hal_com_h2c.h
+@@ -585,7 +585,15 @@ s32 rtw_hal_customer_str_write(_adapter *adapter, const u8 *cs);
+ #define SET_H2CCMD_LPSPG_IQK_INFO_LOC(__pH2CCmd, __Value)	SET_BITS_TO_LE_1BYTE((__pH2CCmd) + 3, 0, 8, __Value)/*Loc_IQK_result*/
+ #endif
+ 
+-#define SET_H2CCMD_BT_UNKNOWN_DEVICE_WA_PARM(__pH2CCmd, __Value) SET_BITS_TO_LE_1BYTE(__pH2CCmd, 1, 1, __Value)
++/* BT_UNKNOWN_DEVICE_WA_0xD1 */
++#define SET_H2CCMD_BT_UNKNOWN_DEVICE_WA_HANG_CHK_EN(__pH2CCmd, __Value) \
++	SET_BITS_TO_LE_1BYTE(__pH2CCmd, 0, 1, __Value)
++#define SET_H2CCMD_BT_UNKNOWN_DEVICE_WA_FORCE_IB_EN(__pH2CCmd, __Value) \
++	SET_BITS_TO_LE_1BYTE(__pH2CCmd, 1, 1, __Value)
++#define SET_H2CCMD_BT_UNKNOWN_DEVICE_WA_HWID_CHK_EN(__pH2CCmd, __Value) \
++	SET_BITS_TO_LE_1BYTE(__pH2CCmd, 2, 1, __Value)
++#define SET_H2CCMD_BT_UNKNOWN_DEVICE_WA_ONE_TIME_CHK(__pH2CCmd, __Value) \
++	SET_BITS_TO_LE_1BYTE(__pH2CCmd, 3, 1, __Value)
+ 
+ #ifdef DBG_FW_DEBUG_MSG_PKT
+ #define SET_H2CCMD_FW_DBG_MSG_PKT_EN(__pH2CCmd, __Value)	SET_BITS_TO_LE_1BYTE(__pH2CCmd, 0, 1, __Value)/*sniffer_dbg_en*/
