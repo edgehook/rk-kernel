@@ -316,6 +316,30 @@
 		status = "okay";
 	};
 
+	rt5640-sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,format = "i2s";
+		simple-audio-card,name = "rockchip,rt5640-codec";
+		simple-audio-card,mclk-fs = <256>;
+		status = "okay";
+
+		simple-audio-card,widgets =
+				"Microphone", "Mic Jack",
+				"Headphone", "Headphone Jack";
+		simple-audio-card,routing =
+				"Mic Jack", "MICBIAS1",
+				"IN1P", "Mic Jack",
+				"Headphone Jack", "HPOL",
+				"Headphone Jack", "HPOR";
+
+		simple-audio-card,cpu {
+			sound-dai = <&i2s0>;
+		};
+		simple-audio-card,codec {
+			sound-dai = <&rt5640>;
+		};
+	};
+
 	hdmi_sound: hdmi-sound {
 		status = "okay";
 		compatible = "simple-audio-card";
@@ -869,7 +893,6 @@
 	i2c-scl-rising-time-ns = <300>;
 	i2c-scl-falling-time-ns = <15>;
 
-
 	vm149c: vm149c@0c {
 		compatible = "silicon touch,vm149c";
 		status = "okay";
@@ -974,6 +997,17 @@
 				#gpio-cells = <2>;
 				/*interrupt-controller;*/
 				/*#interrupt-cells = <2>;*/
+			};
+
+			rt5640: rt5640@1c {
+				#sound-dai-cells = <0>;
+				compatible = "realtek,rt5640";
+				reg = <0x1c>;
+				clocks = <&cru SCLK_I2S_8CH_OUT>;
+				clock-names = "mclk";
+				pinctrl-names = "default";
+				pinctrl-0 = <&i2s_8ch_mclk>;
+				realtek,in1-differential;
 			};
 		};
 	};
@@ -1772,9 +1806,6 @@
 				<3 25 RK_FUNC_1 &pcfg_pull_none>,
 				<3 26 RK_FUNC_1 &pcfg_pull_none>,
 				<3 27 RK_FUNC_1 &pcfg_pull_none>,
-				<3 28 RK_FUNC_1 &pcfg_pull_none>,
-				<3 29 RK_FUNC_1 &pcfg_pull_none>,
-				<3 30 RK_FUNC_1 &pcfg_pull_none>,
 				<3 31 RK_FUNC_1 &pcfg_pull_none>;
 		};
 	};
