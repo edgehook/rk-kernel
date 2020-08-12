@@ -60,6 +60,7 @@
 #include <dt-bindings/display/screen-timing/lcd-g150xgel05.dtsi>
 #include <dt-bindings/display/screen-timing/lcd-g215hvn01.dtsi>
 #include <dt-bindings/display/screen-timing/lcd-n101icgl21.dtsi>
+#include <dt-bindings/display/screen-timing/lcd-vl-fs-7dh.dtsi>
 
 / {
 	model = "ROM-5780 AKS0000000000 V10000";
@@ -230,7 +231,7 @@
 			232 233 234 235 236 237 238 239
 			240 241 242 243 244 245 246 247
 			248 249 250 251 252 253 254 255>;
-		default-brightness-level = <200>;
+		default-brightness-level = <255>;
 	};
 
 	//edp vcc
