@@ -1032,6 +1032,14 @@
 	#sound-dai-cells = <0>;
 };
 
+&i2s1 {
+	#sound-dai-cells = <0>;
+	rockchip,i2s-broken-burst-len;
+	rockchip,playback-channels = <8>;
+	rockchip,capture-channels = <8>;
+	status = "disabled";
+};
+
 &i2s2 {
 	#sound-dai-cells = <0>;
 	status = "okay";
