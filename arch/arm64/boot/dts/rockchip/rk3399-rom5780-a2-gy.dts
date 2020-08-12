@@ -1413,8 +1413,8 @@
 		opp-microvolt = <850000 850000 1250000>;
 		opp-microvolt-L0 = <850000 850000 1250000>;
 		opp-microvolt-L1 = <850000 850000 1250000>;
-		opp-microvolt-L2 = <800000 800000 1250000>;
-		opp-microvolt-L3 = <800000 800000 1250000>;
+		opp-microvolt-L2 = <850000 850000 1250000>;
+		opp-microvolt-L3 = <850000 850000 1250000>;
 	};
 	opp-1008000000 {
 		opp-microvolt = <925000 925000 1250000>;
