@@ -1,0 +1,5 @@
+config CM276MA
+	tristate "CM276MA"
+	---help---
+	  Help message of AW-CM276MA
+
