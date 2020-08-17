@@ -905,7 +905,7 @@ static void __exit rockchip_i2s_driver_exit(void)
 	platform_driver_unregister(&rockchip_i2s_driver);
 }
 
-late_initcall(rockchip_i2s_driver_init);
+device_initcall_sync(rockchip_i2s_driver_init);
 module_exit(rockchip_i2s_driver_exit);
 #else
 module_platform_driver(rockchip_i2s_driver);
