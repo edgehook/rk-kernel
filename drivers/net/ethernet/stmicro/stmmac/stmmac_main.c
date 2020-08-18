@@ -93,7 +93,7 @@ static int tc = TC_DEFAULT;
 module_param(tc, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(tc, "DMA threshold control value");
 
-#define	DEFAULT_BUFSIZE	1536
+#define	DEFAULT_BUFSIZE	4096
 static int buf_sz = DEFAULT_BUFSIZE;
 module_param(buf_sz, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(buf_sz, "DMA buffer size");
@@ -2284,19 +2284,23 @@ static int stmmac_rx(struct stmmac_priv *priv, int limit)
 				print_pkt(skb->data, frame_len);
 			}
 
-			stmmac_rx_vlan(priv->dev, skb);
+			if (frame_len <= ETH_FRAME_LEN) {
+				stmmac_rx_vlan(priv->dev, skb);
 
-			skb->protocol = eth_type_trans(skb, priv->dev);
+				skb->protocol = eth_type_trans(skb, priv->dev);
 
-			if (unlikely(!coe))
-				skb_checksum_none_assert(skb);
-			else
-				skb->ip_summed = CHECKSUM_UNNECESSARY;
+				if (unlikely(!coe))
+					skb_checksum_none_assert(skb);
+				else
+					skb->ip_summed = CHECKSUM_UNNECESSARY;
 
-			napi_gro_receive(&priv->napi, skb);
+				napi_gro_receive(&priv->napi, skb);
 
-			priv->dev->stats.rx_packets++;
-			priv->dev->stats.rx_bytes += frame_len;
+				priv->dev->stats.rx_packets++;
+				priv->dev->stats.rx_bytes += frame_len;
+			} else {
+				dev_kfree_skb(skb);
+			}
 		}
 		entry = next_entry;
 	}
