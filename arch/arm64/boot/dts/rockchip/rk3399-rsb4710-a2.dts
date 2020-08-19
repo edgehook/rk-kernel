@@ -1169,7 +1169,7 @@
 };
 
 &sdio0 {
-	clock-frequency = <150000000>;
+	clock-frequency = <100000000>;
 	clock-freq-min-max = <200000 150000000>;
 	supports-sdio;
 	bus-width = <4>;
@@ -1182,7 +1182,7 @@
 	num-slots = <1>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&sdio0_bus4 &sdio0_cmd &sdio0_clk>;
-	sd-uhs-sdr104;
+	//sd-uhs-sdr104;
 	status = "okay";
 };
 
