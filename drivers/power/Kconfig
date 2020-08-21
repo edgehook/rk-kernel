@@ -582,6 +582,13 @@ config AXP20X_POWER
 	  This driver provides support for the power supply features of
 	  AXP20x PMIC.
 
+config FUEL_GAUGE_BQ40Z50
+	tristate "TI BQ40z50 battery charger driver"
+	depends on I2C
+	default n
+	help
+	  Say Y to enable support for TI bq40z50 fuel gauge driver
+
 source "drivers/power/reset/Kconfig"
 
 endif # POWER_SUPPLY
