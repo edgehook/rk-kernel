@@ -132,8 +132,9 @@
 		compatible = "misc-adv-gpio";
 		status = "okay";
 		pinctrl-names = "default";
-		pinctrl-0 = <&m2_reset_l>;
+		pinctrl-0 = <&m2_reset_l &system_rst_h>;
 		m2-reset-gpio = <&gpio2 28 GPIO_ACTIVE_LOW>;
+		system-reset-gpio = <&gpio1 6 GPIO_ACTIVE_HIGH>;
 		timing-interval = <100>;
 	};
 
@@ -911,7 +912,7 @@
 		reset-gpios = <&gpio1 9 GPIO_ACTIVE_LOW>;
 		pwdn-gpios = <&gpio1 2 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "rockchip,camera_default";
-		pinctrl-0 = <&cif_clkout &cam0_default_pins>;
+		pinctrl-0 = <&cif_clkout>;
 		rockchip,camera-module-index = <0>;
 		rockchip,camera-module-facing = "back";
 		rockchip,camera-module-name = "default";
@@ -980,7 +981,7 @@
 				reset-gpios = <&gpio1 10 GPIO_ACTIVE_LOW>;
 				pwdn-gpios = <&gpio1 3 GPIO_ACTIVE_HIGH>;
 				pinctrl-names = "rockchip,camera_default";
-				pinctrl-0 = <&cif_clkout &cam0_default_pins>;
+				pinctrl-0 = <&cif_clkout>;
 				rockchip,camera-module-index = <0>;
 				rockchip,camera-module-facing = "back";
 				rockchip,camera-module-name = "default";
@@ -1859,6 +1860,10 @@
 	misc {
 		m2_reset_l: m2-reset-l {
 			rockchip,pins = <2 28 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+
+		system_rst_h: system-rst-h {
+			rockchip,pins = <1 6 RK_FUNC_GPIO &pcfg_pull_down>;
 		};
 
 		adv_gpios: adv-gpios {
