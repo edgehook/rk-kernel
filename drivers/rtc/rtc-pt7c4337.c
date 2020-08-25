@@ -114,7 +114,7 @@ static int pt7c4337_init(struct pt7c4337 *pt7c4337, char *status)
 	ret = pt7c4337_get_reg(pt7c4337, PT7C4337_BYTE_HOURS, status, 1);
 	if (ret < 0)
 		return ret;
-	*status |= PT7C4337_HOURS_24H;
+	*status &= ~PT7C4337_HOURS_24H;
 	buf[0] = PT7C4337_BYTE_HOURS;
 	buf[1] = *status;
 	ret = pt7c4337_set_reg(pt7c4337, buf, 2);
@@ -246,9 +246,9 @@ static int pt7c4337_probe(struct i2c_client *client,
 	}
 
 	if (status & PT7C4337_HOURS_24H)
-		pt7c4337->twentyfourhour = 1;
-	else
 		pt7c4337->twentyfourhour = 0;
+	else
+		pt7c4337->twentyfourhour = 1;
 
 	pt7c4337->rtc = devm_rtc_device_register(&client->dev,
 					pt7c4337_driver.driver.name,
