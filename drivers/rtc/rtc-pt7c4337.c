@@ -189,7 +189,7 @@ static int pt7c4337_get_datetime(struct i2c_client *client, struct rtc_time *tm)
 	tm->tm_hour = pt7c4337_reg2hr(pt7c4337, buf[PT7C4337_BYTE_HOURS]);
 	tm->tm_wday = bcd2bin(buf[PT7C4337_BYTE_WDAY]) - 1;
 	tm->tm_mday = bcd2bin(buf[PT7C4337_BYTE_DAY]);
-	tm->tm_mon = bcd2bin(buf[PT7C4337_BYTE_MONTH]) - 1;
+	tm->tm_mon = bcd2bin(buf[PT7C4337_BYTE_MONTH] & 0x1f) - 1;
 	tm->tm_year = bcd2bin(buf[PT7C4337_BYTE_YEAR]) + 100;
 
 	dev_dbg(&client->dev, "%s: tm is secs=%d, mins=%d, hours=%d, mday=%d, "
