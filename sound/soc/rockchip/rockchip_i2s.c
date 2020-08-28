@@ -845,7 +845,8 @@ static void rockchip_i2s_shutdown(struct platform_device *pdev)
 	clk_disable_unprepare(i2s->mclk);
 	clk_disable_unprepare(i2s->hclk);
 
-	cancel_delayed_work(&i2s->work);
+	if (gpio_is_valid(i2s->amp_mute_gpio))
+		cancel_delayed_work(&i2s->work);
 }
 #endif
 
