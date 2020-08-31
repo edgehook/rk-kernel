@@ -2059,6 +2059,78 @@ int rt5640_dmic_enable(struct snd_soc_codec *codec,
 }
 EXPORT_SYMBOL_GPL(rt5640_dmic_enable);
 
+#ifdef CONFIG_ARCH_ADVANTECH
+static ssize_t rt5640_codec_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct rt5640_priv *rt5640 = i2c_get_clientdata(client);
+	struct snd_soc_codec *codec = rt5640->codec;
+	unsigned int val;
+	int cnt = 0, i;
+
+	for (i = 0; i <= RT5640_VENDOR_ID2; i++) {
+		if (cnt + 18 >= PAGE_SIZE)
+			break;
+		val = snd_soc_read(codec, i);
+		if ((!val) || (-1 == val))
+			continue;
+		cnt += snprintf(buf + cnt, 18,
+				"reg=%02x  val=%04x\n", i, val);
+	}
+
+	if (cnt >= PAGE_SIZE)
+		cnt = PAGE_SIZE - 1;
+
+	return cnt;
+}
+
+static ssize_t rt5640_codec_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct rt5640_priv *rt5640 = i2c_get_clientdata(client);
+	struct snd_soc_codec *codec = rt5640->codec;
+	unsigned int val = 0, addr = 0;
+	int i;
+
+	for (i = 0; i < count; i++) {
+		if (*(buf + i) <= '9' && *(buf + i) >= '0')
+			addr = (addr << 4) | (*(buf + i) - '0');
+		else if (*(buf + i) <= 'f' && *(buf + i) >= 'a')
+			addr = (addr << 4) | ((*(buf + i)-'a') + 0xa);
+		else if (*(buf + i) <= 'F' && *(buf + i) >= 'A')
+			addr = (addr << 4) | ((*(buf + i)-'A') + 0xa);
+		else
+			break;
+	}
+
+	for (i = i + 1; i < count; i++) {
+		if (*(buf + i) <= '9' && *(buf + i) >= '0')
+			val = (val << 4) | (*(buf + i)-'0');
+		else if (*(buf + i) <= 'f' && *(buf + i) >= 'a')
+			val = (val << 4) | ((*(buf + i)-'a') + 0xa);
+		else if (*(buf + i) <= 'F' && *(buf + i) >= 'A')
+			val = (val << 4) | ((*(buf + i)-'A') + 0xa);
+		else
+			break;
+	}
+	pr_debug("addr=0x%x val=0x%x\n", addr, val);
+	if (addr > RT5640_VENDOR_ID2 || val > 0xffff || val < 0)
+		return count;
+
+	if (i == count)
+		pr_info("0x%02x = 0x%04x\n", addr, snd_soc_read(codec, addr));
+	else
+		snd_soc_write(codec, addr, val);
+
+
+	return count;
+}
+
+static DEVICE_ATTR(codec_reg, 0664, rt5640_codec_show, rt5640_codec_store);
+#endif
+
 static int rt5640_probe(struct snd_soc_codec *codec)
 {
 	struct snd_soc_dapm_context *dapm = snd_soc_codec_get_dapm(codec);
@@ -2108,6 +2180,9 @@ static int rt5640_probe(struct snd_soc_codec *codec)
 		rt5640_dmic_enable(codec, rt5640->pdata.dmic1_data_pin,
 					  rt5640->pdata.dmic2_data_pin);
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	device_create_file(codec->dev, &dev_attr_codec_reg);
+#endif
 	return 0;
 }
 
