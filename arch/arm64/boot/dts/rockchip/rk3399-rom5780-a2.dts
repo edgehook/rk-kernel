@@ -712,7 +712,7 @@
 		wakeup-source;
 		#clock-cells = <1>;
 		clock-output-names = "rk808-clkout1", "rk808-clkout2";
-		bulk-ilmax = <0x50>;
+		bulk-ilmax = <0xff 0x50>;
 
 		vcc1-supply = <&vcc5v0_sys>;
 		vcc2-supply = <&vcc5v0_sys>;
