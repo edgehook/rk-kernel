@@ -234,6 +234,8 @@ enum soc_type {
 
 #define GRF_REG_FIELD(reg, lsb, msb)	((reg << 16) | (lsb << 8) | (msb))
 
+static bool IS_ENCODER_DISABLE = false;
+
 enum grf_reg_fields {
 	DPIUPDATECFG,
 	DPISHUTDN,
@@ -1224,7 +1226,6 @@ static void dw_mipi_dsi_post_disable(struct dw_mipi_dsi *dsi)
 static void dw_mipi_dsi_encoder_disable(struct drm_encoder *encoder)
 {
 	struct dw_mipi_dsi *dsi = encoder_to_dsi(encoder);
-
 	if (dsi->panel)
 		drm_panel_disable(dsi->panel);
 
@@ -1234,6 +1235,7 @@ static void dw_mipi_dsi_encoder_disable(struct drm_encoder *encoder)
 		drm_panel_unprepare(dsi->panel);
 
 	dw_mipi_dsi_post_disable(dsi);
+	IS_ENCODER_DISABLE = true;
 }
 
 static void dw_mipi_dsi_host_init(struct dw_mipi_dsi *dsi)
@@ -1264,6 +1266,7 @@ static void dw_mipi_dsi_pre_enable(struct dw_mipi_dsi *dsi)
 	udelay(10);
 
 #ifdef CONFIG_ROCKCHIP_DW_MIPI_DSI_2_LVDS
+	if(IS_ENCODER_DISABLE == false)
 	dsi_external_bradge_power_on(dsi);
 #endif
 	dw_mipi_dsi_host_init(dsi);
@@ -1327,7 +1330,6 @@ static void dw_mipi_dsi_encoder_enable(struct drm_encoder *encoder)
 {
 	struct dw_mipi_dsi *dsi = encoder_to_dsi(encoder);
 	unsigned long lane_rate = dw_mipi_dsi_get_lane_rate(dsi);
-
 	if (dsi->dphy.phy)
 		dw_mipi_dsi_set_hs_clk(dsi, lane_rate);
 	else
