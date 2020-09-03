@@ -733,7 +733,7 @@
 	clock_in_out = "input";
 	snps,reset-gpio = <&gpio3 16 GPIO_ACTIVE_LOW>;
 	snps,reset-active-low;
-	snps,reset-delays-us = <10 20000 75000>;
+	snps,reset-delays-us = <20000 50000 75000>;
 	assigned-clocks = <&cru SCLK_RMII_SRC>;
 	assigned-clock-parents = <&clkin_gmac>;
 	pinctrl-names = "default";
@@ -759,8 +759,8 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&vsel1_gpio>;
 		vsel-gpios = <&gpio1 17 GPIO_ACTIVE_HIGH>;
-		regulator-min-microvolt = <712500>;
-		regulator-max-microvolt = <1500000>;
+		regulator-min-microvolt = <800000>;
+		regulator-max-microvolt = <1250000>;
 		regulator-ramp-delay = <1000>;
 		fcs,suspend-voltage-selector = <1>;
 		regulator-always-on;
@@ -804,6 +804,7 @@
 		wakeup-source;
 		#clock-cells = <1>;
 		clock-output-names = "rk808-clkout1", "rk808-clkout2";
+		bulk-ilmax = <0xc0 0x80>;
 
 		vcc1-supply = <&vcc3v3_sys>;
 		vcc2-supply = <&vcc3v3_sys>;
@@ -1575,12 +1576,12 @@
 		opp-microvolt-L4 = <1025000 1025000 1250000>;
 	};
 	opp-1800000000 {
-		opp-microvolt = <1200000 1200000 1250000>;
-		opp-microvolt-L0 = <1200000 1200000 1250000>;
-		opp-microvolt-L1 = <1175000 1175000 1250000>;
-		opp-microvolt-L2 = <1150000 1150000 1250000>;
-		opp-microvolt-L3 = <1125000 1125000 1250000>;
-		opp-microvolt-L4 = <1100000 1100000 1250000>;
+		opp-microvolt = <1180000 1180000 1220000>;
+		opp-microvolt-L0 = <1180000 1180000 1220000>;
+		opp-microvolt-L1 = <1175000 1175000 1220000>;
+		opp-microvolt-L2 = <1150000 1150000 1220000>;
+		opp-microvolt-L3 = <1125000 1125000 1220000>;
+		opp-microvolt-L4 = <1100000 1100000 1220000>;
 	};
 };
 
