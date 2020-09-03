@@ -234,7 +234,9 @@ enum soc_type {
 
 #define GRF_REG_FIELD(reg, lsb, msb)	((reg << 16) | (lsb << 8) | (msb))
 
-static bool IS_ENCODER_DISABLE = false;
+#ifdef CONFIG_ARCH_ADVANTECH
+static bool is_encoder_disable = false;
+#endif
 
 enum grf_reg_fields {
 	DPIUPDATECFG,
@@ -1235,7 +1237,9 @@ static void dw_mipi_dsi_encoder_disable(struct drm_encoder *encoder)
 		drm_panel_unprepare(dsi->panel);
 
 	dw_mipi_dsi_post_disable(dsi);
-	IS_ENCODER_DISABLE = true;
+#ifdef CONFIG_ARCH_ADVANTECH
+	is_encoder_disable = true;
+#endif
 }
 
 static void dw_mipi_dsi_host_init(struct dw_mipi_dsi *dsi)
@@ -1266,7 +1270,9 @@ static void dw_mipi_dsi_pre_enable(struct dw_mipi_dsi *dsi)
 	udelay(10);
 
 #ifdef CONFIG_ROCKCHIP_DW_MIPI_DSI_2_LVDS
-	if(IS_ENCODER_DISABLE == false)
+#ifdef CONFIG_ARCH_ADVANTECH
+	if(is_encoder_disable == false)
+#endif
 	dsi_external_bradge_power_on(dsi);
 #endif
 	dw_mipi_dsi_host_init(dsi);
