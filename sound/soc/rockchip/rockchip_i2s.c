@@ -27,6 +27,7 @@
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
 #include <linux/workqueue.h>
+#include <linux/reboot.h>
 #endif
 
 #include "rockchip_i2s.h"
@@ -67,6 +68,7 @@ struct rk_i2s_dev {
 	int amp_mute_gpio;
 	int amp_mute_gpio_active;
 	struct delayed_work work;
+	struct notifier_block reboot_notifier;
 #endif
 };
 
@@ -646,6 +648,21 @@ static void i2s_mute_work_func(struct work_struct *work)
 		gpio_direction_output(i2s->amp_mute_gpio, i2s->amp_mute_gpio_active);
 	}
 }
+
+static int rockchip_i2s_reboot_notify(struct notifier_block *this,
+			      unsigned long mode, void *cmd)
+{
+	struct rk_i2s_dev *i2s =
+			container_of(this, struct rk_i2s_dev, reboot_notifier);
+
+	clk_disable_unprepare(i2s->mclk);
+	clk_disable_unprepare(i2s->hclk);
+
+	if (gpio_is_valid(i2s->amp_mute_gpio))
+			cancel_delayed_work(&i2s->work);
+
+	return NOTIFY_DONE;
+}
 #endif
 
 static int rockchip_i2s_probe(struct platform_device *pdev)
@@ -702,6 +719,8 @@ static int rockchip_i2s_probe(struct platform_device *pdev)
 	} else {
 		dev_err(&pdev->dev,"Can not read property amp-mute-gpio\n");
 	}
+	i2s->reboot_notifier.notifier_call = rockchip_i2s_reboot_notify;
+	register_reboot_notifier(&i2s->reboot_notifier);
 #endif
 	/* try to prepare related clocks */
 	i2s->hclk = devm_clk_get(&pdev->dev, "i2s_hclk");
@@ -834,22 +853,6 @@ static int rockchip_i2s_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_ARCH_ADVANTECH
-static void rockchip_i2s_shutdown(struct platform_device *pdev)
-{
-	struct rk_i2s_dev *i2s = dev_get_drvdata(&pdev->dev);
-	pm_runtime_disable(&pdev->dev);
-	if (!pm_runtime_status_suspended(&pdev->dev))
-		i2s_runtime_suspend(&pdev->dev);
-
-	clk_disable_unprepare(i2s->mclk);
-	clk_disable_unprepare(i2s->hclk);
-
-	if (gpio_is_valid(i2s->amp_mute_gpio))
-		cancel_delayed_work(&i2s->work);
-}
-#endif
-
 #ifdef CONFIG_PM_SLEEP
 static int rockchip_i2s_suspend(struct device *dev)
 {
@@ -884,9 +887,6 @@ static const struct dev_pm_ops rockchip_i2s_pm_ops = {
 static struct platform_driver rockchip_i2s_driver = {
 	.probe = rockchip_i2s_probe,
 	.remove = rockchip_i2s_remove,
-#ifdef CONFIG_ARCH_ADVANTECH
-	.shutdown = rockchip_i2s_shutdown,
-#endif
 
 	.driver = {
 		.name = DRV_NAME,
