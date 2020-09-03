@@ -138,6 +138,15 @@ void analogix_dp_reset(struct analogix_dp_device *dp)
 
 	usleep_range(20, 30);
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	reg = 0x19;
+	writel(reg, dp->reg_base + 0x104);
+	reg = AUX_FUNC_EN_N |SERDES_FIFO_FUNC_EN_N |LS_CLK_DOMAIN_FUNC_EN_N;
+	writel(reg, dp->reg_base + ANALOGIX_DP_FUNC_EN_2);
+
+	usleep_range(20, 30);
+#endif
+
 	analogix_dp_lane_swap(dp, 0);
 
 	writel(0x0, dp->reg_base + ANALOGIX_DP_SYS_CTL_1);
