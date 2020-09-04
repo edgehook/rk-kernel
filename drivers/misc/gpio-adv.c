@@ -45,7 +45,7 @@ static int misc_adv_gpio_probe(struct platform_device *pdev)
 	bool  m2_reset_active;
 	bool  minipcie_reset_active;
 	bool  m2_pwr_active;
-    int  timing_interval = 0;
+    u32  timing_interval = 0;
 	
     np = dev->of_node;
 	minipcie_reset_gpio = of_get_named_gpio_flags(np, "minipcie-reset-gpio", 0, &flags);
@@ -72,7 +72,7 @@ static int misc_adv_gpio_probe(struct platform_device *pdev)
                         GPIOF_OUT_INIT_LOW, "minipcie pwr gpio");
 	}
 
-	if (!of_property_read_u32(np,"timing-interval",&timing_interval))
+	if (of_property_read_u32(np,"timing-interval",&timing_interval))
 		timing_interval = 50;
 	if(timing_interval)
 	    mdelay(timing_interval);
