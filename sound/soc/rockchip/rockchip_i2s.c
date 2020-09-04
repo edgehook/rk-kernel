@@ -69,6 +69,7 @@ struct rk_i2s_dev {
 	int amp_mute_gpio_active;
 	struct delayed_work work;
 	struct notifier_block reboot_notifier;
+	bool clk_enabled;
 #endif
 };
 
@@ -489,6 +490,7 @@ static int rockchip_i2s_dai_probe(struct snd_soc_dai *dai)
 #ifdef CONFIG_ARCH_ADVANTECH
 	clk_prepare_enable(i2s->hclk);
 	clk_prepare_enable(i2s->mclk);
+	i2s->clk_enabled = true;
 #endif
 	dai->capture_dma_data = &i2s->capture_dma_data;
 	dai->playback_dma_data = &i2s->playback_dma_data;
@@ -655,8 +657,11 @@ static int rockchip_i2s_reboot_notify(struct notifier_block *this,
 	struct rk_i2s_dev *i2s =
 			container_of(this, struct rk_i2s_dev, reboot_notifier);
 
-	clk_disable_unprepare(i2s->mclk);
-	clk_disable_unprepare(i2s->hclk);
+	if(i2s->clk_enabled)
+	{
+		clk_disable_unprepare(i2s->mclk);
+		clk_disable_unprepare(i2s->hclk);
+	}
 
 	if (gpio_is_valid(i2s->amp_mute_gpio))
 			cancel_delayed_work(&i2s->work);
@@ -702,6 +707,7 @@ static int rockchip_i2s_probe(struct platform_device *pdev)
 #ifdef CONFIG_ARCH_ADVANTECH
 	clk_disable_unprepare(i2s->mclk);
 	clk_disable_unprepare(i2s->hclk);
+	i2s->clk_enabled = false;
 	i2s->amp_mute_gpio = of_get_named_gpio_flags(node, "amp-mute-gpio", 0, &flags);
 	if (gpio_is_valid(i2s->amp_mute_gpio)) {
 		ret = devm_gpio_request(&pdev->dev, i2s->amp_mute_gpio, "amp-mute-gpio");
