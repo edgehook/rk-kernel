@@ -372,10 +372,12 @@
 
 	wireless-wlan {
 		compatible = "wlan-platdata";
+		pinctrl-names = "default";
+		pinctrl-0 = <&wifi_wake_irq>;
 		rockchip,grf = <&grf>;
-		wifi_chip_type = "rtl8723bs";
+		wifi_chip_type = "";
 		sdio_vref = <1800>;
-		WIFI,host_wake_irq = <&gpio0 3 GPIO_ACTIVE_HIGH>;
+		WIFI,host_wake_irq = <&gpio0 4 GPIO_ACTIVE_HIGH>;
 		status = "okay";
 	};
 
@@ -1131,10 +1133,10 @@
 };
 
 &pcie0 {
-	//ep-gpios = <&gpio2 28 GPIO_ACTIVE_HIGH>;
+	//ep-gpios = <&gpio2 28 GPIO_ACTIVE_LOW>;
 	num-lanes = <1>;
-	/*pinctrl-names = "default";*/
-	/*pinctrl-0 = <&pcie_clkreqn>;*/
+	//pinctrl-names = "default";
+	//pinctrl-0 = <&pcie_clkreqn>;
 	status = "okay";
 };
 
@@ -1837,6 +1839,13 @@
 				<3 26 RK_FUNC_1 &pcfg_pull_none>,
 				<3 27 RK_FUNC_1 &pcfg_pull_none>,
 				<3 31 RK_FUNC_1 &pcfg_pull_none>;
+		};
+	};
+
+	wireless-wlan {
+		wifi_wake_irq: wifi-wake-irq {
+			rockchip,pins =
+				<0 4 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};
 
