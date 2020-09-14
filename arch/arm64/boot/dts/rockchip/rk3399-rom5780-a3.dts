@@ -341,6 +341,30 @@
 		};
 	};
 
+	rt5640-sound1 {
+		compatible = "simple-audio-card";
+		simple-audio-card,format = "i2s";
+		simple-audio-card,name = "rockchip,rt5640-codec";
+		simple-audio-card,mclk-fs = <256>;
+		status = "disabled";
+
+		simple-audio-card,widgets =
+				"Microphone", "Microphone Jack",
+				"Headphone", "Headphone Jack";
+		simple-audio-card,routing =
+				"IN1P", "Microphone Jack",
+				"Microphone Jack", "MICBIAS1",
+				"Headphone Jack", "HPOL",
+				"Headphone Jack", "HPOR";
+
+		simple-audio-card,cpu {
+			sound-dai = <&i2s1>;
+		};
+		simple-audio-card,codec {
+			sound-dai = <&rt56401>;
+		};
+	};
+
 	hdmi_sound: hdmi-sound {
 		status = "okay";
 		compatible = "simple-audio-card";
@@ -965,6 +989,18 @@
 				reg = <0x0b>;
 				pinctrl-names = "default";
 				pinctrl-0 = <&battery_pins>;
+			};
+
+			rt56401: rt56401@1c {
+				#sound-dai-cells = <0>;
+				compatible = "realtek,rt5640";
+				reg = <0x1c>;
+				clocks = <&cru SCLK_I2S_8CH_OUT>;
+				clock-names = "mclk";
+				//pinctrl-names = "default";
+				//pinctrl-0 = <&i2s_8ch_mclk>;
+				realtek,in1-differential;
+				status = "disabled";
 			};
 		};
 
