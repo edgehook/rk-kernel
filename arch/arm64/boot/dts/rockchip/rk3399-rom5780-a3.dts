@@ -346,7 +346,7 @@
 		simple-audio-card,format = "i2s";
 		simple-audio-card,name = "rockchip,rt5640-codec";
 		simple-audio-card,mclk-fs = <256>;
-		status = "disabled";
+		status = "okay";
 
 		simple-audio-card,widgets =
 				"Microphone", "Microphone Jack",
@@ -1026,7 +1026,7 @@
 				//pinctrl-names = "default";
 				//pinctrl-0 = <&i2s_8ch_mclk>;
 				realtek,in1-differential;
-				status = "disabled";
+				status = "okay";
 			};
 		};
 
@@ -1150,11 +1150,13 @@
 	rockchip,i2s-broken-burst-len;
 	rockchip,playback-channels = <8>;
 	rockchip,capture-channels = <8>;
-	status = "disabled";
+	status = "okay";
 };
 
 &i2s2 {
 	#sound-dai-cells = <0>;
+	dmas = <&dmac_bus 4>;
+	dma-names = "tx";
 	status = "okay";
 };
 
@@ -1292,6 +1294,8 @@
 &spi5 {
 	status = "okay";
 	max-freq = <48000000>;
+	/delete-property/ dmas;
+	/delete-property/ dma-names;
 
 	m25p80@0 {
 		compatible = "jedec,spi-nor";
