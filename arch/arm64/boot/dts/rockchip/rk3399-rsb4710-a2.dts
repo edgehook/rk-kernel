@@ -62,7 +62,7 @@
 #include <dt-bindings/display/screen-timing/lcd-n101icgl21.dtsi>
 
 / {
-	model = "RSB-4710 AKS0000000000 V10000";
+	model = "RSB-4710 AKS0000000000 V10000 A3";
 	compatible = "rockchip,rk3399-rsb4710-a2", "rockchip,rk3399";
 
 	aliases {

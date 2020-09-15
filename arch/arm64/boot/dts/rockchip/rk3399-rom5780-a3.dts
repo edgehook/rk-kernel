@@ -62,7 +62,7 @@
 #include <dt-bindings/display/screen-timing/lcd-n101icgl21.dtsi>
 
 / {
-	model = "ROM-5780 AKS0000000000 V10000";
+	model = "ROM-5780 AKS0000000000 V10000 A3";
 	compatible = "rockchip,rk3399-rom5780-a3", "rockchip,rk3399";
 
 	aliases {
