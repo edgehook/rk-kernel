@@ -760,8 +760,8 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&vsel1_gpio>;
 		vsel-gpios = <&gpio1 17 GPIO_ACTIVE_HIGH>;
-		regulator-min-microvolt = <712500>;
-		regulator-max-microvolt = <1500000>;
+		regulator-min-microvolt = <800000>;
+		regulator-max-microvolt = <1250000>;
 		regulator-ramp-delay = <1000>;
 		fcs,suspend-voltage-selector = <1>;
 		regulator-always-on;
@@ -805,6 +805,7 @@
 		wakeup-source;
 		#clock-cells = <1>;
 		clock-output-names = "rk808-clkout1", "rk808-clkout2";
+		bulk-ilmax = <0xc0 0x80>;
 
 		vcc1-supply = <&vcc3v3_sys>;
 		vcc2-supply = <&vcc3v3_sys>;
@@ -1056,11 +1057,12 @@
 
 &i2s0 {
 	status = "okay";
-	pinctrl-0 = <&i2s0_8ch_bus_1>;
+	pinctrl-0 = <&i2s0_8ch_bus_1 &codec_lout_mute>;
 	rockchip,i2s-broken-burst-len;
 	rockchip,playback-channels = <8>;
 	rockchip,capture-channels = <8>;
 	#sound-dai-cells = <0>;
+	amp-mute-gpio = <&gpio4 3 GPIO_ACTIVE_HIGH>;
 };
 
 &i2s2 {
@@ -1483,7 +1485,6 @@
 		opp-microvolt-L1 = <840000 840000 1250000>;
 		opp-microvolt-L2 = <840000 840000 1250000>;
 		opp-microvolt-L3 = <840000 840000 1250000>;
-		status = "disabled";
 	};
 	opp-600000000 {
 		opp-microvolt = <840000 840000 1250000>;
@@ -1491,7 +1492,6 @@
 		opp-microvolt-L1 = <840000 840000 1250000>;
 		opp-microvolt-L2 = <840000 840000 1250000>;
 		opp-microvolt-L3 = <840000 840000 1250000>;
-		status = "disabled";
 	};
 	opp-816000000 {
 		opp-microvolt = <850000 850000 1250000>;
@@ -1499,7 +1499,6 @@
 		opp-microvolt-L1 = <850000 850000 1250000>;
 		opp-microvolt-L2 = <850000 850000 1250000>;
 		opp-microvolt-L3 = <850000 850000 1250000>;
-		status = "disabled";
 	};
 	opp-1008000000 {
 		opp-microvolt = <925000 925000 1250000>;
@@ -1532,7 +1531,6 @@
 		opp-microvolt-L2 = <840000 840000 1250000>;
 		opp-microvolt-L3 = <840000 840000 1250000>;
 		opp-microvolt-L4 = <840000 840000 1250000>;
-		status = "disabled";
 	};
 	opp-600000000 {
 		opp-microvolt = <840000 840000 1250000>;
@@ -1540,7 +1538,6 @@
 		opp-microvolt-L1 = <840000 840000 1250000>;
 		opp-microvolt-L2 = <840000 840000 1250000>;
 		opp-microvolt-L3 = <840000 840000 1250000>;
-		status = "disabled";
 		opp-microvolt-L4 = <840000 840000 1250000>;
 	};
 	opp-816000000 {
@@ -1550,7 +1547,6 @@
 		opp-microvolt-L2 = <855000 855000 1250000>;
 		opp-microvolt-L3 = <855000 855000 1250000>;
 		opp-microvolt-L4 = <855000 855000 1250000>;
-		status = "disabled";
 	};
 	opp-1008000000 {
 		opp-microvolt = <875000 875000 1250000>;
@@ -1585,12 +1581,12 @@
 		opp-microvolt-L4 = <1025000 1025000 1250000>;
 	};
 	opp-1800000000 {
-		opp-microvolt = <1200000 1200000 1250000>;
-		opp-microvolt-L0 = <1200000 1200000 1250000>;
-		opp-microvolt-L1 = <1175000 1175000 1250000>;
-		opp-microvolt-L2 = <1150000 1150000 1250000>;
-		opp-microvolt-L3 = <1125000 1125000 1250000>;
-		opp-microvolt-L4 = <1100000 1100000 1250000>;
+		opp-microvolt = <1180000 1180000 1220000>;
+		opp-microvolt-L0 = <1180000 1180000 1220000>;
+		opp-microvolt-L1 = <1175000 1175000 1220000>;
+		opp-microvolt-L2 = <1150000 1150000 1220000>;
+		opp-microvolt-L3 = <1125000 1125000 1220000>;
+		opp-microvolt-L4 = <1100000 1100000 1220000>;
 	};
 };
 
@@ -1871,7 +1867,11 @@
 		codec_spkvdd: codec-spkvdd {
 			rockchip,pins = <4 5 RK_FUNC_GPIO &pcfg_pull_down>;
 		};
+		codec_lout_mute: codec-lout-mute {
+			rockchip,pins = <4 3  RK_FUNC_GPIO &pcfg_pull_none>;
+		};
 	};
+
 	i2s0 {
 		i2s0_8ch_bus_1: i2s0-8ch-bus-1 {
 			rockchip,pins =
@@ -1915,7 +1915,6 @@
 		adv_gpios: adv-gpios {
 			rockchip,pins = <2 8  RK_FUNC_GPIO &pcfg_pull_none>,
 							<1 18 RK_FUNC_GPIO &pcfg_pull_none>,
-							<4 3  RK_FUNC_GPIO &pcfg_pull_none>,
 							<3 28 RK_FUNC_GPIO &pcfg_pull_none>,
 							<4 4  RK_FUNC_GPIO &pcfg_pull_none>,
 							<0 8  RK_FUNC_GPIO &pcfg_pull_none>;
