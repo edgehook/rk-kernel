@@ -734,14 +734,16 @@
 	clock_in_out = "input";
 	snps,reset-gpio = <&gpio3 16 GPIO_ACTIVE_LOW>;
 	snps,reset-active-low;
-	snps,reset-delays-us = <10 20000 75000>;
+	snps,reset-delays-us = <20000 50000 75000>;
 	assigned-clocks = <&cru SCLK_RMII_SRC>;
 	assigned-clock-parents = <&clkin_gmac>;
 	pinctrl-names = "default";
-	pinctrl-0 = <&rgmii_pins &rgmii_phy_reset>;
+	pinctrl-0 = <&rgmii_16ma_pins &rgmii_phy_reset>;
 	enable_phy_delay = <0>;
-	tx_delay = <0x27>;
+	tx_delay = <0x2a>;
 	rx_delay = <0x1e>;
+	tx_delay1 = <0x27>;
+	rx_delay1 = <0x1e>;
 	status = "okay";
 };
 
@@ -1731,6 +1733,11 @@
 };
 
 &pinctrl {
+	pcfg_pull_none_16ma: pcfg-pull-none-16ma {
+		bias-disable;
+		drive-strength = <16>;
+	};
+
 	pcfg_pull_none_26ma: pcfg-pull-none-26ma {
 		bias-disable;
 		drive-strength = <26>;
@@ -1936,6 +1943,40 @@
 	};
 
 	gmac {
+		rgmii_16ma_pins: rgmii-16ma-pins {
+			rockchip,pins =
+				/* mac_txclk */
+				<3 17 RK_FUNC_1 &pcfg_pull_none_16ma>,
+				/* mac_rxclk */
+				<3 14 RK_FUNC_1 &pcfg_pull_none>,
+				/* mac_mdio */
+				<3 13 RK_FUNC_1 &pcfg_pull_none>,
+				/* mac_txen */
+				<3 12 RK_FUNC_1 &pcfg_pull_none_13ma>,
+				/* mac_clk */
+				<3 11 RK_FUNC_1 &pcfg_pull_none>,
+				/* mac_rxdv */
+				<3 9 RK_FUNC_1 &pcfg_pull_none>,
+				/* mac_mdc */
+				<3 8 RK_FUNC_1 &pcfg_pull_none>,
+				/* mac_rxd1 */
+				<3 7 RK_FUNC_1 &pcfg_pull_none>,
+				/* mac_rxd0 */
+				<3 6 RK_FUNC_1 &pcfg_pull_none>,
+				/* mac_txd1 */
+				<3 5 RK_FUNC_1 &pcfg_pull_none_13ma>,
+				/* mac_txd0 */
+				<3 4 RK_FUNC_1 &pcfg_pull_none_13ma>,
+				/* mac_rxd3 */
+				<3 3 RK_FUNC_1 &pcfg_pull_none>,
+				/* mac_rxd2 */
+				<3 2 RK_FUNC_1 &pcfg_pull_none>,
+				/* mac_txd3 */
+				<3 1 RK_FUNC_1 &pcfg_pull_none_13ma>,
+				/* mac_txd2 */
+				<3 0 RK_FUNC_1 &pcfg_pull_none_13ma>;
+		};
+
 		rgmii_26ma_pins: rgmii-26ma-pins {
 			rockchip,pins =
 				/* mac_txclk */
