@@ -1716,10 +1716,16 @@ static void rockchip_drm_postclose(struct drm_device *dev, struct drm_file *file
 	file->driver_priv = NULL;
 }
 
+#ifdef CONFIG_ARCH_ADVANTECH
+bool drm_can_restore = true;
+#endif
 static void rockchip_drm_lastclose(struct drm_device *dev)
 {
 	struct rockchip_drm_private *priv = dev->dev_private;
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	if(drm_can_restore)
+#endif
 	if (!priv->logo)
 		drm_fb_helper_restore_fbdev_mode_unlocked(priv->fbdev_helper);
 }

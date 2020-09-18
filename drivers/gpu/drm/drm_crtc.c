@@ -3942,6 +3942,9 @@ out_err1:
 	return ret;
 }
 
+#ifdef CONFIG_ARCH_ADVANTECH
+extern bool drm_can_restore;
+#endif
 /**
  * drm_fb_release - remove and free the FBs on this file
  * @priv: drm file for the ioctl
@@ -3982,6 +3985,9 @@ void drm_fb_release(struct drm_file *priv)
 	}
 
 	if (!list_empty(&arg.fbs)) {
+#ifdef CONFIG_ARCH_ADVANTECH
+		drm_can_restore = false;
+#endif
 		INIT_WORK_ONSTACK(&arg.work, drm_mode_rmfb_work_fn);
 
 		schedule_work(&arg.work);
