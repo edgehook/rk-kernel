@@ -303,6 +303,19 @@
 		status = "disabled";
 	};
 
+	dsi_vdd_io: dsi-vdd-io {
+		compatible = "regulator-fixed";
+		regulator-name = "dsi_vdd_io";
+		pinctrl-names = "default";
+		pinctrl-0 = <&dsi_pwr_vdd_io_h>;
+		gpio = <&gpio0 11 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-always-on;
+		regulator-boot-on;
+		regulator-uboot-logo;
+		status = "disabled";
+	};
+
 	vpd0: virtual-pd0 {
 		compatible = "linux,extcon-pd-virtual";
 		dp-det-gpios = <&gpio4 25 GPIO_ACTIVE_LOW>; //GPIO4_D1 - DP_HOTPLUG
@@ -622,7 +635,9 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&dsi_enable_h &dsi_reset_l>;
 	power-supply = <&vcc1v2_lvds>;
-	power-io-supply = <&vcc_1v8>;
+	power-io-supply = <&dsi_vdd_io>;
+	power-gpios =<&gpio1 4 GPIO_ACTIVE_HIGH>;
+	power-io-gpios = <&gpio0 11 GPIO_ACTIVE_HIGH>;
 	enable-gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
 	reset-gpios = <&gpio1 24 GPIO_ACTIVE_HIGH>;
 	status = "disabled";
@@ -1897,11 +1912,8 @@
 	};
 
 	dsi-phy {
-		dsi_pwr_vdd_core_h: dsi-pwr-vdd-core-h {
-			rockchip,pins = <1 4 RK_FUNC_GPIO &pcfg_pull_down>;
-		};
 		dsi_pwr_vdd_io_h: dsi-pwr-vdd-io-h {
-			rockchip,pins = <1 22 RK_FUNC_GPIO &pcfg_pull_down>;
+			rockchip,pins = <0 11 RK_FUNC_GPIO &pcfg_pull_down>;
 		};
 		dsi_enable_h: dsi-enable-h {
 			rockchip,pins = <0 2 RK_FUNC_GPIO &pcfg_pull_down>;
