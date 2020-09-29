@@ -61,6 +61,7 @@
 #include <dt-bindings/display/screen-timing/lcd-g215hvn01.dtsi>
 #include <dt-bindings/display/screen-timing/lcd-n101icgl21.dtsi>
 #include <dt-bindings/display/screen-timing/lcd-ev101wxm.dtsi>
+#include <dt-bindings/display/screen-timing/lcd-lvds2hdmi-1920x1080.dtsi>
 
 / {
 	model = "RSB-4710 AKS0000000000 V10000";
