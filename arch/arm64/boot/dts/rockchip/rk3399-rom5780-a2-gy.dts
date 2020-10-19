@@ -137,9 +137,9 @@
 		compatible = "misc-adv-gpio";
 		status = "okay";
 		pinctrl-names = "default";
-		pinctrl-0 = <&m2_reset_l>;
+		pinctrl-0 = <&m2_reset_l &system_rst_h>;
 		m2-pwr-gpio = <&gpio1 23 GPIO_ACTIVE_LOW>;
-		m2-reset-gpio = <&gpio2 28 GPIO_ACTIVE_LOW>;
+		system-reset-gpio = <&gpio1 6 GPIO_ACTIVE_HIGH>;
 		timing-interval = <10>;
 	};
 
@@ -353,10 +353,12 @@
 
 	wireless-wlan {
 		compatible = "wlan-platdata";
+		pinctrl-names = "default";
+		pinctrl-0 = <&wifi_wake_irq>;
 		rockchip,grf = <&grf>;
-		wifi_chip_type = "rtl8723bs";
+		wifi_chip_type = "";
 		sdio_vref = <1800>;
-		WIFI,host_wake_irq = <&gpio0 3 GPIO_ACTIVE_HIGH>;
+		WIFI,host_wake_irq = <&gpio0 4 GPIO_ACTIVE_HIGH>;
 		status = "okay";
 	};
 
@@ -693,7 +695,7 @@
 		wakeup-source;
 		#clock-cells = <1>;
 		clock-output-names = "rk808-clkout1", "rk808-clkout2";
-		bulk-ilmax = <0x50>;
+		bulk-ilmax = <0xff 0x50>;
 
 		vcc1-supply = <&vcc5v0_sys>;
 		vcc2-supply = <&vcc5v0_sys>;
@@ -1081,10 +1083,10 @@
 };
 
 &pcie0 {
-	//ep-gpios = <&gpio2 28 GPIO_ACTIVE_HIGH>;
+	//ep-gpios = <&gpio2 28 GPIO_ACTIVE_LOW>;
 	num-lanes = <1>;
-	/*pinctrl-names = "default";*/
-	/*pinctrl-0 = <&pcie_clkreqn>;*/
+	//pinctrl-names = "default";
+	//pinctrl-0 = <&pcie_clkreqn>;
 	status = "okay";
 };
 
@@ -1786,10 +1788,14 @@
 				<3 25 RK_FUNC_1 &pcfg_pull_none>,
 				<3 26 RK_FUNC_1 &pcfg_pull_none>,
 				<3 27 RK_FUNC_1 &pcfg_pull_none>,
-				<3 28 RK_FUNC_1 &pcfg_pull_none>,
-				<3 29 RK_FUNC_1 &pcfg_pull_none>,
-				<3 30 RK_FUNC_1 &pcfg_pull_none>,
 				<3 31 RK_FUNC_1 &pcfg_pull_none>;
+		};
+	};
+
+	wireless-wlan {
+		wifi_wake_irq: wifi-wake-irq {
+			rockchip,pins =
+				<0 4 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};
 
@@ -1813,6 +1819,10 @@
 	misc {
 		m2_reset_l: m2-reset-l {
 			rockchip,pins = <2 28 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+
+		system_rst_h: system-rst-h {
+			rockchip,pins = <1 6 RK_FUNC_GPIO &pcfg_pull_down>;
 		};
 
 		adv_gpios: adv-gpios {
