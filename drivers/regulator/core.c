@@ -1959,6 +1959,11 @@ static int regulator_ena_gpio_request(struct regulator_dev *rdev,
 	if (ret)
 		return ret;
 
+#ifdef CONFIG_ARCH_ADVANTECH_CHUANDA
+	if(strcmp(rdev_get_name(rdev), "vcc5v0_host") == 0)
+		gpio_export(config->ena_gpio, false);
+#endif
+
 	pin = kzalloc(sizeof(struct regulator_enable_gpio), GFP_KERNEL);
 	if (pin == NULL) {
 		gpio_free(config->ena_gpio);
