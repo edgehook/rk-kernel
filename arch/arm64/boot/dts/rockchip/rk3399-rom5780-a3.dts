@@ -132,10 +132,9 @@
 		compatible = "misc-adv-gpio";
 		status = "okay";
 		pinctrl-names = "default";
-		pinctrl-0 = <&m2_reset_l &system_rst_h>;
-		m2-reset-gpio = <&gpio2 28 GPIO_ACTIVE_LOW>;
+		pinctrl-0 = <&system_rst_h>;
 		system-reset-gpio = <&gpio1 6 GPIO_ACTIVE_HIGH>;
-		timing-interval = <100>;
+		timing-interval = <10>;
 	};
 
 	// Backlight edp
@@ -1247,10 +1246,10 @@
 };
 
 &pcie0 {
-	//ep-gpios = <&gpio2 28 GPIO_ACTIVE_LOW>;
+	ep-gpios = <&gpio2 28 GPIO_ACTIVE_HIGH>;
 	num-lanes = <1>;
-	//pinctrl-names = "default";
-	//pinctrl-0 = <&pcie_clkreqn>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pcie_clkreqn &pcie_reset_l>;
 	status = "okay";
 };
 
@@ -1980,8 +1979,8 @@
 	};
 
 	misc {
-		m2_reset_l: m2-reset-l {
-			rockchip,pins = <2 28 RK_FUNC_GPIO &pcfg_pull_up>;
+		pcie_reset_l: pcie-reset-l {
+			rockchip,pins = <2 28 RK_FUNC_GPIO &pcfg_pull_down>;
 		};
 
 		system_rst_h: system-rst-h {

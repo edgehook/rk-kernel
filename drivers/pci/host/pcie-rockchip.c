@@ -1015,7 +1015,11 @@ static int rockchip_pcie_parse_dt(struct rockchip_pcie *rockchip)
 		return PTR_ERR(rockchip->aclk_rst);
 	}
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	rockchip->ep_gpio = devm_gpiod_get_optional(dev, "ep", GPIOD_OUT_LOW);
+#else
 	rockchip->ep_gpio = devm_gpiod_get_optional(dev, "ep", GPIOD_OUT_HIGH);
+#endif
 	if (IS_ERR(rockchip->ep_gpio)) {
 		dev_err(dev, "invalid ep-gpios property in node\n");
 #ifndef CONFIG_ARCH_ADVANTECH
