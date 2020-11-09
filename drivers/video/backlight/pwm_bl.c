@@ -38,6 +38,9 @@ struct pwm_bl_data {
 	struct regulator	*power_supply;
 	struct gpio_desc	*enable_gpio;
 	unsigned int		scale;
+#ifdef CONFIG_ARCH_ADVANTECH
+	unsigned int		dft_enable;
+#endif
 	bool			legacy;
 	int			(*notify)(struct device *,
 					  int brightness);
@@ -257,6 +260,13 @@ static int pwm_backlight_probe(struct platform_device *pdev)
 	pb->exit = data->exit;
 	pb->dev = &pdev->dev;
 	pb->enabled = false;
+	pb->dft_enable = 0;
+
+#ifdef CONFIG_ARCH_ADVANTECH
+	if (!of_property_read_u32(node, "default-enable", &ret)) {
+		pb->dft_enable = ret;
+	}
+#endif
 
 	pb->enable_gpio = devm_gpiod_get_optional(&pdev->dev, "enable",
 						  GPIOD_ASIS);
@@ -361,9 +371,10 @@ static int pwm_backlight_probe(struct platform_device *pdev)
 
 	bl->props.brightness = data->dft_brightness;
 	bl->props.power = initial_blank;
-#ifndef CONFIG_ARCH_ADVANTECH
-	backlight_update_status(bl);
+#ifdef CONFIG_ARCH_ADVANTECH
+	if(pb->dft_enable)
 #endif
+	backlight_update_status(bl);
 
 	platform_set_drvdata(pdev, bl);
 	return 0;
