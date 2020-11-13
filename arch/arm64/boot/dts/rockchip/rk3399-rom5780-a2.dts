@@ -726,7 +726,7 @@
 		vcc10-supply = <&vcc5v0_sys>;
 		vcc11-supply = <&vcc5v0_sys>;
 		vcc12-supply = <&vcc3v3_sys>;
-		vddio-supply = <&vcc3v3_sys>;
+		vddio-supply = <&vcc_1v8>;
 
 		regulators {
 			vdd_center: DCDC_REG1 {
