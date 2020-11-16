@@ -84,7 +84,8 @@
 		dsi_in_vopl = &dsi_in_vopl;
 		dsi1_in_vopb = &dsi1_in_vopb;
 		dsi1_in_vopl = &dsi1_in_vopl;
-
+		dsi_vcc = &vcc1v2_lvds;
+		dsi_vcc_io = &dsi_vdd_io;
 		edp_backlight = &backlight0;
 		dsi_backlight = &backlight1;
 
@@ -505,6 +506,7 @@
 		gpio = <&gpio1 4 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&vcc1v2_en>;
+		status = "disabled";
 	};
 
 	vcc1v8_sata: vcc1v8-sata-regulator {
@@ -1921,7 +1923,7 @@
 			rockchip,pins = <1 24 RK_FUNC_GPIO &pcfg_pull_down>;
 		};
 		vcc1v2_en: vcc1v2-en {
-			rockchip,pins =	<1 4 RK_FUNC_GPIO &pcfg_pull_up>; // GPIO1_A4 / VCC_1V2_EN
+			rockchip,pins =	<1 4 RK_FUNC_GPIO &pcfg_pull_down>; // GPIO1_A4 / VCC_1V2_EN
 		};
 	};
 
