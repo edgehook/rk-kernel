@@ -1396,6 +1396,9 @@ void drm_atomic_helper_commit_hw_done(struct drm_atomic_state *state)
 			continue;
 
 		/* backend must have consumed any event by now */
+#ifdef CONFIG_ARCH_ADVANTECH
+		if (crtc->state->active)
+#endif
 		WARN_ON(crtc->state->event);
 		spin_lock(&crtc->commit_lock);
 		complete_all(&commit->hw_done);
