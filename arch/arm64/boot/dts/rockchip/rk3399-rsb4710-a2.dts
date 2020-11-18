@@ -136,11 +136,11 @@
 		compatible = "misc-adv-gpio";
 		status = "okay";
 		pinctrl-names = "default";
-		pinctrl-0 = <&minipcie_pwr_h &minipcie_reset_l &m2_pwr_h &m2_reset_l &system_rst_h &adv_gpios>;
+		pinctrl-0 = <&minipcie_pwr_h &minipcie_reset_l &m2_pwr_h &system_rst_h &adv_gpios>;
 		minipcie-pwr-gpio = <&gpio2 3 GPIO_ACTIVE_HIGH>;
 		minipcie-reset-gpio = <&gpio3 29 GPIO_ACTIVE_LOW>;
 		m2-pwr-gpio = <&gpio4 21 GPIO_ACTIVE_HIGH>;
-		m2-reset-gpio = <&gpio2 28 GPIO_ACTIVE_LOW>;
+		//m2-reset-gpio = <&gpio2 28 GPIO_ACTIVE_LOW>;
 		system-reset-gpio = <&gpio1 6 GPIO_ACTIVE_HIGH>;
 		timing-interval = <110>;
 	};
@@ -1142,10 +1142,10 @@
 };
 
 &pcie0 {
-	//ep-gpios = <&gpio1 0 GPIO_ACTIVE_HIGH>;
+	ep-gpios = <&gpio2 28 GPIO_ACTIVE_HIGH>;
 	num-lanes = <1>;
 	pinctrl-names = "default";
-	pinctrl-0 = <&pcie_clkreqn>;
+	pinctrl-0 = <&pcie_clkreqn &m2_pcie_reset_l>;
 	status = "okay";
 };
 
@@ -1905,8 +1905,8 @@
 		m2_pwr_h: m2-pwr-h {
 			rockchip,pins = <4 21 RK_FUNC_GPIO &pcfg_pull_none>; 
 		};
-		m2_reset_l: m2-reset-l {
-			rockchip,pins = <2 28 RK_FUNC_GPIO &pcfg_pull_up>;
+		m2_pcie_reset_l: m2-pcie-reset-l {
+			rockchip,pins = <2 28 RK_FUNC_GPIO &pcfg_pull_down>;
 		};
 		system_rst_h: system-rst-h {
 			rockchip,pins = <1 6 RK_FUNC_GPIO &pcfg_pull_down>;
