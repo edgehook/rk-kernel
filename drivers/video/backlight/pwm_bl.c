@@ -369,6 +369,11 @@ static int pwm_backlight_probe(struct platform_device *pdev)
 		data->dft_brightness = data->max_brightness;
 	}
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	if(pb->dft_enable)
+		initial_blank = FB_BLANK_UNBLANK;
+#endif
+
 	bl->props.brightness = data->dft_brightness;
 	bl->props.power = initial_blank;
 #ifdef CONFIG_ARCH_ADVANTECH
