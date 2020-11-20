@@ -321,7 +321,7 @@
 		vpd,init-ss = <0>;
 		/* 0: dfp, 1: ufp, 2: dp 3: dp/ufp */
 		vpd,init-mode = <2>;
-		status = "okay";
+		status = "disabled";
 	};
 
 	hdmi_sound: hdmi-sound {
@@ -340,7 +340,7 @@
 	};
 
 	dp_sound: dp-sound {
-		status = "okay";
+		status = "disabled";
 		compatible = "rockchip,cdndp-sound";
 		rockchip,cpu = <&spdif>;
 		rockchip,codec = <&cdn_dp 1>;
@@ -632,7 +632,7 @@
 };
 
 &spdif {
-	status = "okay";
+	status = "disabled";
 	/delete-property/ pinctrl-names;
 	/delete-property/ pinctrl-0;
 };
@@ -882,7 +882,7 @@
 
 	vm149c: vm149c@0c {
 		compatible = "silicon touch,vm149c";
-		status = "okay";
+		status = "disabled";
 		reg = <0x0c>;
 		rockchip,camera-module-index = <0>;
 		rockchip,camera-module-facing = "back";
@@ -890,7 +890,7 @@
 
 	ov5648: ov5648@36 {
 		compatible = "ovti,ov5648";
-		status = "okay";
+		status = "disabled";
 		reg = <0x36>;
 		clocks = <&cru SCLK_CIF_OUT>;
 		clock-names = "xvclk";
@@ -946,7 +946,7 @@
 
 			ov5648_multi_csi: ov5648-multi-csi@36 {
 				compatible = "ovti,ov5648";
-				status = "okay";
+				status = "disabled";
 				reg = <0x36>;
 				clocks = <&cru SCLK_CIF_OUT>;
 				clock-names = "xvclk";
