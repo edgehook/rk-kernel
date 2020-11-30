@@ -17,3 +17,5 @@ obj-$(CONFIG_CYW_BCMDHD)	+= cywdhd/
 
 obj-$(CONFIG_CM276MA)	+= cm276_bt/
 obj-$(CONFIG_CM276MA)	+= cm276_wlan/
+obj-$(CONFIG_CAN_F81601)	+= f81601/
+

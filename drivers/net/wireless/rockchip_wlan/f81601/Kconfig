@@ -1,0 +1,6 @@
+config CAN_F81601
+	tristate "CAN f81601"
+	depends on CAN
+	---help---
+	  Help message of CAN f81601
+
