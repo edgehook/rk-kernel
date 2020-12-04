@@ -546,14 +546,14 @@
 };
 
 &disp_timings {
-	native-mode = <&dp_default>;
+	native-mode = <&lvds_g070vw01>;
 //	native-mode = <&lvds_g070vw01>;
 //	native-mode = <&lvds_g150xgel05>;
 //	native-mode = <&lvds_g215hvn01>;
 
 	use-dts-screen = <0>;
 	prmry-screen = <&hdmi_default>;
-	extend-screen = <&dp_default>;
+	extend-screen = <&lvds_g070vw01>;
 };
 
 // edp
