@@ -1,0 +1,84 @@
+diff --git a/drivers/gpu/drm/rockchip/dw-mipi-dsi.c b/drivers/gpu/drm/rockchip/dw-mipi-dsi.c
+old mode 100644
+new mode 100755
+index 8c6ca0d..6092ed5
+--- a/drivers/gpu/drm/rockchip/dw-mipi-dsi.c
++++ b/drivers/gpu/drm/rockchip/dw-mipi-dsi.c
+@@ -675,13 +675,14 @@ static void dw_mipi_dsi_phy_pll_init(struct dw_mipi_dsi *dsi)
+ static void dsi_external_bradge_power_on(struct dw_mipi_dsi *dsi)
+ {
+ #ifdef CONFIG_ARCH_ADVANTECH
++	int ret;
+ 	if(!IS_ERR(dsi->power_io_supply)) {
+-		regulator_enable(dsi->power_io_supply);
++		ret = regulator_enable(dsi->power_io_supply);
+ 		usleep_range(1000, 2000);
+ 	}
+ 
+ 	if(!IS_ERR(dsi->power_supply)) {
+-		regulator_enable(dsi->power_supply);
++		ret = regulator_enable(dsi->power_supply);
+ 		usleep_range(1000, 2000);
+ 	}
+ #endif
+@@ -1751,6 +1752,7 @@ encoder_cleanup:
+ 	return ret;
+ }
+ 
++#ifndef CONFIG_ARCH_ADVANTECH
+ static int dw_mipi_dsi_match_by_id(struct device *dev, void *data)
+ {
+ 	struct dw_mipi_dsi *dsi = dev_get_drvdata(dev);
+@@ -1794,6 +1796,7 @@ static void dw_mipi_dsi_rpm_disable(struct dw_mipi_dsi *dsi)
+ 	if (dsi->master && pm_runtime_enabled(dsi->master->dev))
+ 		pm_runtime_enable(dsi->master->dev);
+ }
++#endif
+ 
+ static int dw_mipi_dsi_bind(struct device *dev, struct device *master,
+ 			     void *data)
+diff --git a/drivers/gpu/drm/rockchip/rockchip_drm_drv.c b/drivers/gpu/drm/rockchip/rockchip_drm_drv.c
+old mode 100644
+new mode 100755
+index d807acd..70bbbcb
+--- a/drivers/gpu/drm/rockchip/rockchip_drm_drv.c
++++ b/drivers/gpu/drm/rockchip/rockchip_drm_drv.c
+@@ -1991,9 +1991,11 @@ static int rockchip_drm_platform_remove(struct platform_device *pdev)
+ static void rockchip_drm_platform_shutdown(struct platform_device *pdev)
+ {
+ 	struct device *dev = &pdev->dev;
+-	struct drm_crtc *crtc;
+ 	struct drm_device *drm;
++#ifndef CONFIG_ARCH_ADVANTECH
++	struct drm_crtc *crtc;
+ 	struct rockchip_drm_private *priv;
++#endif
+ 
+ 	drm = dev_get_drvdata(dev);
+ 	if (!drm) {
+diff --git a/drivers/regulator/rk808-regulator.c b/drivers/regulator/rk808-regulator.c
+index 00dddd2..7ac4efe 100755
+--- a/drivers/regulator/rk808-regulator.c
++++ b/drivers/regulator/rk808-regulator.c
+@@ -1491,7 +1491,7 @@ static int rk808_regulator_dt_parse_pdata(struct device *dev,
+ 
+ #ifdef CONFIG_ARCH_ADVANTECH
+ 	u32 conf[2];
+-	i = of_property_read_u32_array(client_dev->of_node, "bulk-ilmax", &conf, 2);
++	i = of_property_read_u32_array(client_dev->of_node, "bulk-ilmax", conf, 2);
+ 	if (!i) {
+ 		regmap_read(map, RK808_IO_POL_REG, &tmp);
+ 		tmp &= ~conf[0];
+diff --git a/sound/soc/rockchip/rockchip_i2s.c b/sound/soc/rockchip/rockchip_i2s.c
+index a8b0a21..c3a3d3b 100755
+--- a/sound/soc/rockchip/rockchip_i2s.c
++++ b/sound/soc/rockchip/rockchip_i2s.c
+@@ -643,7 +643,7 @@ static const struct of_device_id rockchip_i2s_match[] = {
+ static void i2s_mute_work_func(struct work_struct *work)
+ {
+ 	struct rk_i2s_dev *i2s =
+-		container_of(work, struct rk_i2s_dev, work);
++		container_of(work, struct rk_i2s_dev, work.work);
+ 
+ 	if(gpio_is_valid(i2s->amp_mute_gpio))
+ 	{

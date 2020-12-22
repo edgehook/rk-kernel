@@ -1,0 +1,22 @@
+diff --git a/drivers/net/ethernet/stmicro/stmmac/stmmac_main.c b/drivers/net/ethernet/stmicro/stmmac/stmmac_main.c
+index 759ac30..20dcbcb 100755
+--- a/drivers/net/ethernet/stmicro/stmmac/stmmac_main.c
++++ b/drivers/net/ethernet/stmicro/stmmac/stmmac_main.c
+@@ -2848,7 +2848,7 @@ static int stmmac_hw_init(struct stmmac_priv *priv)
+ static void stmmac_mdio_work_func(struct work_struct *work)
+ {
+ 	struct stmmac_priv *stmmac =
+-		container_of(work, struct stmmac_priv, work);
++		container_of(work, struct stmmac_priv, work.work);
+ 	int val;
+ 
+ 	phy_write(stmmac->phydev, 0x1f, 0x0d04);
+@@ -2857,7 +2857,7 @@ static void stmmac_mdio_work_func(struct work_struct *work)
+ 		phy_write(stmmac->phydev, 0x10, REALTEK_8211F_PHY_LED);
+ 	phy_write(stmmac->phydev, 0x1f, 0x0000);
+ 	if(!stmmac->exit)
+-		mod_delayed_work(system_wq, work, msecs_to_jiffies(20));
++		mod_delayed_work(system_wq, &stmmac->work, msecs_to_jiffies(20));
+ }
+ #endif
+ 
