@@ -1991,9 +1991,11 @@ static int rockchip_drm_platform_remove(struct platform_device *pdev)
 static void rockchip_drm_platform_shutdown(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct drm_crtc *crtc;
 	struct drm_device *drm;
+#ifndef CONFIG_ARCH_ADVANTECH
+	struct drm_crtc *crtc;
 	struct rockchip_drm_private *priv;
+#endif
 
 	drm = dev_get_drvdata(dev);
 	if (!drm) {

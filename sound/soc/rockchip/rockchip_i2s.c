@@ -643,7 +643,7 @@ static const struct of_device_id rockchip_i2s_match[] = {
 static void i2s_mute_work_func(struct work_struct *work)
 {
 	struct rk_i2s_dev *i2s =
-		container_of(work, struct rk_i2s_dev, work);
+		container_of(work, struct rk_i2s_dev, work.work);
 
 	if(gpio_is_valid(i2s->amp_mute_gpio))
 	{

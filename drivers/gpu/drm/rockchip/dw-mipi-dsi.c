@@ -675,13 +675,14 @@ static void dw_mipi_dsi_phy_pll_init(struct dw_mipi_dsi *dsi)
 static void dsi_external_bradge_power_on(struct dw_mipi_dsi *dsi)
 {
 #ifdef CONFIG_ARCH_ADVANTECH
+	int ret;
 	if(!IS_ERR(dsi->power_io_supply)) {
-		regulator_enable(dsi->power_io_supply);
+		ret = regulator_enable(dsi->power_io_supply);
 		usleep_range(1000, 2000);
 	}
 
 	if(!IS_ERR(dsi->power_supply)) {
-		regulator_enable(dsi->power_supply);
+		ret = regulator_enable(dsi->power_supply);
 		usleep_range(1000, 2000);
 	}
 #endif
@@ -1751,6 +1752,7 @@ encoder_cleanup:
 	return ret;
 }
 
+#ifndef CONFIG_ARCH_ADVANTECH
 static int dw_mipi_dsi_match_by_id(struct device *dev, void *data)
 {
 	struct dw_mipi_dsi *dsi = dev_get_drvdata(dev);
@@ -1794,6 +1796,7 @@ static void dw_mipi_dsi_rpm_disable(struct dw_mipi_dsi *dsi)
 	if (dsi->master && pm_runtime_enabled(dsi->master->dev))
 		pm_runtime_enable(dsi->master->dev);
 }
+#endif
 
 static int dw_mipi_dsi_bind(struct device *dev, struct device *master,
 			     void *data)
