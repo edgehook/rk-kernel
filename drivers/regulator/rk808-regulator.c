@@ -1493,10 +1493,10 @@ static int rk808_regulator_dt_parse_pdata(struct device *dev,
 	u32 conf[2];
 	i = of_property_read_u32_array(client_dev->of_node, "bulk-ilmax", conf, 2);
 	if (!i) {
-		regmap_read(map, RK808_IO_POL_REG, &tmp);
+		regmap_read(map, RK808_DCDC_ILMAX_REG, &tmp);
 		tmp &= ~conf[0];
 		tmp |= conf[1];
-		regmap_write(map, RK808_IO_POL_REG, tmp);
+		regmap_write(map, RK808_DCDC_ILMAX_REG, tmp);
 	}
 #endif
 
