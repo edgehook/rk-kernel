@@ -41,12 +41,14 @@ static int misc_adv_gpio_probe(struct platform_device *pdev)
     int  m2_reset_gpio;
 	int  minipcie_reset_gpio;
 	int  m2_pwr_gpio;
+	int  lan2_reset_gpio;
 	bool  minipcie_pwr_active;
 	bool  m2_reset_active;
 	bool  minipcie_reset_active;
 	bool  m2_pwr_active;
-    u32  timing_interval = 0;
-	
+	bool  lan2_reset_active;
+    int  timing_interval = 0;
+
     np = dev->of_node;
 	minipcie_reset_gpio = of_get_named_gpio_flags(np, "minipcie-reset-gpio", 0, &flags);
 	if (gpio_is_valid(minipcie_reset_gpio))
@@ -58,6 +60,30 @@ static int misc_adv_gpio_probe(struct platform_device *pdev)
 		else
 			gpio_request_one(minipcie_reset_gpio, 
                         GPIOF_OUT_INIT_LOW, "minipcie 4g reset gpio");
+	}
+
+	m2_reset_gpio = of_get_named_gpio_flags(np, "m2-reset-gpio", 0, &flags);
+	if (gpio_is_valid(m2_reset_gpio))
+	{
+		m2_reset_active = !(flags & OF_GPIO_ACTIVE_LOW);
+		if(m2_reset_active)
+			gpio_request_one(m2_reset_gpio, 
+                        GPIOF_OUT_INIT_HIGH, "m2 reset gpio");
+		else
+			gpio_request_one(m2_reset_gpio, 
+                        GPIOF_OUT_INIT_LOW, "m2 reset gpio");
+	}
+
+	lan2_reset_gpio = of_get_named_gpio_flags(np, "lan2-reset-gpio", 0, &flags);
+	if (gpio_is_valid(lan2_reset_gpio))
+	{
+		lan2_reset_active = !(flags & OF_GPIO_ACTIVE_LOW);
+		if(lan2_reset_active)
+			gpio_request_one(lan2_reset_gpio, 
+						GPIOF_OUT_INIT_HIGH, "lan2 reset gpio");
+		else
+			gpio_request_one(lan2_reset_gpio, 
+						GPIOF_OUT_INIT_LOW, "lan2 reset gpio");
 	}
 
 	minipcie_pwr_gpio = of_get_named_gpio_flags(np, "minipcie-pwr-gpio", 0, &flags);
@@ -72,25 +98,6 @@ static int misc_adv_gpio_probe(struct platform_device *pdev)
                         GPIOF_OUT_INIT_LOW, "minipcie pwr gpio");
 	}
 
-	if (of_property_read_u32(np,"timing-interval",&timing_interval))
-		timing_interval = 50;
-	if(timing_interval)
-	    mdelay(timing_interval);
-	if (gpio_is_valid(minipcie_reset_gpio))
-		gpio_direction_output(minipcie_reset_gpio, !minipcie_reset_active);
-
-	m2_reset_gpio = of_get_named_gpio_flags(np, "m2-reset-gpio", 0, &flags);
-	if (gpio_is_valid(m2_reset_gpio))
-	{
-		m2_reset_active = !(flags & OF_GPIO_ACTIVE_LOW);
-		if(m2_reset_active)
-			gpio_request_one(m2_reset_gpio, 
-                        GPIOF_OUT_INIT_HIGH, "m2 reset gpio");
-		else
-			gpio_request_one(m2_reset_gpio, 
-                        GPIOF_OUT_INIT_LOW, "m2 reset gpio");
-	}
-
 	m2_pwr_gpio = of_get_named_gpio_flags(np, "m2-pwr-gpio", 0, &flags);
 	if (gpio_is_valid(m2_pwr_gpio))
 	{
@@ -103,10 +110,19 @@ static int misc_adv_gpio_probe(struct platform_device *pdev)
                         GPIOF_OUT_INIT_LOW, "m2 pwr gpio");
 	}
 
+	if (of_property_read_u32(np,"timing-interval",&timing_interval))
+		timing_interval = 50;
 	if(timing_interval)
-	    	mdelay(timing_interval);
+		mdelay(timing_interval);
+
+	if (gpio_is_valid(minipcie_reset_gpio))
+		gpio_direction_output(minipcie_reset_gpio, !minipcie_reset_active);
+
 	if (gpio_is_valid(m2_reset_gpio))
 		gpio_direction_output(m2_reset_gpio, !m2_reset_active);
+
+	if (gpio_is_valid(lan2_reset_gpio))
+		gpio_direction_output(lan2_reset_gpio, !lan2_reset_active);
 
 	pm_reset_gpio = of_get_named_gpio_flags(np,"system-reset-gpio",0,&flags);
 	if(gpio_is_valid(pm_reset_gpio)) {
