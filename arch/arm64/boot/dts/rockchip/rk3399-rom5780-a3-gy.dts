@@ -979,19 +979,6 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		i2c@0{
-			#address-cells = <1>;
-			#size-cells = <0>;
-			reg = <0>;
-
-			battery: bq40z50@0b {
-				compatible = "ti,bq40z50";
-				reg = <0x0b>;
-				pinctrl-names = "default";
-				pinctrl-0 = <&battery_pins>;
-			};
-		};
-
 		i2c@1{
 			#address-cells = <1>;
 			#size-cells = <0>;
@@ -1905,20 +1892,6 @@
 							<2  2  RK_FUNC_GPIO &pcfg_pull_none>, 
 							<2  3  RK_FUNC_GPIO &pcfg_pull_none>,
 							<4 21  RK_FUNC_GPIO &pcfg_pull_none>;
-		};
-	};
-
-	battery {
-		battery_pins: battery-pins {
-			rockchip,pins = 
-				/* SMB_ALERT_1V8 */
-				<4 26 RK_FUNC_1 &pcfg_pull_none>,
-				/* BATLOW */
-				//<3 14 RK_FUNC_1 &pcfg_pull_none>,
-				/* CHARGING */
-				<2 24 RK_FUNC_GPIO &pcfg_pull_none>,
-				/* CHARGER_PRSNT */
-				<2 25 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};
 
