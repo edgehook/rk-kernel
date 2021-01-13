@@ -1,0 +1,225 @@
+/*
+ * Copyright (c) 2019 Fuzhou Rockchip Electronics Co., Ltd
+ *
+ * This file is dual-licensed: you can use it either under the terms
+ * of the GPL or the X11 license, at your option. Note that this dual
+ * licensing only applies to this file, and not this project as a
+ * whole.
+ *
+ *  a) This file is free software; you can redistribute it and/or
+ *     modify it under the terms of the GNU General Public License as
+ *     published by the Free Software Foundation; either version 2 of the
+ *     License, or (at your option) any later version.
+ *
+ *     This file is distributed in the hope that it will be useful,
+ *     but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *     GNU General Public License for more details.
+ *
+ * Or, alternatively,
+ *
+ *  b) Permission is hereby granted, free of charge, to any person
+ *     obtaining a copy of this software and associated documentation
+ *     files (the "Software"), to deal in the Software without
+ *     restriction, including without limitation the rights to use,
+ *     copy, modify, merge, publish, distribute, sublicense, and/or
+ *     sell copies of the Software, and to permit persons to whom the
+ *     Software is furnished to do so, subject to the following
+ *     conditions:
+ *
+ *     The above copyright notice and this permission notice shall be
+ *     included in all copies or substantial portions of the Software.
+ *
+ *     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ *     EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ *     OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ *     NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ *     HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ *     WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ *     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ *     OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+
+/ {
+	aliases {
+		uio_gpio_standard = &uio_gpio_standard;
+		uio_gpio_4030 = &uio_gpio_4030;
+		uio_gpio_4032 = &uio_gpio_4032;
+		uio_gpio_4034 = &uio_gpio_4034;
+		uio_gpio_4036 = &uio_gpio_4036;
+
+		rtl8367 = &rtl8367;
+	};
+
+	adv-uio {
+		// 0      standard
+		// 4030   uio-4030
+		// 4032   uio-4032
+		// 4034   uio-4034
+		// 4036   uio-4036
+		uio-default = <0>;
+	};
+
+	uio_gpio_standard: uio-gpio-standard {
+		compatible = "uio-gpio";
+		uio-name = "uio-standard";
+		pinctrl-names = "default";
+		pinctrl-0 = <&uio_standard_gpios>;
+
+		status = "okay";
+	};
+
+	uio_gpio_4030: uio-gpio-4030 {
+		compatible = "uio-gpio";
+		uio-name = "uio-4030";
+		pinctrl-names = "default";
+		pinctrl-0 = <&uio_4030_gpios>;
+
+		input-gpios = <&gpio2 18 GPIO_ACTIVE_HIGH
+			       &gpio2 24 GPIO_ACTIVE_HIGH
+			       &gpio2 20 GPIO_ACTIVE_HIGH
+			       &gpio2 22 GPIO_ACTIVE_HIGH>;
+
+		output-gpios = <&gpio2 19 GPIO_ACTIVE_LOW
+			        &gpio2 25 GPIO_ACTIVE_LOW
+			        &gpio2 21 GPIO_ACTIVE_LOW
+			        &gpio2 23 GPIO_ACTIVE_LOW>;
+
+		status = "disabled";
+	};
+
+	uio_gpio_4032: uio-gpio-4032 {
+		compatible = "uio-gpio";
+		uio-name = "uio-4032";
+		pinctrl-names = "default";
+		pinctrl-0 = <&uio_4032_gpios>;
+
+		lan-pwren-gpio = <&gpio2 10 GPIO_ACTIVE_HIGH>;
+		lan-reset-gpio = <&gpio2 12 GPIO_ACTIVE_LOW>;
+		timing-interval = <50>;
+
+		status = "disabled";
+	};
+
+	uio_gpio_4034: uio-gpio-4034 {
+		compatible = "uio-gpio";
+		uio-name = "uio-4034";
+		pinctrl-names = "default";
+		pinctrl-0 = <&uio_4034_gpios>;
+
+		status = "disabled";
+	};
+
+
+	uio_gpio_4036: uio-gpio-4036 {
+		compatible = "uio-gpio";
+		uio-name = "uio-4036";
+		pinctrl-names = "default";
+		pinctrl-0 = <&uio_4036_gpios>;
+
+		lan-pwren-gpio = <&gpio2 19 GPIO_ACTIVE_HIGH>;
+		lan-reset-gpio = <&gpio2 25 GPIO_ACTIVE_LOW>;
+		timing-interval = <50>;
+
+		status = "disabled";
+
+	};
+
+ 	rtl8367:rtl8367 {
+		compatible = "realtek,rtl8367b";
+		pinctrl-names = "default";
+		//pinctrl-0 = <&rtl_sda &rtl_scl>;
+		gpio-sda = <&gpio2 23  GPIO_ACTIVE_HIGH>;
+		gpio-sck = <&gpio2 22 GPIO_ACTIVE_HIGH>;
+		realtek,extif0 = <1 0 1 1 1 1 1 1 2>;
+		status = "disabled";
+	};
+
+};
+
+
+&pinctrl {
+	uio {
+		uio_standard_gpios: uio-standard-gpios{
+			rockchip,pins = <2 9  RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO1
+					<2 10 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO2
+					<2 11 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO3
+					<2 12 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO4
+					<2 18 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO5
+					<2 19 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO6
+					<2 24 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO7
+					<2 25 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO8
+					<2 20 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO9
+					<2 21 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO10
+					<2 22 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO11
+					<2 23 RK_FUNC_GPIO &pcfg_pull_up>;  // GPIO12
+		};
+
+		uio_4030_gpios: uio-4030-gpios{
+			rockchip,pins = <2 9  RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO1
+					<2 10 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO2
+					<2 11 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO3
+					<2 12 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO4
+					<2 18 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO5
+					<2 19 RK_FUNC_GPIO &pcfg_pull_down>,  // GPIO6
+					<2 24 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO7
+					<2 25 RK_FUNC_GPIO &pcfg_pull_down>,  // GPIO8
+					<2 20 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO9
+					<2 21 RK_FUNC_GPIO &pcfg_pull_down>,  // GPIO10
+					<2 22 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO11
+					<2 23 RK_FUNC_GPIO &pcfg_pull_down>;  // GPIO12
+		};
+
+		uio_4032_gpios: uio-4032-gpios{
+			rockchip,pins = <2 9  RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO1
+					<2 10 RK_FUNC_GPIO &pcfg_pull_down>,  // GPIO2    LAN7500_PWREN
+					<2 11 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO3
+					<2 12 RK_FUNC_GPIO &pcfg_pull_down>,  // GPIO4    LAN7500_RESET
+					<2 18 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO5
+					<2 19 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO6
+					<2 24 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO7
+					<2 25 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO8
+					<2 20 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO9
+					<2 21 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO10
+					<2 22 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO11
+					<2 23 RK_FUNC_GPIO &pcfg_pull_up>;  // GPIO12
+		};
+
+		uio_4034_gpios: uio-4034-gpios{
+			rockchip,pins = <2 9  RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO1
+					<2 10 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO2
+					<2 11 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO3
+					<2 12 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO4
+					<2 18 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO5
+					<2 19 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO6
+					<2 24 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO7
+					<2 25 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO8
+					<2 20 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO9
+					<2 21 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO10
+					<2 22 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO11
+					<2 23 RK_FUNC_GPIO &pcfg_pull_up>;  // GPIO12
+		};
+
+		uio_4036_gpios: uio-4036-gpios{
+			rockchip,pins = <2 9  RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO1
+					<2 10 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO2
+					<2 11 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO3
+					<2 12 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO4
+					<2 18 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO5
+					<2 19 RK_FUNC_GPIO &pcfg_pull_down>,  // GPIO6    LAN7500_PWREN
+					<2 24 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO7
+					<2 25 RK_FUNC_GPIO &pcfg_pull_down>,  // GPIO8    LAN7500_RESET
+					<2 20 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO9
+					<2 21 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO10
+					<2 22 RK_FUNC_GPIO &pcfg_pull_up>,  // GPIO11    RTL8367_SCL
+					<2 23 RK_FUNC_GPIO &pcfg_pull_up>;  // GPIO12    RTL8367_SDA
+		};
+	
+	};
+};
+
+
+
+
+		

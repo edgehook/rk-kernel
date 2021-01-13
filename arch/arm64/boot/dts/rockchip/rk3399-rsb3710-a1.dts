@@ -63,6 +63,9 @@
 #include <dt-bindings/display/screen-timing/lcd-ev101wxm.dtsi>
 #include <dt-bindings/display/screen-timing/lcd-lvds2hdmi-1920x1080.dtsi>
 
+// uio
+#include "rk3399-rsb3710-a1-uio.dtsi"
+
 / {
 	model = "RSB-3710 AKS0000000000 V10000 A1";
 	compatible = "rockchip,rk3399-rsb3710-a1", "rockchip,rk3399";
@@ -102,6 +105,7 @@
 
 		debug_console = &fiq_debugger;
 		ethernet0 = &gmac;
+
 	};
 
 	fdt_dummy {
@@ -131,8 +135,7 @@
 		compatible = "misc-adv-gpio";
 		status = "okay";
 		pinctrl-names = "default";
-		pinctrl-0 = <&minipcie_pwr_h &system_rst_h &lan2_rst_h &led_user_h 
-					&spi2_gpios &sdio0_gpios &uart0_gpios>;
+		pinctrl-0 = <&minipcie_pwr_h &system_rst_h &lan2_rst_h &led_user_h>;
 		minipcie-pwr-gpio = <&gpio2 3 GPIO_ACTIVE_HIGH>;
 
 		system-reset-gpio = <&gpio1 6 GPIO_ACTIVE_HIGH>;
@@ -888,7 +891,7 @@
 
 	ov8858: ov8858@36 {
 		compatible = "ovti,ov8858";
-		status = "okay";
+		status = "disabled";
 		reg = <0x36>;
 		clocks = <&cru SCLK_CIF_OUT>;
 		clock-names = "xvclk";
@@ -957,6 +960,9 @@
 &uart0 {
 	dmas = <&dmac_peri 0>, <&dmac_peri 1>;
 	dma-names = "tx", "rx";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_xfer>;
+
 	status = "okay";
 };
 
@@ -972,6 +978,9 @@
 &uart4 {
 	dmas = <&dmac_peri 8>, <&dmac_peri 9>;
 	dma-names = "tx", "rx";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart4_xfer>;
+
 	status = "okay";
 };
 
@@ -1761,6 +1770,8 @@
 		led_user_h: led-user-h {
 			rockchip,pins = <3 29 RK_FUNC_GPIO &pcfg_pull_down>;
 		};
+
+#if 0
 		spi2_gpios: spi2-gpios {
 			rockchip,pins = <2 9  RK_FUNC_GPIO &pcfg_pull_none>,
 							<2 10 RK_FUNC_GPIO &pcfg_pull_none>,
@@ -1779,6 +1790,7 @@
 			rockchip,pins = <2 18 RK_FUNC_GPIO &pcfg_pull_none>,
 							<2 19 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
+#endif
 		
 	};
 
