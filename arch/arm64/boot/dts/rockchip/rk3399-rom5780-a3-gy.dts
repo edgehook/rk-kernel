@@ -187,7 +187,7 @@
 			240 241 242 243 244 245 246 247
 			248 249 250 251 252 253 254 255>;
 		default-brightness-level = <200>;
-		default-enable = <0>;
+		default-enable = <1>;
 	};
 
 	// Backlight dsi2lvds
@@ -234,7 +234,7 @@
 			240 241 242 243 244 245 246 247
 			248 249 250 251 252 253 254 255>;
 		default-brightness-level = <200>;
-		default-enable = <0>;
+		default-enable = <1>;
 	};
 
 	//edp vcc
