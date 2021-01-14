@@ -1,5 +1,5 @@
 /*
- * Advantech. LCD_G215HVN01
+ * Advantech. LCD_M128LV5005
  *
  */
 / {
@@ -19,7 +19,7 @@
 			vsync-active = <0>;
 			de-active = <0>;
 			pixelclk-active = <0>;
-			panel-init-sequence = [			
+			panel-init-sequence = [	
 				29 00 06 3C 01 0B 00 08 00
 				29 00 06 14 01 07 00 00 00
 				29 00 06 64 01 0A 00 00 00
