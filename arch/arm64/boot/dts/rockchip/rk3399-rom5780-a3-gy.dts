@@ -61,6 +61,7 @@
 #include <dt-bindings/display/screen-timing/lcd-g215hvn01.dtsi>
 #include <dt-bindings/display/screen-timing/lcd-n101icgl21.dtsi>
 #include <dt-bindings/display/screen-timing/lcd-vl-fs-7dh.dtsi>
+#include <dt-bindings/display/screen-timing/lcd-M128LV5005.dtsi>
 
 / {
 	model = "ROM-5780 AKS0000000000 V10000";
