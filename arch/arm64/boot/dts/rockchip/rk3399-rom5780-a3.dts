@@ -682,9 +682,9 @@
 	assigned-clock-parents = <&clkin_gmac>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&rgmii_16ma_pins &rgmii_phy_reset>;
-	enable_phy_delay = <1>;
-	tx_delay = <0>;
-	rx_delay = <0>;
+	enable_phy_delay = <0>;
+	tx_delay = <0x2c>;
+	rx_delay = <0x1e>;
 	status = "okay";
 };
 
