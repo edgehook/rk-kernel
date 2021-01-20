@@ -1,0 +1,34 @@
+diff --git a/drivers/watchdog/watchdog_advantech.c b/drivers/watchdog/watchdog_advantech.c
+index d16a366..5b313e8 100755
+--- a/drivers/watchdog/watchdog_advantech.c
++++ b/drivers/watchdog/watchdog_advantech.c
+@@ -94,6 +94,7 @@ struct watchdog_info adv_wdt_info = {
+ 
+ static int adv_wdt_i2c_write_reg(struct i2c_client *client, u8 reg, void *buf, size_t len)
+ {
++#if 0
+ 	u8 val[1 + len];
+ 	struct i2c_msg msg[1] = {
+ 		{
+@@ -113,11 +114,13 @@ static int adv_wdt_i2c_write_reg(struct i2c_client *client, u8 reg, void *buf, s
+ 	}
+ 	
+ 	msleep(10);
++#endif
+ 	return 0;
+ }
+ 
+ static int adv_wdt_i2c_read_reg(struct i2c_client *client, u8 reg, void *buf, size_t len)
+ {
++#if 0
+ 	struct i2c_msg msg[2] = {
+ 		{
+ 			.addr	= client->addr,
+@@ -139,6 +142,7 @@ static int adv_wdt_i2c_read_reg(struct i2c_client *client, u8 reg, void *buf, si
+ 	}
+ 	
+ 	msleep(10);
++#endif
+ 	return 0;
+ }
+ 

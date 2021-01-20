@@ -1,0 +1,78 @@
+diff --git a/arch/arm64/boot/dts/rockchip/rk3399-rom5780-a3-gy.dts b/arch/arm64/boot/dts/rockchip/rk3399-rom5780-a3-gy.dts
+index 7caf480..257c304 100755
+--- a/arch/arm64/boot/dts/rockchip/rk3399-rom5780-a3-gy.dts
++++ b/arch/arm64/boot/dts/rockchip/rk3399-rom5780-a3-gy.dts
+@@ -965,11 +965,12 @@
+ 	adv-wdt-i2c@29 {
+ 		compatible = "adv-wdt-i2c";
+ 		pinctrl-names = "rockchip,camera_default";
+-		pinctrl-0 = <&wdt_en &wdt_ping>;
++		pinctrl-0 = <&wdt_en &wdt_ping &wdt_ping2>;
+ 		reg = <0x29>;
++		wdt-ping2 = <&gpio0 1 GPIO_ACTIVE_HIGH>;
+ 		wdt-ping = <&gpio0 9 GPIO_ACTIVE_HIGH>;
+ 		wdt-en = <&gpio0 6 GPIO_ACTIVE_HIGH>;
+-		status = "disabled";
++		status = "okay";
+ 	};
+ };
+ 
+@@ -1050,7 +1051,7 @@
+ };
+ 
+ &watchdog {
+-    status = "okay";
++    status = "disabled";
+ };
+ 
+ &i2s0 {
+@@ -1867,6 +1868,10 @@
+ 		wdt_ping: wdt-ping {
+ 			rockchip,pins = <0 9 RK_FUNC_GPIO &pcfg_pull_none>;
+ 		};
++
++		wdt_ping2: wdt-ping2 {
++			rockchip,pins =	<0 1 RK_FUNC_GPIO &pcfg_pull_none>;
++		};
+ 	};
+ 
+ 	misc {
+diff --git a/drivers/watchdog/watchdog_advantech.c b/drivers/watchdog/watchdog_advantech.c
+index 2da99e5..d16a366 100755
+--- a/drivers/watchdog/watchdog_advantech.c
++++ b/drivers/watchdog/watchdog_advantech.c
+@@ -62,6 +62,7 @@ static struct {
+ 	unsigned int remain_time;
+ 	unsigned long status;
+ 	int gpio_wdt_ping;
++	int gpio_wdt_ping2;
+ 	int wdt_ping_status;
+ 	int gpio_wdt_en;
+ 	int wdt_en_off;
+@@ -186,6 +187,8 @@ static inline void adv_wdt_ping(void)
+ 	msleep(10);
+ 	adv_wdt.wdt_ping_status= !adv_wdt.wdt_ping_status;
+ 	gpio_set_value(adv_wdt.gpio_wdt_ping, adv_wdt.wdt_ping_status);
++	if (gpio_is_valid(adv_wdt.gpio_wdt_ping2))
++		gpio_set_value(adv_wdt.gpio_wdt_ping2, adv_wdt.wdt_ping_status);
+ 	msleep(10);
+ }
+ 
+@@ -365,6 +368,17 @@ static int adv_wdt_i2c_probe(struct i2c_client *client, const struct i2c_device_
+ 	adv_wdt.wdt_ping_status=flags;
+ 	gpio_direction_output(adv_wdt.gpio_wdt_ping, flags);
+ 
++	adv_wdt.gpio_wdt_ping2 = of_get_named_gpio_flags(np, "wdt-ping2", 0, &flags);
++	if (gpio_is_valid(adv_wdt.gpio_wdt_ping2)) {
++		ret = devm_gpio_request_one(&client->dev, adv_wdt.gpio_wdt_ping2, 
++					GPIOF_OUT_INIT_LOW, "adv_wdt.wdt_ping2");
++		if (ret < 0) {
++			dev_err(&client->dev, "request gpio failed: %d\n", ret);
++			return ret;
++		}
++		gpio_direction_output(adv_wdt.gpio_wdt_ping2, flags);
++	}
++
+ 	adv_wdt.timeout = clamp_t(unsigned, timeout, 1, ADV_WDT_MAX_TIME);
+ 	if (adv_wdt.timeout != timeout)
+ 		dev_warn(&client->dev, "Initial timeout out of range! "
