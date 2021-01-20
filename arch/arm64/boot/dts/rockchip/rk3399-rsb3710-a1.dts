@@ -615,8 +615,8 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&rgmii_16ma_pins &rgmii_phy_reset>;
 	enable_phy_delay = <0>;
-	tx_delay = <0x2a>;
-	rx_delay = <0x1e>;
+	tx_delay = <0x2e>;
+	rx_delay = <0x20>;
 	status = "okay";
 };
 
