@@ -140,6 +140,15 @@ static int rk_spdif_hw_params(struct snd_pcm_substream *substream,
 		return -EINVAL;
 	}
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	ret = regmap_update_bits(spdif->regmap, SPDIF_CFGR, SDPIF_CFGR_VDW_MASK, 0x00);
+	if (ret != 0) {
+		dev_err(spdif->dev, "Failed to set SPDIF_CFGR disable: %d\n",
+				ret);
+		return ret;
+	}
+#endif
+
 	val |= SPDIF_CFGR_CLK_DIV(0);
 	ret = regmap_update_bits(spdif->regmap, SPDIF_CFGR,
 				 SPDIF_CFGR_CLK_DIV_MASK |
