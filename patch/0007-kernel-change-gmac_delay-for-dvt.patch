@@ -1,5 +1,5 @@
 diff --git a/arch/arm64/boot/dts/rockchip/rk3399-rom5780-a3-gy.dts b/arch/arm64/boot/dts/rockchip/rk3399-rom5780-a3-gy.dts
-index 257c304..4681226 100755
+index 7caf480..daa083b 100755
 --- a/arch/arm64/boot/dts/rockchip/rk3399-rom5780-a3-gy.dts
 +++ b/arch/arm64/boot/dts/rockchip/rk3399-rom5780-a3-gy.dts
 @@ -669,7 +669,8 @@
@@ -7,8 +7,8 @@ index 257c304..4681226 100755
  	pinctrl-0 = <&rgmii_16ma_pins &rgmii_phy_reset>;
  	enable_phy_delay = <0>;
 -	tx_delay = <0x2c>;
-+	tx_delay = <0x1c>;
-+	//tx_delay = <0x2c>;
++	tx_delay = <0x1c>;//from dvt board
++	//tx_delay = <0x2c>;//from pvt board
  	rx_delay = <0x1e>;
  	status = "okay";
  };
