@@ -6,22 +6,20 @@
 	disp_timings: display-timings {
 		lvds_m128lv5005: lvds-m128lv5005 {
 			lvds-format = <LVDS_8BIT_1>;
-			clock-frequency = <134000000>;
+			clock-frequency = <136000000>;
 			hactive = <1920>;
 			vactive = <1080>;
-			hback-porch = <32>;
-			hfront-porch = <52>;
+			hback-porch = <16>;
+			hfront-porch = <26>;
 			vback-porch = <24>;
 			vfront-porch = <8>;
-			hsync-len = <24>;
+			hsync-len = <12>;
 			vsync-len = <3>;
 			hsync-active = <0>;
 			vsync-active = <0>;
 			de-active = <0>;
 			pixelclk-active = <0>;
-			panel-init-sequence = [	
-				29 00 06 3C 01 0B 00 08 00
-				29 00 06 14 01 07 00 00 00
+			panel-init-sequence = [
 				29 00 06 64 01 0A 00 00 00
 				29 00 06 68 01 0A 00 00 00
 				29 00 06 6C 01 0A 00 00 00
@@ -31,10 +29,10 @@
 				29 00 06 04 01 01 00 00 00
 				29 00 06 04 02 01 00 00 00
 				29 00 06 50 04 20 01 F0 03
-				29 00 06 54 04 1A 00 23 00
-				29 00 06 58 04 80 07 38 00
-				29 00 06 5C 04 03 00 1A 00
-				29 00 06 60 04 38 04 09 00
+				29 00 06 54 04 18 00 20 00
+				29 00 06 58 04 80 07 34 00
+				29 00 06 5C 04 03 00 18 00
+				29 00 06 60 04 38 04 08 00
 				29 00 06 64 04 01 00 00 00
 				29 01 06 A0 04 06 80 44 00
 				29 00 06 A0 04 06 80 04 00
