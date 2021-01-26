@@ -248,6 +248,9 @@ static int isneed_pm_adv_reboot(const char *cmd)
 	if(strcmp(cmd, "loader") == 0)
 		return 0;
 
+	if(strcmp(cmd, "backup") == 0)
+		return 0;
+
 	return 1;
 }
 #endif

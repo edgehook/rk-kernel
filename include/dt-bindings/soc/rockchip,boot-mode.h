@@ -21,4 +21,5 @@
 /* enter usb mass storage mode */
 #define BOOT_UMS		(REBOOT_FLAG + 12)
 
+#define BOOT_BACKUP		(REBOOT_FLAG + 16)
 #endif
