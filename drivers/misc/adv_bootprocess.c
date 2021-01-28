@@ -39,7 +39,6 @@ static ssize_t timer_flag_show(struct device *dev,
 	return status;
 }
  
-
 static ssize_t timer_flag_store(struct device *dev,
                              struct device_attribute *attr,
                              const char *buf, size_t len)        
@@ -55,7 +54,7 @@ static ssize_t timer_flag_store(struct device *dev,
 }
 
 static DEVICE_ATTR_RW(timer_flag);
- 
+
 struct file_operations adv_timer_ops={
     .owner  = THIS_MODULE,
 };
@@ -64,38 +63,37 @@ static int major;
 static struct class *cls;
 static int adv_timer_init(void)
 {
-    struct device *mydev;
+	struct device *mydev;
 
+	if (early_enable)
+	{
+		major=register_chrdev(0,"timer_flag", &adv_timer_ops);
+		cls=class_create(THIS_MODULE, "adv_bootprocess_class");
 
-    if (early_enable)
-    {
-	major=register_chrdev(0,"timer_flag", &adv_timer_ops);
-    	cls=class_create(THIS_MODULE, "adv_bootprocess_class");
+		mydev = device_create(cls, 0, MKDEV(major,0),NULL,"adv_bootprocess_device");    
 
-	mydev = device_create(cls, 0, MKDEV(major,0),NULL,"adv_bootprocess_device");    
-    
-    	if(sysfs_create_file(&(mydev->kobj), &dev_attr_timer_flag.attr)) {
-        	return -1;
+		if(sysfs_create_file(&(mydev->kobj), &dev_attr_timer_flag.attr)) {
+			return -1;
+		}
+
+		printk(" Enabled delay work\n");
+		INIT_DELAYED_WORK(&adv_delay_work, adv_delay_work_handler );
+		mod_delayed_work(system_wq, &adv_delay_work, msecs_to_jiffies(60000));
 	}
-
-    	printk(" Enabled delay work\n");
-    	INIT_DELAYED_WORK(&adv_delay_work, adv_delay_work_handler );
-    	mod_delayed_work(system_wq, &adv_delay_work, msecs_to_jiffies(60000));
-    }
-    else
-    	printk(" Disabled delay work\n");
+	else
+		printk(" Disabled delay work\n");
 
     return 0;
 }
  
 static void adv_timer_exit(void)
 {
-    if (early_enable)
-    {
-	device_destroy(cls, MKDEV(major,0));
-    	class_destroy(cls);
-    	unregister_chrdev(major, "timer_flag");
-    }
+	if (early_enable)
+	{
+		device_destroy(cls, MKDEV(major,0));
+		class_destroy(cls);
+		unregister_chrdev(major, "timer_flag");
+	}
 }
  
 late_initcall_sync(adv_timer_init);
