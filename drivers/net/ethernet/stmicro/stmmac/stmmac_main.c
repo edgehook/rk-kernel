@@ -1797,6 +1797,8 @@ static int stmmac_open(struct net_device *dev)
 
 #ifdef CONFIG_ARCH_ADVANTECH
 	priv->exit=1;
+	cancel_delayed_work_sync(&priv->work);
+	//flush_scheduled_work();
 #endif
 
 	if (priv->pcs != STMMAC_PCS_RGMII && priv->pcs != STMMAC_PCS_TBI &&
@@ -2851,13 +2853,15 @@ static void stmmac_mdio_work_func(struct work_struct *work)
 		container_of(work, struct stmmac_priv, work.work);
 	int val;
 
-	phy_write(stmmac->phydev, 0x1f, 0x0d04);
-	val = phy_read(stmmac->phydev, 0x10);
-	if(val != REALTEK_8211F_PHY_LED)
-		phy_write(stmmac->phydev, 0x10, REALTEK_8211F_PHY_LED);
-	phy_write(stmmac->phydev, 0x1f, 0x0000);
 	if(!stmmac->exit)
+	{
+		phy_write(stmmac->phydev, 0x1f, 0x0d04);
+		val = phy_read(stmmac->phydev, 0x10);
+		if(val != REALTEK_8211F_PHY_LED)
+			phy_write(stmmac->phydev, 0x10, REALTEK_8211F_PHY_LED);
+		phy_write(stmmac->phydev, 0x1f, 0x0000);
 		mod_delayed_work(system_wq, &stmmac->work, msecs_to_jiffies(20));
+	}
 }
 #endif
 
