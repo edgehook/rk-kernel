@@ -1184,6 +1184,14 @@
 	mali-supply = <&vdd_gpu>;
 };
 
+&gpu_power_model {
+	// for DDK r14.
+	/delete-property/ voltage;
+	/delete-property/ frequency;
+	/delete-property/ static-power;
+	/delete-property/ dynamic-power;
+};
+
 &io_domains {
 	status = "okay";
 	bt656-supply = <&vcc_1v8>;			/* bt656_gpio2ab_ms */
