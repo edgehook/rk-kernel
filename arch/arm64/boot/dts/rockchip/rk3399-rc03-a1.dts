@@ -54,9 +54,6 @@
 
 // mipi-dsi to lvds panel
 #include <dt-bindings/display/screen-timing/lcd-g070vw01.dtsi>
-#include <dt-bindings/display/screen-timing/lcd-g150xgel05.dtsi>
-#include <dt-bindings/display/screen-timing/lcd-g215hvn01.dtsi>
-#include <dt-bindings/display/screen-timing/lcd-n101icgl21.dtsi>
 
 / {
 	model = "RC03 AKS0000000000 V10000";
@@ -324,7 +321,7 @@
 		vpd,init-ss = <0>;
 		/* 0: dfp, 1: ufp, 2: dp 3: dp/ufp */
 		vpd,init-mode = <2>;
-		status = "okay";
+		status = "disabled";
 	};
 
 	rt5640-sound {
@@ -352,7 +349,7 @@
 	};
 
 	hdmi_sound: hdmi-sound {
-		status = "okay";
+		status = "disabled";
 		compatible = "simple-audio-card";
 		simple-audio-card,format = "i2s";
 		simple-audio-card,mclk-fs = <256>;
@@ -898,64 +895,6 @@
 	status = "okay";
 	i2c-scl-rising-time-ns = <300>;
 	i2c-scl-falling-time-ns = <15>;
-
-	i2c1_vm149c: vm149c@0c {
-		compatible = "silicon touch,vm149c";
-		status = "okay";
-		reg = <0x0c>;
-		rockchip,camera-module-index = <0>;
-		rockchip,camera-module-facing = "back";
-	};
-
-	ov5648: ov5648@36 {
-		compatible = "ovti,ov5648";
-		status = "disabled";
-		reg = <0x36>;
-		clocks = <&cru SCLK_CIF_OUT>;
-		clock-names = "xvclk";
-
-		reset-gpios = <&gpio1 9 GPIO_ACTIVE_LOW>;
-		pwdn-gpios = <&gpio1 2 GPIO_ACTIVE_HIGH>;
-		pinctrl-names = "rockchip,camera_default";
-		pinctrl-0 = <&cif_clkout>;
-		rockchip,camera-module-index = <0>;
-		rockchip,camera-module-facing = "back";
-		rockchip,camera-module-name = "default";
-		rockchip,camera-module-lens-name = "default";
-
-		/*port {
-			ucam_out0: endpoint {
-				remote-endpoint = <&mipi_in_ucam0>;
-				data-lanes = <1 2>;
-			};
-		};*/
-	};
-
-	ov8858: ov8858@36 {
-		compatible = "ovti,ov8858";
-		status = "okay";
-		reg = <0x36>;
-		clocks = <&cru SCLK_CIF_OUT>;
-		clock-names = "xvclk";
-
-		reset-gpios = <&gpio1 9 GPIO_ACTIVE_HIGH>;
-		pwdn-gpios = <&gpio1 2 GPIO_ACTIVE_LOW>;
-		pinctrl-names = "rockchip,camera_default";
-		pinctrl-0 = <&cif_clkout &cam0_default_pins>;
-		rockchip,camera-module-index = <0>;
-		rockchip,camera-module-facing = "back";
-		rockchip,camera-module-name = "CameraKing";
-		rockchip,camera-module-lens-name = "Largan-9569A2";
-
-		lens-focus = <&i2c1_vm149c>;
-
-		port {
-			ucam_out0: endpoint {
-				remote-endpoint = <&mipi_in_ucam0>;
-				data-lanes = <1 2>;
-			};
-		};
-	};
 };
 
 &i2c2 {
@@ -979,90 +918,12 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			reg = <0>;
-
-			battery: bq40z50@0b {
-				compatible = "ti,bq40z50";
-				reg = <0x0b>;
-				pinctrl-names = "default";
-				pinctrl-0 = <&battery_pins>;
-			};
-
-			rt56401: rt56401@1c {
-				#sound-dai-cells = <0>;
-				compatible = "realtek,rt5640";
-				reg = <0x1c>;
-				clocks = <&cru SCLK_I2S_8CH_OUT>;
-				clock-names = "mclk";
-				//pinctrl-names = "default";
-				//pinctrl-0 = <&i2s_8ch_mclk>;
-				realtek,in1-differential;
-				status = "okay";
-			};
 		};
 
 		i2c@1{
 			#address-cells = <1>;
 			#size-cells = <0>;
 			reg = <1>;
-
-			ov5648_multi_csi: ov5648-multi-csi@36 {
-				compatible = "ovti,ov5648";
-				status = "disabled";
-				reg = <0x36>;
-				clocks = <&cru SCLK_CIF_OUT>;
-				clock-names = "xvclk";
-
-				reset-gpios = <&gpio1 10 GPIO_ACTIVE_LOW>;
-				pwdn-gpios = <&gpio1 3 GPIO_ACTIVE_HIGH>;
-				pinctrl-names = "rockchip,camera_default";
-				pinctrl-0 = <&cif_clkout>;
-				rockchip,camera-module-index = <0>;
-				rockchip,camera-module-facing = "back";
-				rockchip,camera-module-name = "default";
-				rockchip,camera-module-lens-name = "default";
-
-				/*port {
-					ucam_out1: endpoint {
-						remote-endpoint = <&mipi_in_ucam1>;
-						data-lanes = <1 2>;
-					};
-				};*/
-			};
-
-			vm149c: vm149c@0c {
-				compatible = "silicon touch,vm149c";
-				status = "okay";
-				reg = <0x0c>;
-				rockchip,camera-module-index = <0>;
-				rockchip,camera-module-facing = "back";
-			};
-
-			ov8858_multi: ov8858@36 {
-				compatible = "ovti,ov8858";
-				status = "okay";
-				reg = <0x36>;
-				clocks = <&cru SCLK_CIF_OUT>;
-				clock-names = "xvclk";
-
-				reset-gpios = <&gpio1 10 GPIO_ACTIVE_HIGH>;
-				pwdn-gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
-				pinctrl-names = "rockchip,camera_default";
-				pinctrl-0 = <&cif_clkout &cam0_default_pins>;
-				rockchip,camera-module-index = <0>;
-				rockchip,camera-module-facing = "back";
-				rockchip,camera-module-name = "CameraKing";
-				rockchip,camera-module-lens-name = "Largan-9569A2";
-
-				lens-focus = <&vm149c>;
-
-				port {
-					ucam_out1: endpoint {
-						remote-endpoint = <&mipi_in_ucam1>;
-						data-lanes = <1 2 3 4>;
-					};
-				};
-			};
-
 		};
 
 		i2c@2 {
@@ -1127,7 +988,7 @@
 	#sound-dai-cells = <0>;
 	dmas = <&dmac_bus 4>;
 	dma-names = "tx";
-	status = "okay";
+	status = "disabled";
 };
 
 &uart0 {
@@ -1222,7 +1083,7 @@
 };
 
 &pwm1 {
-	status = "okay";
+	status = "disabled";
 };
 
 &pwm2 {
@@ -1289,9 +1150,7 @@
 	status = "disabled";
 };
 
-//DP
 &tcphy0 {
-	extcon = <&vpd0>;
 	status = "okay";
 };
 
@@ -1363,7 +1222,7 @@
 };
 
 &isp1_mmu {
-	status = "okay";
+	status = "disabled";
 };
 
 &mipi_dphy_rx0 {
@@ -1380,7 +1239,7 @@
 
 			mipi_in_ucam0: endpoint@1 {
 				reg = <1>;
-				remote-endpoint = <&ucam_out0>;
+				//remote-endpoint = <&ucam_out0>;
 				data-lanes = <1 2>;
 			};
 		};
@@ -1412,7 +1271,7 @@
 
 			mipi_in_ucam1: endpoint@1 {
 				reg = <1>;
-				remote-endpoint = <&ucam_out1>;
+				//remote-endpoint = <&ucam_out1>;
 				data-lanes = <1 2 3 4>;
 			};
 		};
@@ -1424,7 +1283,7 @@
 
 			dphy_tx1rx1_out: endpoint@0 {
 				reg = <0>;
-				remote-endpoint = <&isp1_mipi_in>;
+				//remote-endpoint = <&isp1_mipi_in>;
 			};
 		};
 	};
@@ -1445,17 +1304,7 @@
 };
 
 &rkisp1_1 {
-	status = "okay";
-
-	port {
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-		isp1_mipi_in: endpoint@0 {
-			reg = <0>;
-			remote-endpoint = <&dphy_tx1rx1_out>;
-		};
-	};
+	status = "disabled";
 };
 
 &rockchip_suspend {
