@@ -9,7 +9,6 @@
 #include <linux/moduleparam.h>
 #include <linux/platform_device.h>
 #include <linux/watchdog.h>
-#include <linux/clk.h>
 #include <linux/fs.h>
 #include <linux/io.h>
 #include <linux/uaccess.h>
@@ -44,7 +43,6 @@
 static struct i2c_client *adv_client;
 
 static struct {
-	struct clk *clk;
 	unsigned int timeout;
 	unsigned int remain_time;
 	unsigned long status;
@@ -375,10 +373,6 @@ static int adv_wdt_i2c_probe(struct i2c_client *client, const struct i2c_device_
 		goto fail;
 	}
 
-	dev_info(&client->dev,
-						"Advantech Watchdog Timer enabled. timeout=%ds (nowayout=%d), Ver.%d\n",
-						adv_wdt.timeout, nowayout, adv_wdt_info.firmware_version);
-
 	adv_wdt_miscdev.parent = &client->dev;
 	ret = misc_register(&adv_wdt_miscdev);
 	if (ret)
@@ -387,6 +381,10 @@ static int adv_wdt_i2c_probe(struct i2c_client *client, const struct i2c_device_
 	     WATCHDOG_MINOR, ret);
 		goto fail;
 	}
+
+	dev_info(&client->dev,
+						"Advantech MSP430 Watchdog Timer enabled. timeout=%ds (nowayout=%d), Ver.%d\n",
+						adv_wdt.timeout, nowayout, adv_wdt_info.firmware_version);
 
 	return 0;
 
