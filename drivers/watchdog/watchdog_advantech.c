@@ -170,10 +170,8 @@ static int adv_wdt_i2c_read_version(struct i2c_client *client, unsigned int *val
 
 static inline void adv_wdt_ping(void)
 {
-	msleep(10);
 	adv_wdt.wdt_ping_status= !adv_wdt.wdt_ping_status;
 	gpio_set_value(adv_wdt.gpio_wdt_ping, adv_wdt.wdt_ping_status);
-	msleep(10);
 }
 
 static void adv_wdt_start(void)
@@ -350,6 +348,8 @@ static int adv_wdt_i2c_probe(struct i2c_client *client, const struct i2c_device_
 		return ret;
 	}
 	adv_wdt.wdt_ping_status=flags;
+	gpio_direction_output(adv_wdt.gpio_wdt_ping, !flags);
+	msleep(10);
 	gpio_direction_output(adv_wdt.gpio_wdt_ping, flags);
 
 	adv_wdt.timeout = clamp_t(unsigned, timeout, 1, ADV_WDT_MAX_TIME);
