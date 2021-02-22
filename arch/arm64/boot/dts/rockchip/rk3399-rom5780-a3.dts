@@ -1004,7 +1004,7 @@
 
 	adv-wdt-i2c@29 {
 		compatible = "adv-wdt-i2c";
-		pinctrl-names = "rockchip,camera_default";
+		pinctrl-names = "default";
 		pinctrl-0 = <&wdt_en &wdt_ping>;
 		reg = <0x29>;
 		wdt-ping = <&gpio0 9 GPIO_ACTIVE_HIGH>;
