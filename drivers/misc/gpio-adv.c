@@ -18,7 +18,7 @@
 #include <linux/of_platform.h>
 
 #define MISC_ADV_GPIO_MODNAME		"misc-adv-gpio"
-static int pm_reset_gpio;
+static int pm_reset_gpio=-1;
 static bool pm_reset_gpio_active;
 
 void pm_adv_reboot(void)
