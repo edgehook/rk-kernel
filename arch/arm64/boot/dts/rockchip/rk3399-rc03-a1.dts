@@ -125,7 +125,7 @@
 
 	misc-adv-gpio {
 		compatible = "misc-adv-gpio";
-		status = "okay";
+		status = "disabled";
 		pinctrl-names = "default";
 		pinctrl-0 = <&system_rst_h>;
 		system-reset-gpio = <&gpio1 6 GPIO_ACTIVE_HIGH>;
@@ -710,7 +710,7 @@
 		interrupts = <21 IRQ_TYPE_LEVEL_LOW>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pmic_int_l &clk32k_in>;
-		rockchip,system-power-controller;
+		//rockchip,system-power-controller;
 		wakeup-source;
 		#clock-cells = <1>;
 		clock-output-names = "rk808-clkout1", "rk808-clkout2";
@@ -902,6 +902,15 @@
 	s35390a: s35390a@30 {
 		compatible = "sii,s35390a";
 		reg = <0x30>;
+	};
+
+	adv-wdt-i2c@29 {
+		compatible = "msp430-wdt-i2c";
+		pinctrl-names = "default";
+		pinctrl-0 = <&wdt_en &wdt_ping>;
+		reg = <0x29>;
+		wdt-ping = <&gpio0 9 GPIO_ACTIVE_HIGH>;
+		wdt-en = <&gpio0 6 GPIO_ACTIVE_HIGH>;
 	};
 };
 
