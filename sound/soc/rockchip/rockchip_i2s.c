@@ -716,6 +716,7 @@ static int rockchip_i2s_probe(struct platform_device *pdev)
 			return ret;
 		}
 		i2s->amp_mute_gpio_active = (flags == GPIO_ACTIVE_HIGH)? 1:0;
+		dev_err(&pdev->dev,"XXX amp gpio val :%d\n",i2s->amp_mute_gpio_active);
 		ret = gpio_direction_output(i2s->amp_mute_gpio, !i2s->amp_mute_gpio_active);
 		if(ret){
 			dev_err(&pdev->dev,"amp_mute_gpio set ERROR:%d\n",ret);

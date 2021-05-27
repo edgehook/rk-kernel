@@ -4,6 +4,27 @@
  */
 / {
 	disp_timings: display-timings {
+		edp_1280x1024: edp-1280x1024 {
+			screen-type = <SCREEN_EDP>;
+			out-face    = <OUT_P888>;
+			clock-frequency = <108000000>;
+			hactive = <1280>;
+			vactive = <1024>;
+			hback-porch = <248>;
+			hfront-porch = <48>;
+			vback-porch = <38>;
+			vfront-porch = <1>;
+			hsync-len = <112>;
+			vsync-len = <3>;
+			hsync-active = <0>;
+			vsync-active = <0>;
+			de-active = <0>;
+			pixelclk-active = <1>;
+			swap-rb = <0>;
+			swap-rg = <0>;
+			swap-gb = <0>;
+		};
+
 		edp_1920x1080: edp-1920x1080 {
 			out-face    = <OUT_P888>;
 			clock-frequency = <148500000>;
