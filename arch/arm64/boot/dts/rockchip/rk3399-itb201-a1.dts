@@ -1,45 +1,3 @@
-/*
- * Copyright (c) 2019 Fuzhou Rockchip Electronics Co., Ltd
- *
- * This file is dual-licensed: you can use it either under the terms
- * of the GPL or the X11 license, at your option. Note that this dual
- * licensing only applies to this file, and not this project as a
- * whole.
- *
- *  a) This file is free software; you can redistribute it and/or
- *     modify it under the terms of the GNU General Public License as
- *     published by the Free Software Foundation; either version 2 of the
- *     License, or (at your option) any later version.
- *
- *     This file is distributed in the hope that it will be useful,
- *     but WITHOUT ANY WARRANTY; without even the implied warranty of
- *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *     GNU General Public License for more details.
- *
- * Or, alternatively,
- *
- *  b) Permission is hereby granted, free of charge, to any person
- *     obtaining a copy of this software and associated documentation
- *     files (the "Software"), to deal in the Software without
- *     restriction, including without limitation the rights to use,
- *     copy, modify, merge, publish, distribute, sublicense, and/or
- *     sell copies of the Software, and to permit persons to whom the
- *     Software is furnished to do so, subject to the following
- *     conditions:
- *
- *     The above copyright notice and this permission notice shall be
- *     included in all copies or substantial portions of the Software.
- *
- *     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- *     EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
- *     OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- *     NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
- *     HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- *     WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- *     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
- *     OTHER DEALINGS IN THE SOFTWARE.
- */
-
 /dts-v1/;
 #include "dt-bindings/display/rk_fb.h"
 #include "dt-bindings/pwm/pwm.h"
@@ -90,7 +48,6 @@
 		edp_backlight = &backlight0;
 		dsi_backlight = &backlight1;
 
-		edp_vcc = &edp_vcc;
 		edp_bkl_vdd = &edp_bkl_vdd;
 		dsi_vcc = &dsi_vdd_core;
 		dsi_vcc_io = &dsi_vdd_io;
@@ -136,9 +93,8 @@
 		compatible = "misc-adv-gpio";
 		status = "okay";
 		pinctrl-names = "default";
-		pinctrl-0 = <&minipcie_pwr_h &minipcie_reset_l &m2_pwr_h &system_rst_h &adv_gpios>;
-		minipcie-pwr-gpio = <&gpio2 3 GPIO_ACTIVE_HIGH>;
-		minipcie-reset-gpio = <&gpio3 29 GPIO_ACTIVE_LOW>;
+		pinctrl-0 = <&minipcie_reset_l &m2_pwr_h &system_rst_h &adv_gpios>;
+		minipcie-reset-gpio = <&gpio1 23 GPIO_ACTIVE_LOW>;
 		m2-pwr-gpio = <&gpio4 21 GPIO_ACTIVE_HIGH>;
 		//m2-reset-gpio = <&gpio2 28 GPIO_ACTIVE_LOW>;
 		system-reset-gpio = <&gpio1 6 GPIO_ACTIVE_HIGH>;
@@ -146,39 +102,38 @@
 	};
 
     gpio_export {
-        compatible = "gpios_export";
+        compatible = "adv,gpio_export";
+	pinctrl-names = "default";
+	pinctrl-0 = <&gpios_export_pins>;
         gpio_counts = <16>; //gpio counts
         adv,export-gpio-use-number;
         #address-cells = <1>; 
         #size-cells = <1>;
         status = "okay";
 
-        gpio-0 = <8 0>;
-        gpio-1 = <66 0>;
-        gpio-2 = <67 0>;
-        gpio-3 = <68 0>;
-        gpio-4 = <70 0>;
-        gpio-5 = <84 0>;
-        gpio-6 = <85 0>;
-        gpio-7 = <86 0>;
-        gpio-8 = <87 0>;
-        gpio-9 = <88 0>;
-        gpio-10 = <89 0>;
-        gpio-11 = <90 0>;
-        gpio-12 = <124 0>;
-        gpio-13 = <125 0>;
-        gpio-14 = <131 0>;
-        gpio-15 = <132 0>;
+        gpio-0 = <84 0>;
+        gpio-1 = <85 0>;
+        gpio-2 = <86 0>;
+        gpio-3 = <87 0>;
+        gpio-4 = <88 0>;
+        gpio-5 = <89 0>;
+	gpio-6 = <8 0>;
+	gpio-7 = <91 0>;
+        gpio-8 = <124 0>;
+        gpio-9 = <125 0>;
+        gpio-10 = <131 0>;
+        gpio-11 = <132 0>;
+	gpio-12 = <66 0>;
+	gpio-13 = <67 0>;
+	gpio-14 = <68 0>;
+	gpio-15 = <70 0>;
     }; 
 
 	// Backlight edp
 	backlight0: backlight0 {
 		status = "disabled";
 		compatible = "pwm-backlight";
-		enable-gpios = <&gpio2 6 GPIO_ACTIVE_HIGH>;
 		power-supply = <&edp_bkl_vdd>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&edp_bkl_en>;
 		pwms = <&pwm0 0 50000 0>;
 		brightness-levels = <
 			  0   1   2   3   4   5   6   7
@@ -262,21 +217,6 @@
 		default-brightness-level = <200>;
 	};
 
-	//edp vcc
-	edp_vcc: edp-vcc {
-		compatible = "regulator-fixed";
-		regulator-name = "edp_vcc";
-		pinctrl-names = "default";
-		pinctrl-0 = <&edp_vdd_pwr>;
-		gpio = <&gpio2 4 GPIO_ACTIVE_HIGH>;
-		startup-delay-us = <100000>;
-		enable-active-high;
-		//regulator-always-on;
-		regulator-boot-on;
-		//regulator-uboot-logo;
-		status = "disabled";
-	};
-
 	edp_bkl_vdd: edp-bkl-vdd {
 		compatible = "regulator-fixed";
 		regulator-name = "edp_bkl_vdd";
@@ -292,7 +232,6 @@
 		status = "okay";
 		compatible = "simple-panel";
 		backlight = <&backlight0>;
-		power-supply = <&edp_vcc>;
 		//power-gpios = <&gpio2 4 GPIO_ACTIVE_HIGH>;
 		enable-delay-ms = <50>;
 		prepare-delay-ms = <1>;
@@ -554,30 +493,6 @@
 		#clock-cells = <0>;
 	};
 #endif
-
-	cp210x_232_485 {
-		compatible = "cp210x-232-485";
-		status = "okay";
-		pinctrl-names = "default";
-		pinctrl-0 = <&cp210x_port2 &cp210x_port3>;
-		rs232_mode_table = <1 0 1>;
-		rs485_mode_table = <0 1 1>;
-
-		port2{
-			mode = <0>; /*0 RS232 1 RS485*/
-			sel0_gpio = <&gpio0 6  GPIO_ACTIVE_HIGH>;
-			sel1_gpio = <&gpio0 12 GPIO_ACTIVE_LOW>;
-			term_gpio = <&gpio0 13 GPIO_ACTIVE_HIGH>;
-			
-		};
-		
-		port3{
-			mode = <0>; /*0 RS232 1 RS485*/
-			sel0_gpio = <&gpio1 20 GPIO_ACTIVE_HIGH>;
-			sel1_gpio = <&gpio2 2  GPIO_ACTIVE_LOW>;
-			term_gpio = <&gpio4 24 GPIO_ACTIVE_HIGH>;
-		};
-	};
 
 #if 0
 	ext_cam_clk: external-camera-clock {
@@ -1017,16 +932,17 @@
 		rockchip,cru = <&cru>;
 		rockchip,grf = <&grf>;
 		reg = <0x1c>;
-		codec-avdd-gpio = <&gpio4 6 GPIO_ACTIVE_LOW>;
+		codec-avdd-gpio = <&gpio4 6 GPIO_ACTIVE_HIGH>;
 		codec-avdd-delay = <200>;
 		codec-micvdd-gpio = <&gpio4 7 GPIO_ACTIVE_HIGH>;
 		codec-spkvdd-gpio = <&gpio4 5 GPIO_ACTIVE_HIGH>;
+		amp-shutdown-gpio = <&gpio3 30 GPIO_ACTIVE_HIGH>;			
 	
 		clocks = <&cru SCLK_I2S_8CH_OUT>;
 		clock-names = "mclk";
 
 		pinctrl-names = "default";
-		pinctrl-0 = <&i2s_8ch_mclk &codec_avdd &codec_micvdd &codec_spkvdd>;
+		pinctrl-0 = <&i2s_8ch_mclk &codec_avdd &codec_micvdd &codec_spkvdd &codec_lout_mute>;
 	};
 
 	vm149c: vm149c@0c {
@@ -1035,32 +951,6 @@
 		reg = <0x0c>;
 		rockchip,camera-module-index = <0>;
 		rockchip,camera-module-facing = "back";
-	};
-
-	ov8858: ov8858@36 {
-		compatible = "ovti,ov8858";
-		status = "okay";
-		reg = <0x36>;
-		clocks = <&cru SCLK_CIF_OUT>;
-		clock-names = "xvclk";
-
-		reset-gpios = <&gpio2 27 GPIO_ACTIVE_HIGH>;
-		pwdn-gpios = <&gpio1 23 GPIO_ACTIVE_LOW>;
-		pinctrl-names = "rockchip,camera_default";
-		pinctrl-0 = <&cif_clkout &cam0_default_pins>;
-		rockchip,camera-module-index = <0>;
-		rockchip,camera-module-facing = "back";
-		rockchip,camera-module-name = "CameraKing";
-		rockchip,camera-module-lens-name = "Largan-9569A2";
-
-		lens-focus = <&vm149c>;
-
-		port {
-			ucam_out0: endpoint {
-				remote-endpoint = <&mipi_in_ucam0>;
-				data-lanes = <1 2>;
-			};
-		};
 	};
 
     rx8010: rx8010@32 {
@@ -1078,12 +968,11 @@
 
 &i2s0 {
 	status = "okay";
-	pinctrl-0 = <&i2s0_8ch_bus_1 &codec_lout_mute>;
+	pinctrl-0 = <&i2s0_8ch_bus_1>;
 	rockchip,i2s-broken-burst-len;
 	rockchip,playback-channels = <8>;
 	rockchip,capture-channels = <8>;
 	#sound-dai-cells = <0>;
-	amp-mute-gpio = <&gpio3 30 GPIO_ACTIVE_HIGH>;
 };
 
 &i2s2 {
@@ -1208,7 +1097,7 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&sdio0_bus4 &sdio0_cmd &sdio0_clk>;
 	//sd-uhs-sdr104;
-	status = "okay";
+	status = "disabled";
 };
 
 &sdmmc {
@@ -1328,35 +1217,7 @@
 };
 
 &mipi_dphy_rx0 {
-	status = "okay";
-
-	ports {
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-		port@0 {
-			reg = <0>;
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			mipi_in_ucam0: endpoint@1 {
-				reg = <1>;
-				remote-endpoint = <&ucam_out0>;
-				data-lanes = <1 2>;
-			};
-		};
-
-		port@1 {
-			reg = <1>;
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			dphy_rx0_out: endpoint@0 {
-				reg = <0>;
-				remote-endpoint = <&isp0_mipi_in>;
-			};
-		};
-	};
+	status = "disabled";
 };
 
 &mipi_dphy_tx1rx1 {
@@ -1393,17 +1254,7 @@
 };
 
 &rkisp1_0 {
-	status = "okay";
-
-	port {
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-		isp0_mipi_in: endpoint@0 {
-			reg = <0>;
-			remote-endpoint = <&dphy_rx0_out>;
-		};
-	};
+	status = "disabled";
 };
 
 &rkisp1_1 {
@@ -1716,30 +1567,6 @@
 	};
 };
 
-&sdio0_bus1 {
-	rockchip,pins =
-		<2 20 RK_FUNC_1 &pcfg_pull_up_20ma>;
-};
-
-&sdio0_bus4 {
-	rockchip,pins =
-		<2 20 RK_FUNC_1 &pcfg_pull_up_20ma>,
-		<2 21 RK_FUNC_1 &pcfg_pull_up_20ma>,
-		<2 22 RK_FUNC_1 &pcfg_pull_up_20ma>,
-		<2 23 RK_FUNC_1 &pcfg_pull_up_20ma>;
-};
-
-&sdio0_cmd {
-	rockchip,pins =
-		<2 24 RK_FUNC_1 &pcfg_pull_up_20ma>;
-};
-
-&sdio0_clk{
-	rockchip,pins =
-		<2 25 RK_FUNC_1 &pcfg_pull_none_20ma>;
-};
-
-
 &pinctrl {
 	pcfg_pull_none_16ma: pcfg-pull-none-16ma {
 		bias-disable;
@@ -1749,6 +1576,28 @@
 	pcfg_pull_none_26ma: pcfg-pull-none-26ma {
 		bias-disable;
 		drive-strength = <26>;
+	};
+
+	gpio_export {
+		gpios_export_pins: gpios_export_pins {
+			rockchip,pins = 
+				<2 20 RK_FUNC_GPIO &pcfg_pull_up>,
+				<2 21 RK_FUNC_GPIO &pcfg_pull_up>,
+				<2 22 RK_FUNC_GPIO &pcfg_pull_up>,
+				<2 23 RK_FUNC_GPIO &pcfg_pull_up>,
+				<2 24 RK_FUNC_GPIO &pcfg_pull_up>,
+				<2 25 RK_FUNC_GPIO &pcfg_pull_up>,
+				<0 8 RK_FUNC_GPIO &pcfg_pull_up>,
+				<2 27 RK_FUNC_GPIO &pcfg_pull_up>,
+				<3 28 RK_FUNC_GPIO &pcfg_pull_up>,
+				<3 29 RK_FUNC_GPIO &pcfg_pull_up>,
+				<4 3 RK_FUNC_GPIO &pcfg_pull_up>,
+				<4 4 RK_FUNC_GPIO &pcfg_pull_up>,
+				<2 2 RK_FUNC_GPIO &pcfg_pull_up>,
+				<2 3 RK_FUNC_GPIO &pcfg_pull_up>,
+				<2 4 RK_FUNC_GPIO &pcfg_pull_up>,
+				<2 6 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
 	};
 
 	pmic {
@@ -1827,15 +1676,6 @@
 		};
 	};
 
-	edp-panel {
-		edp_vdd_pwr: edp-vdd-pwr {
-			rockchip,pins = <2 4 RK_FUNC_GPIO &pcfg_pull_down>;
-		};
-		edp_bkl_en: edp-bkl-en {
-			rockchip,pins = <2 6 RK_FUNC_GPIO &pcfg_pull_down>;
-		};
-	};
-
 	dsi-phy {
 		dsi_pwr_vdd_core_h: dsi-pwr-vdd-core-h {
 			rockchip,pins = <1 4 RK_FUNC_GPIO &pcfg_pull_down>;
@@ -1892,13 +1732,6 @@
 		};
 	};
 
-	cam_pins {
-		cam0_default_pins: cam0-default-pins {
-			rockchip,pins = <1 23 RK_FUNC_GPIO &pcfg_pull_none>,
-					<2 27 RK_FUNC_GPIO &pcfg_pull_none>;
-		};
-	};
-
 	rgmii_phys {
 		rgmii_phy_reset: rgmii-phy-reset {
 			rockchip,pins = <3 16 RK_FUNC_GPIO &pcfg_pull_down>;
@@ -1906,11 +1739,8 @@
 	};
 
 	misc {
-		minipcie_pwr_h: minipcie-pwr-h {
-			rockchip,pins = <2 3 RK_FUNC_GPIO &pcfg_pull_up>;
-		};
 		minipcie_reset_l: minipcie-reset-l {
-			rockchip,pins = <3 29 RK_FUNC_GPIO &pcfg_pull_none>;
+			rockchip,pins = <1 23 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 		m2_pwr_h: m2-pwr-h {
 			rockchip,pins = <4 21 RK_FUNC_GPIO &pcfg_pull_none>; 
@@ -1924,9 +1754,7 @@
 		adv_gpios: adv-gpios {
 			rockchip,pins = <2 8  RK_FUNC_GPIO &pcfg_pull_none>,
 							<1 18 RK_FUNC_GPIO &pcfg_pull_none>,
-							<3 28 RK_FUNC_GPIO &pcfg_pull_none>,
-							<4 4  RK_FUNC_GPIO &pcfg_pull_none>,
-							<0 8  RK_FUNC_GPIO &pcfg_pull_none>;
+							<4 4  RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};
 
@@ -1939,7 +1767,6 @@
 
 		cp210x_port3: cp210x-port3 {
 			rockchip,pins = <1 20 RK_FUNC_GPIO &pcfg_pull_up>,
-							<2 2  RK_FUNC_GPIO &pcfg_pull_up>,
 							<4 24 RK_FUNC_GPIO &pcfg_pull_up>;
 		};
 	};

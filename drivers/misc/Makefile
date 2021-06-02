@@ -62,3 +62,4 @@ obj-$(CONFIG_UID_SYS_STATS) += uid_sys_stats.o
 obj-$(CONFIG_MEMORY_STATE_TIME) += memory_state_time.o
 obj-$(CONFIG_USB_CAM_GPIO)	+= usb_cam_gpio.o
 obj-$(CONFIG_ARCH_ADVANTECH) += board.o gpio-adv.o gpio-uio.o adv_bootprocess.o
+obj-$(CONFIG_GPIOS_EXPORT_SYS) += gpios_export.o
