@@ -841,6 +841,21 @@ static int analogix_dp_get_modes(struct drm_connector *connector)
 
 	if (dp->plat_data->panel) {
 		num_modes += drm_panel_get_modes(dp->plat_data->panel);
+
+#ifdef CONFIG_ARCH_ADVANTECH
+		/*
+		* Let's edp use edid.
+		*/
+		pm_runtime_get_sync(dp->dev);
+		edid = drm_get_edid(connector, &dp->aux.ddc);
+		pm_runtime_put(dp->dev);
+		if (edid) {
+			drm_mode_connector_update_edid_property(&dp->connector,
+								edid);
+			num_modes += drm_add_edid_modes(&dp->connector, edid);
+			kfree(edid);
+		}
+#endif
 	} else {
 		pm_runtime_get_sync(dp->dev);
 		edid = drm_get_edid(connector, &dp->aux.ddc);

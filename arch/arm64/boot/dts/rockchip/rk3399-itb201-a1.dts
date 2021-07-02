@@ -186,8 +186,6 @@
 		unprepare-delay-ms = <1>;
 		panel_type = <SCREEN_EDP>;
 
-		display-timings = <&disp_timings>;
-
 		ports {
 			panel_in_edp: endpoint {
 				remote-endpoint = <&edp_out_panel>;
