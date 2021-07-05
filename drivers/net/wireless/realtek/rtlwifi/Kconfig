@@ -93,17 +93,6 @@ config RTL8192EE
 
 	If you choose to build it as a module, it will be called rtl8192ee
 
-config RTL8821AE
-	tristate "Realtek RTL8821AE/RTL8812AE Wireless Network Adapter"
-	depends on PCI
-	select RTLWIFI
-	select RTLWIFI_PCI
-	select RTLBTCOEXIST
-	---help---
-	This is the driver for Realtek RTL8821AE/RTL8812AE 802.11ac PCIe
-	wireless network adapters.
-
-	If you choose to build it as a module, it will be called rtl8821ae
 
 config RTL8192CU
 	tristate "Realtek RTL8192CU/RTL8188CU USB Wireless Network Adapter"
@@ -150,5 +139,7 @@ config RTLBTCOEXIST
 	tristate
 	depends on RTL8723AE || RTL8723BE || RTL8821AE || RTL8192EE
 	default y
+
+source drivers/net/wireless/realtek/rtlwifi/rtl8821ae/Kconfig
 
 endif

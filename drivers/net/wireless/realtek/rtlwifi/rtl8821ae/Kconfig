@@ -1,0 +1,7 @@
+config RTL8821AE
+	tristate "Realtek 8821A PCI WiFi"
+	depends on PCI
+	select RTLWIFI
+	---help---
+	  Help message of RTL8821AE
+
