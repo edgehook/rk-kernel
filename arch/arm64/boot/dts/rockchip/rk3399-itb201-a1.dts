@@ -879,8 +879,14 @@
 
 &i2c7 {
 	status = "okay";
-	//i2c-scl-rising-time-ns = <300>;
-	//i2c-scl-falling-time-ns = <15>;
+	clock-frequency = <400000>;
+	i2c-scl-rising-time-ns = <300>;
+	i2c-scl-falling-time-ns = <15>;
+
+	fm24@54 {
+		compatible = "cypress,fm24v10";
+		reg = <0x54>;
+	};
 };
 
 /*************************
