@@ -885,7 +885,9 @@
 
 	fm24@54 {
 		compatible = "cypress,fm24v10";
+		label = "fm24";
 		reg = <0x54>;
+		status = "okay";
 	};
 };
 
@@ -1675,8 +1677,7 @@
 			rockchip,pins = <1 6 RK_FUNC_GPIO &pcfg_pull_down>;
 		};
 		adv_gpios: adv-gpios {
-			rockchip,pins = <2 8  RK_FUNC_GPIO &pcfg_pull_none>,
-							<1 18 RK_FUNC_GPIO &pcfg_pull_none>,
+			rockchip,pins = <1 18 RK_FUNC_GPIO &pcfg_pull_none>,
 							<4 4  RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};

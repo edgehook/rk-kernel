@@ -569,6 +569,8 @@ static int fm24_probe(struct i2c_client *client, const struct i2c_device_id * de
 	err = fm24_read(fm24, 0, &test_byte, 1);
 	if (err) {
 		pm_runtime_disable(dev);
+		nvmem_unregister(fm24->nvmem);
+		dev_err(dev, "%s is not exists\n", nvmem_config.name);
 		return -ENODEV;
 	}
 
