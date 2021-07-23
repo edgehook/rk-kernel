@@ -849,11 +849,11 @@
 		rockchip,cru = <&cru>;
 		rockchip,grf = <&grf>;
 		reg = <0x1c>;
-		codec-avdd-gpio = <&gpio4 6 GPIO_ACTIVE_HIGH>;
+		codec-avdd-gpio = <&gpio4 6 GPIO_ACTIVE_LOW>;
 		codec-avdd-delay = <200>;
 		codec-micvdd-gpio = <&gpio4 7 GPIO_ACTIVE_HIGH>;
 		codec-spkvdd-gpio = <&gpio4 5 GPIO_ACTIVE_HIGH>;
-		/* amp-shutdown-gpio = <&gpio3 30 GPIO_ACTIVE_HIGH>; */			
+		amp-shutdown-gpio = <&gpio3 30 GPIO_ACTIVE_HIGH>;
 	
 		clocks = <&cru SCLK_I2S_8CH_OUT>;
 		clock-names = "mclk";
