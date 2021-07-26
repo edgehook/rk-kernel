@@ -542,7 +542,7 @@ static int panel_simple_of_get_adv_mode(struct panel_simple *panel)
 	timings_np = of_parse_phandle(panel->dev->of_node,
 					  "display-timings", 0);
 	if (!timings_np) {
-		dev_err(panel->dev, "%s: failed to find display-timings node\n", of_node_full_name(panel->dev->of_node));
+		//dev_err(panel->dev, "%s: failed to find display-timings node\n", of_node_full_name(panel->dev->of_node));
 		return 0;
 	}
 	of_node_put(timings_np);
