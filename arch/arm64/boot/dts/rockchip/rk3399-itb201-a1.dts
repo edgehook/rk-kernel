@@ -29,7 +29,6 @@
 		edp = &edp;
 		hdmi = &hdmi;
 		dp = &cdn_dp;
-		vpd = &vpd0;
 		dsi = &dsi;
 		dsi1 = &dsi1;
 
@@ -246,20 +245,6 @@
 		status = "disabled";
 	};
 
-	vpd0: virtual-pd0 {
-		compatible = "linux,extcon-pd-virtual";
-		dp-det-gpios = <&gpio4 25 GPIO_ACTIVE_LOW>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&dp_det>;
-		/* 0: positive, 1: negative*/
-		vpd,init-flip = <0>;
-		/* 0: u2, 1: u3*/
-		vpd,init-ss = <0>;
-		/* 0: dfp, 1: ufp, 2: dp 3: dp/ufp */
-		vpd,init-mode = <2>;
-		status = "okay";
-	};
-
 	rt5660-sound {
 		compatible = "simple-audio-card";
 		simple-audio-card,format = "i2s";
@@ -311,48 +296,25 @@
 		#clock-cells = <0>;
 	};
 
-	sdio_pwrseq: sdio-pwrseq {
-		compatible = "mmc-pwrseq-simple";
-		clocks = <&rk808 1>;
-		clock-names = "ext_clock";
-		pinctrl-names = "default";
-		pinctrl-0 = <&wifi_enable_h>;
-
-		/*
-		 * On the module itself this is one of these (depending
-		 * on the actual card populated):
-		 * - SDIO_RESET_L_WL_REG_ON
-		 * - PDN (power down when low)
-		 */
-		reset-gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;
-	};
-
 	wireless-wlan {
 		compatible = "wlan-platdata";
 		rockchip,grf = <&grf>;
 		wifi_chip_type = "";
 		sdio_vref = <1800>;
-		//pinctrl-names = "default";
-		//pinctrl-0 = <&wifi_pwr_h>;
 		WIFI,host_wake_irq = <&gpio0 3 GPIO_ACTIVE_HIGH>; /* GPIO0_a3 */
 		//WIFI,poweren_gpio = <&gpio4 21 GPIO_ACTIVE_HIGH>;
-		status = "okay";
+		status = "disabled";
 	};
 
 	wireless-bluetooth {
 		compatible = "bluetooth-platdata";
 		clocks = <&rk808 1>;
 		clock-names = "ext_clock";
-		//wifi-bt-power-toggle;
-		//uart_rts_gpios = <&gpio2 19 GPIO_ACTIVE_LOW>; /* GPIO2_C3 */
 		pinctrl-names = "default", "rts_gpio";
 		pinctrl-0 = <&uart0_rts>;
-		//pinctrl-1 = <&uart0_gpios>;
-		//BT,power_gpio  = <&gpio3 19 GPIO_ACTIVE_HIGH>; /* GPIOx_xx */
 		BT,reset_gpio    = <&gpio0 9 GPIO_ACTIVE_HIGH>; /* GPIO0_B1 */
-		//BT,wake_gpio     = <&gpio2 26 GPIO_ACTIVE_HIGH>; /* GPIO2_D2 */
 		BT,wake_host_irq = <&gpio0 4 GPIO_ACTIVE_HIGH>; /* GPIO0_A4 */
-		status = "okay";
+		status = "disabled";
 	};
 
 	vcc3v3_sys: vcc3v3-sys {
@@ -997,6 +959,9 @@
 	status = "okay";
 };
 
+/*
+* SD Card
+*/
 &sdhci {
 	bus-width = <8>;
 	mmc-hs400-1_8v;
@@ -1016,7 +981,6 @@
 	cap-sd-highspeed;
 	cap-sdio-irq;
 	keep-power-in-suspend;
-	mmc-pwrseq = <&sdio_pwrseq>;
 	non-removable;
 	num-slots = <1>;
 	pinctrl-names = "default";
@@ -1025,6 +989,9 @@
 	status = "disabled";
 };
 
+/*
+* EMMC Card
+*/
 &sdmmc {
 	clock-frequency = <150000000>;
 	clock-freq-min-max = <100000 150000000>;
@@ -1062,12 +1029,20 @@
 	status = "disabled";
 };
 
+/******************** 
+* USB 3.0 for LTE
+********************/
 &tcphy0 {
 	status = "okay";
 };
 
-&tcphy1 {
+&usbdrd3_0 {
 	status = "okay";
+};
+
+&usbdrd_dwc3_0 {
+	status = "okay";
+	dr_mode = "host";
 };
 
 &u2phy0 {
@@ -1077,7 +1052,27 @@
 		vbus-supply = <&vcc_otg_vbus>;
 		status = "okay";
 	};
+};
 
+/*
+* USB 3.0 HOST FOR HUB.
+*/
+&tcphy1 {
+	status = "okay";
+};
+
+&usbdrd3_1 {
+	status = "okay";
+};
+
+&usbdrd_dwc3_1 {
+	status = "okay";
+	dr_mode = "host";
+};
+
+
+&u2phy0 {
+	status = "okay";
 	u2phy0_host: host-port {
 		status = "okay";
 	};
@@ -1089,24 +1084,6 @@
 	u2phy1_host: host-port {
 		status = "okay";
 	};
-};
-
-&usbdrd3_0 {
-	status = "okay";
-};
-
-&usbdrd3_1 {
-	status = "okay";
-};
-
-&usbdrd_dwc3_0 {
-	status = "okay";
-	dr_mode = "host";
-};
-
-&usbdrd_dwc3_1 {
-	status = "okay";
-	dr_mode = "host";
 };
 
 &usb_host0_ehci {
@@ -1625,8 +1602,8 @@
 		};
 	};
 
-	vdp0 {
-		dp_det: dp-det {
+	m2b1 {
+		m2b1_sel: m2b1-sel {
 			rockchip,pins = <4 25 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};

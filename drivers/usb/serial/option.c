@@ -100,6 +100,9 @@ static void option_instat_callback(struct urb *urb);
 #define YISO_VENDOR_ID				0x0EAB
 #define YISO_PRODUCT_U893			0xC893
 
+/* FIBOCOM */
+#define FIBOCOM_VENDOR_ID			0x2CB7
+
 /*
  * NOVATEL WIRELESS PRODUCTS
  *
@@ -1995,6 +1998,14 @@ static const struct usb_device_id option_ids[] = {
 	{ USB_DEVICE(0x2C7C, 0x0620) }, /* Quectel EG20 */
 	{ USB_DEVICE(0x2C7C, 0x0800) }, /* Quectel RG500Q/RM500Q/RG510Q/RM510Q */
 #endif
+	{USB_DEVICE(FIBOCOM_VENDOR_ID, 0x0104) },
+	{USB_DEVICE(FIBOCOM_VENDOR_ID, 0x0105) },
+	{USB_DEVICE(FIBOCOM_VENDOR_ID, 0x0107) },
+	{USB_DEVICE(FIBOCOM_VENDOR_ID, 0x0108) },
+	{USB_DEVICE(FIBOCOM_VENDOR_ID, 0x0109) },
+	{USB_DEVICE(FIBOCOM_VENDOR_ID, 0x010A) },
+	{USB_DEVICE(FIBOCOM_VENDOR_ID, 0x0110) },
+	{USB_DEVICE(FIBOCOM_VENDOR_ID, 0x0111) },
 	{ } /* Terminating entry */
 };
 MODULE_DEVICE_TABLE(usb, option_ids);
@@ -2073,6 +2084,24 @@ static int option_probe(struct usb_serial *serial,
 	    dev_desc->idProduct == cpu_to_le16(0x4e3c) &&
 	    iface_desc->bInterfaceNumber <= 1)
 		return -ENODEV;
+
+	if(dev_desc->idVendor == FIBOCOM_VENDOR_ID &&
+		(((dev_desc->idProduct == cpu_to_le16(0x0104) ||
+		dev_desc->idProduct == cpu_to_le16(0x0105)) &&
+		iface_desc->bInterfaceNumber >= 4)||
+		((dev_desc->idProduct == cpu_to_le16(0x0109) ||
+		dev_desc->idProduct == cpu_to_le16(0x010A)) &&
+		iface_desc->bInterfaceNumber >= 2))){
+		printk(KERN_INFO "Discovery the interface for FIBOCOM .");
+		return -ENODEV;
+	}
+
+	if(((dev_desc->idProduct == cpu_to_le16(0x0110) ||
+		dev_desc->idProduct == cpu_to_le16(0x0111)) &&
+		iface_desc->bInterfaceNumber < 2)){
+		printk(KERN_INFO "Discovery the interface for FIBOCOM .");
+		return -ENODEV;
+	}
 
 	/* Store the device flags so we can use them during attach. */
 	usb_set_serial_data(serial, (void *)device_flags);
