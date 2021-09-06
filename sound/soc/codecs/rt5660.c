@@ -1604,10 +1604,10 @@ void rt5660_i2c_shutdown(struct i2c_client *client)
 	struct rt5660_priv *rt5660 = i2c_get_clientdata(client);
 	struct snd_soc_codec *codec = rt5660->codec;
 
-	mdelay(200);
-
 	if (codec != NULL)
 		rt5660_set_bias_level(codec, SND_SOC_BIAS_OFF);
+
+	mdelay(230);
 
 	if(gpio_is_valid(rt5660->codec_micvdd_gpio))
 		gpio_direction_output(rt5660->codec_micvdd_gpio, !rt5660->codec_micvdd_gpio_active);
