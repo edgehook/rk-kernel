@@ -814,13 +814,12 @@
 		codec-avdd-delay = <200>;
 		codec-micvdd-gpio = <&gpio4 7 GPIO_ACTIVE_HIGH>;
 		codec-spkvdd-gpio = <&gpio4 5 GPIO_ACTIVE_HIGH>;
-		amp-shutdown-gpio = <&gpio3 30 GPIO_ACTIVE_HIGH>;
 	
 		clocks = <&cru SCLK_I2S_8CH_OUT>;
 		clock-names = "mclk";
 
 		pinctrl-names = "default";
-		pinctrl-0 = <&i2s_8ch_mclk &codec_avdd &codec_micvdd &codec_spkvdd >;
+		pinctrl-0 = <&i2s_8ch_mclk &codec_avdd &codec_micvdd &codec_spkvdd>;
 	};
 
 	vm149c: vm149c@0c {
@@ -907,11 +906,12 @@
 ********/
 &i2s0 {
 	status = "okay";
-	pinctrl-0 = <&i2s0_8ch_bus_1>;
+	pinctrl-0 = <&i2s0_8ch_bus_1 &codec_lout_mute>;
 	rockchip,i2s-broken-burst-len;
 	rockchip,playback-channels = <8>;
 	rockchip,capture-channels = <8>;
 	#sound-dai-cells = <0>;
+	amp-mute-gpio = <&gpio3 30 GPIO_ACTIVE_HIGH>;
 };
 
 &i2s2 {
