@@ -47,7 +47,7 @@
 	compatible = "rockchip,linux", "rockchip,rk3399";
 
 	chosen {
-		bootargs = "earlycon=uart8250,mmio32,0xff1a0000 console=ttyFIQ0 rw root=PARTUUID=614e0000-0000 rootfstype=ext4 rootwait coherent_pool=1m";
+		bootargs = "console=uart8250,mmio32,0xff1a0000 rw root=PARTUUID=614e0000-0000 rootfstype=ext4 rootwait coherent_pool=1m";
 	};
 
 	reserved-memory {
@@ -84,6 +84,7 @@
 		rockchip,baudrate = <1500000>;  /* Only 115200 and 1500000 */
 		pinctrl-names = "default";
 		pinctrl-0 = <&uart2c_xfer>;
+		status = "disabled";
 	};
 
 	cif_isp0: cif_isp@ff910000 {
@@ -232,7 +233,7 @@
 };
 
 &uart2 {
-	status = "disabled";
+	status = "okay";
 };
 
 &pinctrl {
