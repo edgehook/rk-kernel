@@ -1069,22 +1069,19 @@
 	dr_mode = "host";
 };
 
-
-&u2phy0 {
-	status = "okay";
-	u2phy0_host: host-port {
-		status = "okay";
-	};
-};
-
 &u2phy1 {
 	status = "okay";
 
-	u2phy1_host: host-port {
+	u2phy1_otg: otg-port {
 		status = "okay";
 	};
 };
 
+/*
+* USB2.0 interface.
+* 0: LAN2
+* 1: USB2.0 HUB.
+*/
 &usb_host0_ehci {
 	status = "okay";
 };
@@ -1093,12 +1090,27 @@
 	status = "okay";
 };
 
+&u2phy0 {
+	status = "okay";
+	u2phy0_host: host-port {
+		status = "okay";
+	};
+};
+
 &usb_host1_ehci {
 	status = "okay";
 };
 
 &usb_host1_ohci {
 	status = "okay";
+};
+
+&u2phy1 {
+	status = "okay";
+
+	u2phy1_host: host-port {
+		status = "okay";
+	};
 };
 
 &iep {
