@@ -224,6 +224,12 @@ config ARCH_ROCKCHIP
 	  This enables support for the ARMv8 based Rockchip chipsets,
 	  like the RK3368.
 
+config ARCH_ADVANTECH
+	bool "Support Advantech board"
+	depends on ARCH_ROCKCHIP
+	help
+	  Support Advantech boards series.
+
 config ARCH_S32
 	bool "NXP S32 SoC Family"
 	help
