@@ -44,4 +44,7 @@
 
 #define RK_FUNC_GPIO	0
 
+#define RK_FUNC_1 1
+#define RK_FUNC_2 2
+
 #endif
