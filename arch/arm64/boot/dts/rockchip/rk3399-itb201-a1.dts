@@ -998,6 +998,7 @@
 		};
 	};
 
+	/* RTC */
     rx8010: rx8010@32 {
         compatible = "epson,rx8010";
         reg = <0x32>;
