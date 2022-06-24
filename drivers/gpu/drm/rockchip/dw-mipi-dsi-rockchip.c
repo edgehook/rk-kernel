@@ -23,6 +23,11 @@
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_of.h>
 #include <drm/drm_simple_kms_helper.h>
+#ifdef CONFIG_ARCH_ADVANTECH
+#include <linux/gpio/consumer.h>
+#include <linux/regulator/consumer.h>
+#endif
+
 
 #include "rockchip_drm_drv.h"
 #include "rockchip_drm_vop.h"
@@ -284,6 +289,14 @@ struct dw_mipi_dsi_rockchip {
 	u16 feedback_div;
 	u32 format;
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	/* dsi bridge power, enable, reset signal. */
+	struct regulator *power_supply;
+	struct regulator *power_io_supply;
+	struct gpio_desc *reset_gpio;
+	struct gpio_desc *enable_gpio;
+#endif
+
 	struct dw_mipi_dsi *dmd;
 	const struct rockchip_dw_dsi_chip_data *cdata;
 	struct dw_mipi_dsi_plat_data pdata;
@@ -537,12 +550,69 @@ static int dw_mipi_dsi_phy_init(void *priv_data)
 	return 0;
 }
 
+#ifdef CONFIG_ARCH_ADVANTECH
+static void dsi_ext_bridge_power_on(struct dw_mipi_dsi_rockchip *dsi){
+	int ret;
+
+	if(!IS_ERR_OR_NULL(dsi->power_io_supply)) {
+		ret = regulator_enable(dsi->power_io_supply);
+		if(ret) {
+			dev_err(dsi->dev, "regulator_enable io with err %d", ret);
+			return;
+		}
+		usleep_range(1000, 2000);
+	}
+
+	if(!IS_ERR_OR_NULL(dsi->power_supply)) {
+		ret = regulator_enable(dsi->power_supply);
+		if(ret) {
+                        dev_err(dsi->dev, "regulator_enable with err %d", ret);
+                        return;
+                }
+		usleep_range(1000, 2000);
+	}
+
+    if(!IS_ERR_OR_NULL(dsi->enable_gpio)) {
+        gpiod_direction_output(dsi->enable_gpio, 1);
+        msleep(10);
+    }
+
+    if(!IS_ERR_OR_NULL(dsi->reset_gpio)) {
+       gpiod_direction_output(dsi->reset_gpio, 0);
+       usleep_range(1000, 2000);
+       gpiod_direction_output(dsi->reset_gpio, 1);
+    }
+}
+
+static void dsi_ext_bridge_power_off(struct dw_mipi_dsi_rockchip *dsi)
+{
+	if(!IS_ERR_OR_NULL(dsi->reset_gpio)){
+		gpiod_direction_output(dsi->reset_gpio, 0);
+		msleep(1);
+	}
+
+    if(!IS_ERR_OR_NULL(dsi->enable_gpio))
+		gpiod_direction_output(dsi->enable_gpio, 0);
+
+	if(!IS_ERR_OR_NULL(dsi->power_supply)) {
+		regulator_disable(dsi->power_supply);
+	}
+	msleep(1);
+	if(!IS_ERR_OR_NULL(dsi->power_io_supply)) {
+		regulator_disable(dsi->power_io_supply);
+	}
+}
+#endif
+
 static void dw_mipi_dsi_phy_power_on(void *priv_data)
 {
 	struct dw_mipi_dsi_rockchip *dsi = priv_data;
 
 	if (dsi->phy_enabled)
 		return;
+#ifdef CONFIG_ARCH_ADVANTECH
+	dsi_ext_bridge_power_on(dsi);
+#endif
 
 	phy_power_on(dsi->phy);
 	dsi->phy_enabled = true;
@@ -556,6 +626,11 @@ static void dw_mipi_dsi_phy_power_off(void *priv_data)
 		return;
 
 	phy_power_off(dsi->phy);
+
+#ifdef CONFIG_ARCH_ADVANTECH
+	dsi_ext_bridge_power_off(dsi);
+#endif
+
 	dsi->phy_enabled = false;
 }
 
@@ -1195,6 +1270,14 @@ static int dw_mipi_dsi_rockchip_probe(struct platform_device *pdev)
 		DRM_DEV_ERROR(dsi->dev, "Unable to get rockchip,grf\n");
 		return PTR_ERR(dsi->grf_regmap);
 	}
+
+#ifdef CONFIG_ARCH_ADVANTECH
+	dsi->power_supply = devm_regulator_get(dev, "power");
+	dsi->power_io_supply = devm_regulator_get(dev, "power-io");
+
+	dsi->enable_gpio = devm_gpiod_get_optional(dev, "enable", 0);
+	dsi->reset_gpio = devm_gpiod_get_optional(dev, "reset", 0);
+#endif
 
 	dsi->dev = dev;
 	dsi->pdata.base = dsi->base;
