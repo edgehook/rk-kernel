@@ -4,11 +4,26 @@
 */
 
 /dts-v1/;
+#include "dt-bindings/display/rk_fb.h"
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/pwm/pwm.h>
 #include "rk3399.dtsi"
 #include "rk3399-opp.dtsi"
 #include "rk3399-linux.dtsi"
+
+//hdmi/dp dummy panel
+#include <dt-bindings/display/screen-timing/lcd-adv-dummy.dtsi>
+
+// edp panel
+#include <dt-bindings/display/screen-timing/lcd-edp-general.dtsi>
+
+// mipi-dsi to lvds panel
+#include <dt-bindings/display/screen-timing/lcd-g070vw01.dtsi>
+#include <dt-bindings/display/screen-timing/lcd-g150xgel05.dtsi>
+#include <dt-bindings/display/screen-timing/lcd-g215hvn01.dtsi>
+#include <dt-bindings/display/screen-timing/lcd-n101icgl21.dtsi>
+#include <dt-bindings/display/screen-timing/lcd-ev101wxm.dtsi>
+#include <dt-bindings/display/screen-timing/lcd-lvds2hdmi-1920x1080.dtsi>
 
 / {
 	model = "Advantech RSB4710 A2";
@@ -223,6 +238,8 @@
 		prepare-delay-ms = <1>;
 		unprepare-delay-ms = <1>;
 		panel_type = <9>;
+
+		display-timings = <&disp_timings>;
 
 		port {
 			panel_in_edp: endpoint {
@@ -537,6 +554,17 @@
 	status = "okay";
 };
 
+&disp_timings {
+	native-mode = <&dp_default>;
+//	native-mode = <&lvds_g070vw01>;
+//	native-mode = <&lvds_g150xgel05>;
+//	native-mode = <&lvds_g215hvn01>;
+
+	use-dts-screen = <0>;
+	prmry-screen = <&hdmi_default>;
+	extend-screen = <&dp_default>;
+};
+
 // edp
 &edp_panel {
 	status = "disabled";
@@ -649,6 +677,7 @@
 		unprepare-delay-ms = <16>;
 
 		panel_type = <2>;
+		display-timings = <&disp_timings>;
 	};
 };
 

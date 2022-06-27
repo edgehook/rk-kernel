@@ -18,6 +18,9 @@ struct display_timings;
 int of_get_display_timing(const struct device_node *np, const char *name,
 		struct display_timing *dt);
 struct display_timings *of_get_display_timings(const struct device_node *np);
+#ifdef CONFIG_ARCH_ADVANTECH
+struct device_node * of_get_display_timing_node(const struct device_node *np, const char *name);
+#endif
 #else
 static inline int of_get_display_timing(const struct device_node *np,
 		const char *name, struct display_timing *dt)
@@ -29,6 +32,12 @@ of_get_display_timings(const struct device_node *np)
 {
 	return NULL;
 }
+
+#ifdef CONFIG_ARCH_ADVANTECH
+struct device_node * of_get_display_timing_node(const struct device_node *np, const char *name){
+	return NULL;
+}
+#endif
 #endif
 
 #endif
