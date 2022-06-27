@@ -901,6 +901,48 @@ int rockchip_drm_parse_next_hdr(struct next_hdr_sink_data *sink_data,
 }
 EXPORT_SYMBOL(rockchip_drm_parse_next_hdr);
 
+#ifdef CONFIG_ARCH_ADVANTECH
+static char lcd_prmry_screen[30]={0};
+static char lcd_extend_screen[30]={0};
+
+char* rockchip_drm_get_screen_name(char* buf)
+{
+	if(! buf)
+		return NULL;
+
+	if(!memcmp(lcd_prmry_screen,buf,strlen(buf)))
+		return lcd_prmry_screen;
+	else if(!memcmp(lcd_extend_screen,buf,strlen(buf)))
+		return lcd_extend_screen;
+	else
+		return NULL;
+}
+EXPORT_SYMBOL(rockchip_drm_get_screen_name);
+
+static int __init setup_prmry_screen(char *buf)
+{
+	u32 len;
+
+	len = (strlen(buf) > (sizeof(lcd_prmry_screen)-1)) ? (sizeof(lcd_prmry_screen)-1) : strlen(buf);
+	memcpy(lcd_prmry_screen,buf,len);
+
+	return 0;
+}
+
+static int __init setup_extend_screen(char *buf)
+{
+	u32 len;
+
+	len = (strlen(buf) > (sizeof(lcd_extend_screen)-1)) ? (sizeof(lcd_extend_screen)-1) : strlen(buf);
+	memcpy(lcd_extend_screen,buf,len);
+
+	return 0;
+}
+
+early_param("prmry_screen", setup_prmry_screen);
+early_param("extend_screen", setup_extend_screen);
+#endif
+
 /*
  * Attach a (component) device to the shared drm dma mapping from master drm
  * device.  This is used by the VOPs to map GEM buffers to a common DMA

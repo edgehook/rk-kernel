@@ -41,6 +41,11 @@
 #include <drm/drm_dsc.h>
 
 #include "panel-simple.h"
+#ifdef CONFIG_ARCH_ADVANTECH
+#include "../rockchip/rockchip_drm_drv.h"
+#include <soc/rockchip/rockchip_dmc.h>
+#endif
+
 
 struct panel_cmd_header {
 	u8 data_type;
@@ -121,6 +126,9 @@ struct panel_desc {
 	u32 bus_format;
 	u32 bus_flags;
 	int connector_type;
+#ifdef CONFIG_ARCH_ADVANTECH
+	u32 type;
+#endif
 
 	struct panel_cmd_seq *init_seq;
 	struct panel_cmd_seq *exit_seq;
@@ -457,6 +465,11 @@ static int panel_simple_unprepare(struct drm_panel *panel)
 
 	if (!p->prepared)
 		return 0;
+
+#ifdef CONFIG_ARCH_ADVANTECH
+	if (p->desc->delay.unprepare)
+		msleep(p->desc->delay.unprepare);
+#endif
 
 	if (p->desc->exit_seq)
 		if (p->dsi)
@@ -4613,6 +4626,194 @@ static bool of_child_node_is_present(const struct device_node *node,
 	return !!child;
 }
 
+#ifdef CONFIG_ARCH_ADVANTECH
+static char * strdup(char *str){
+	int length;
+	char * dupstr = NULL;
+
+	if(str == NULL) return NULL;
+
+	length = strlen(str);
+
+	dupstr= kzalloc(length+1, GFP_KERNEL);
+	if (dupstr)
+		memcpy(dupstr,str,length);
+
+	return dupstr;
+}
+
+extern char* rockchip_drm_get_screen_name(char* buf);
+
+static int panel_simple_of_get_desc_data(struct device *dev,
+					 struct panel_desc *desc)
+{
+	struct device_node *np = dev->of_node;
+	u32 bus_flags;
+	const void *data;
+	int len;
+	int err;
+
+	if (of_child_node_is_present(np, "display-timings")) {
+		int i = 0;
+		int ret;
+		int native_index;
+		char* screen_name = NULL;
+		struct videomode vm;
+		struct display_timings *disp;
+		struct drm_display_mode *mode;
+		struct device_node * dt_np;
+
+		mode = devm_kzalloc(dev, sizeof(*mode), GFP_KERNEL);
+		if (!mode)
+			return -ENOMEM;
+
+		disp = of_get_display_timings(np);
+		if (!disp) {
+			dev_err(dev,"%pOF: no timings specified\n", np);
+			return -EINVAL;
+		}
+
+		if(desc->type == SCREEN_LVDS)
+			screen_name = rockchip_drm_get_screen_name("lvds");
+		else if(desc->type == SCREEN_EDP)
+			screen_name = rockchip_drm_get_screen_name("edp");
+
+		if(screen_name){
+			for (i = 0; i <disp->num_timings; i++){
+				if(strlen(disp->timings[i]->name) != strlen(screen_name))
+					continue;
+
+				if(!memcmp(disp->timings[i]->name,screen_name,strlen(screen_name)))
+					break;
+			}
+
+			if(i < disp->num_timings){
+				native_index = i;
+			}else{
+				native_index = disp->native_mode;
+			}
+		}else{
+			native_index = disp->native_mode;
+		}
+
+		if(native_index >= 0){
+			//we set the real screen name form display timing node
+			screen_name = strdup(disp->timings[native_index]->name);
+
+			ret = videomode_from_timings(disp, &vm, native_index);
+			display_timings_release(disp);
+			if (ret){
+				dev_err(dev,"%pOF: videomode_from_timings failed \n", np);
+				return ret;
+			}
+
+			drm_display_mode_from_videomode(&vm, mode);
+			drm_bus_flags_from_videomode(&vm, &bus_flags);
+
+			desc->modes = mode;
+			desc->num_modes = 1;
+			desc->bus_flags = bus_flags;
+
+			dt_np = of_get_display_timing_node(np, screen_name);
+			if(dt_np){
+				data = of_get_property(dt_np, "panel-init-sequence", &len);
+				if (data) {
+					desc->init_seq = devm_kzalloc(dev, sizeof(*desc->init_seq),
+						      GFP_KERNEL);
+					if (!desc->init_seq)
+						return -ENOMEM;
+
+					err = panel_simple_parse_cmd_seq(dev, data, len,
+							 desc->init_seq);
+					if (err) {
+						dev_err(dev, "failed to parse init sequence\n");
+						return err;
+					}
+				}
+
+				data = of_get_property(dt_np, "panel-exit-sequence", &len);
+				if (data) {
+					desc->exit_seq = devm_kzalloc(dev, sizeof(*desc->exit_seq),
+								      GFP_KERNEL);
+					if (!desc->exit_seq)
+						return -ENOMEM;
+
+					err = panel_simple_parse_cmd_seq(dev, data, len,
+							 desc->exit_seq);
+					if (err) {
+						dev_err(dev, "failed to parse exit sequence\n");
+						return err;
+					}
+				}
+			}
+		}
+	} else if (of_child_node_is_present(np, "panel-timing")) {
+		struct display_timing *timing;
+		struct videomode vm;
+
+		timing = devm_kzalloc(dev, sizeof(*timing), GFP_KERNEL);
+		if (!timing)
+			return -ENOMEM;
+
+		if (!of_get_display_timing(np, "panel-timing", timing)) {
+			desc->timings = timing;
+			desc->num_timings = 1;
+
+			bus_flags = 0;
+			vm.flags = timing->flags;
+			drm_bus_flags_from_videomode(&vm, &bus_flags);
+			desc->bus_flags = bus_flags;
+		}
+
+		data = of_get_property(np, "panel-init-sequence", &len);
+		if (data) {
+			desc->init_seq = devm_kzalloc(dev, sizeof(*desc->init_seq),
+						      GFP_KERNEL);
+			if (!desc->init_seq)
+				return -ENOMEM;
+
+			err = panel_simple_parse_cmd_seq(dev, data, len,
+						 desc->init_seq);
+			if (err) {
+				dev_err(dev, "failed to parse init sequence\n");
+				return err;
+			}
+		}
+
+		data = of_get_property(np, "panel-exit-sequence", &len);
+		if (data) {
+			desc->exit_seq = devm_kzalloc(dev, sizeof(*desc->exit_seq),
+						      GFP_KERNEL);
+			if (!desc->exit_seq)
+				return -ENOMEM;
+
+			err = panel_simple_parse_cmd_seq(dev, data, len,
+						 desc->exit_seq);
+			if (err) {
+				dev_err(dev, "failed to parse exit sequence\n");
+				return err;
+			}
+		}
+	}
+
+	if (desc->num_modes || desc->num_timings) {
+		of_property_read_u32(np, "bpc", &desc->bpc);
+		of_property_read_u32(np, "bus-format", &desc->bus_format);
+		of_property_read_u32(np, "width-mm", &desc->size.width);
+		of_property_read_u32(np, "height-mm", &desc->size.height);
+	}
+
+	of_property_read_u32(np, "prepare-delay-ms", &desc->delay.prepare);
+	of_property_read_u32(np, "enable-delay-ms", &desc->delay.enable);
+	of_property_read_u32(np, "disable-delay-ms", &desc->delay.disable);
+	of_property_read_u32(np, "unprepare-delay-ms", &desc->delay.unprepare);
+	of_property_read_u32(np, "reset-delay-ms", &desc->delay.reset);
+	of_property_read_u32(np, "init-delay-ms", &desc->delay.init);
+	of_property_read_u32(np, "panel_type", &desc->type);
+
+	return 0;
+}
+#else
 static int panel_simple_of_get_desc_data(struct device *dev,
 					 struct panel_desc *desc)
 {
@@ -4700,6 +4901,7 @@ static int panel_simple_of_get_desc_data(struct device *dev,
 
 	return 0;
 }
+#endif
 
 static int panel_simple_platform_probe(struct platform_device *pdev)
 {

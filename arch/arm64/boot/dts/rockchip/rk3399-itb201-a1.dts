@@ -4,11 +4,26 @@
 */
 
 /dts-v1/;
+#include "dt-bindings/display/rk_fb.h"
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/pwm/pwm.h>
 #include "rk3399.dtsi"
 #include "rk3399-opp.dtsi"
 #include "rk3399-linux.dtsi"
+
+//hdmi/dp dummy panel
+#include <dt-bindings/display/screen-timing/lcd-adv-dummy.dtsi>
+
+// edp panel
+#include <dt-bindings/display/screen-timing/lcd-edp-general.dtsi>
+
+// mipi-dsi to lvds panel
+#include <dt-bindings/display/screen-timing/lcd-g070vw01.dtsi>
+#include <dt-bindings/display/screen-timing/lcd-g150xgel05.dtsi>
+#include <dt-bindings/display/screen-timing/lcd-g215hvn01.dtsi>
+#include <dt-bindings/display/screen-timing/lcd-n101icgl21.dtsi>
+#include <dt-bindings/display/screen-timing/lcd-ev101wxm.dtsi>
+#include <dt-bindings/display/screen-timing/lcd-lvds2hdmi-1920x1080.dtsi>
 
 / {
 	model = "Advantech ITB201 A1";
@@ -113,6 +128,24 @@
 		default-brightness-level = <200>;
 	};
 	
+	/*******************
+	* EDP 2 VGA panel.
+	*******************/
+	edp_panel: edp-panel {
+		status = "okay";
+		compatible = "simple-panel";
+		enable-delay-ms = <50>;
+		prepare-delay-ms = <1>;
+		unprepare-delay-ms = <1>;
+		panel_type = <SCREEN_EDP>;
+
+		ports {
+			panel_in_edp: endpoint {
+				remote-endpoint = <&edp_out_panel>;
+			};
+		};
+	};
+
 	clkin_gmac: external-gmac-clock {
 		compatible = "fixed-clock";
 		clock-frequency = <125000000>;
@@ -366,43 +399,6 @@
 		vin-supply = <&vcc5v0_sys>;
 	};
 
-	/*
-	panel: panel {
-		compatible = "simple-panel";
-		backlight = <&backlight>;
-		power-supply = <&vcc_lcd>;
-		reset-gpios = <&gpio1 23 GPIO_ACTIVE_LOW>;
-		prepare-delay-ms = <20>;
-		enable-delay-ms = <20>;
-
-		display-timings {
-			native-mode = <&timing0>;
-
-			timing0: timing0 {
-				clock-frequency = <200000000>;
-				hactive = <1536>;
-				vactive = <2048>;
-				hfront-porch = <12>;
-				hsync-len = <16>;
-				hback-porch = <48>;
-				vfront-porch = <8>;
-				vsync-len = <4>;
-				vback-porch = <8>;
-				hsync-active = <0>;
-				vsync-active = <0>;
-				de-active = <0>;
-				pixelclk-active = <0>;
-			};
-		};
-
-		ports {
-			panel_in: endpoint {
-				remote-endpoint = <&edp_out>;
-			};
-		};
-	};
-	*/
-
 	test-power {
 		status = "okay";
 	};
@@ -571,31 +567,44 @@
 	status = "okay";
 };
 
+&disp_timings {
+	native-mode = <&lvds_g150xgel05>;
+
+	use-dts-screen = <1>;
+	prmry-screen = <&hdmi_default>;
+	extend-screen = <&edp_1280x1024>;
+};
+
+
 &dmac_bus {
 	iram = <&iram>;
 	rockchip,force-iram;
 };
 
-
-/*
+/************
+*  EDP
+************/
 &edp {
 	status = "okay";
 	force-hpd;
+	//hpd-gpios = <&gpio4 28 GPIO_ACTIVE_HIGH>;
 
 	ports {
 		port@1 {
 			reg = <1>;
 
-			edp_out: endpoint {
-				remote-endpoint = <&panel_in>;
+			edp_out_panel: endpoint {
+				remote-endpoint = <&panel_in_edp>;
 			};
 		};
 	};
 };
-*/
 
 &edp_in_vopb {
 	status = "disabled";
+};
+&edp_in_vopl {
+	status = "okay";
 };
 
 &hdmi {
@@ -648,6 +657,7 @@
 		unprepare-delay-ms = <16>;
 
 		panel_type = <2>;
+		display-timings = <&disp_timings>;
 	};
 };
 
