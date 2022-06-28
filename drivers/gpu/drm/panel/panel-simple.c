@@ -4627,6 +4627,11 @@ static bool of_child_node_is_present(const struct device_node *node,
 }
 
 #ifdef CONFIG_ARCH_ADVANTECH
+static bool of_property_is_present(const struct device_node *node,
+				     const char *name){
+	return !!of_find_property(node, name, NULL);
+}
+
 static char * strdup(char *str){
 	int length;
 	char * dupstr = NULL;
@@ -4644,6 +4649,114 @@ static char * strdup(char *str){
 
 extern char* rockchip_drm_get_screen_name(char* buf);
 
+static int adv_panel_of_get_display_timings(struct device *dev,
+					 struct panel_desc *desc)
+{
+	int len,err,i = 0;
+	int native_index;
+	char* screen_name = NULL;
+	struct display_timings *disp;
+	struct drm_display_mode *mode;
+	struct device_node *timings_np=NULL;
+
+	timings_np = of_parse_phandle(dev->of_node, "display-timings", 0);
+	if(!timings_np){
+		dev_err(dev,"%pOF: no display-timings specified\n", dev->of_node);
+		return -EINVAL;
+	}
+
+	mode = devm_kzalloc(dev, sizeof(*mode), GFP_KERNEL);
+	if (!mode)
+		return -ENOMEM;
+
+	disp = of_get_display_timings(of_get_next_parent(timings_np));
+	if (!disp) {
+		dev_err(dev,"%pOF: no timings specified\n", timings_np);
+		return -EINVAL;
+	}
+
+	if(desc->type == SCREEN_LVDS)
+		screen_name = rockchip_drm_get_screen_name("lvds");
+	else if(desc->type == SCREEN_EDP)
+		screen_name = rockchip_drm_get_screen_name("edp");
+
+	if(screen_name){
+		for (i = 0; i <disp->num_timings; i++){
+			if(strlen(disp->timings[i]->name) != strlen(screen_name))
+				continue;
+
+			if(!memcmp(disp->timings[i]->name,screen_name,strlen(screen_name)))
+				break;
+		}
+
+		if(i < disp->num_timings){
+			native_index = i;
+		}else{
+			native_index = disp->native_mode;
+		}
+	}else{
+		native_index = disp->native_mode;
+	}
+
+	if(native_index >= 0){
+		u32 bus_flags;
+		const void *data;
+		struct videomode vm;
+		struct device_node * dt_np;
+
+		//we set the real screen name form display timing node
+		screen_name = strdup(disp->timings[native_index]->name);
+		err = videomode_from_timings(disp, &vm, native_index);
+		display_timings_release(disp);
+		if(err){
+			dev_err(dev,"%pOF: videomode_from_timings failed \n", timings_np);
+			return err;
+		}
+
+		drm_display_mode_from_videomode(&vm, mode);
+		drm_bus_flags_from_videomode(&vm, &bus_flags);
+
+		desc->modes = mode;
+		desc->num_modes = 1;
+		desc->bus_flags = bus_flags;
+
+		dt_np = of_get_display_timing_node(timings_np, screen_name);
+		if(dt_np){
+			data = of_get_property(dt_np, "panel-init-sequence", &len);
+			if (data) {
+				desc->init_seq = devm_kzalloc(dev, sizeof(*desc->init_seq),
+					      GFP_KERNEL);
+				if (!desc->init_seq)
+					return -ENOMEM;
+
+				err = panel_simple_parse_cmd_seq(dev, data, len,
+						 desc->init_seq);
+				if (err) {
+					dev_err(dev, "failed to parse init sequence\n");
+					return err;
+				}
+			}
+
+			data = of_get_property(dt_np, "panel-exit-sequence", &len);
+			if (data) {
+				desc->exit_seq = devm_kzalloc(dev, sizeof(*desc->exit_seq),
+							      GFP_KERNEL);
+				if (!desc->exit_seq)
+					return -ENOMEM;
+
+				err = panel_simple_parse_cmd_seq(dev, data, len,
+						 desc->exit_seq);
+				if (err) {
+					dev_err(dev, "failed to parse exit sequence\n");
+					return err;
+				}
+			}
+		}
+	}
+
+	return 0;
+}
+
 static int panel_simple_of_get_desc_data(struct device *dev,
 					 struct panel_desc *desc)
 {
@@ -4653,99 +4766,12 @@ static int panel_simple_of_get_desc_data(struct device *dev,
 	int len;
 	int err;
 
-	if (of_child_node_is_present(np, "display-timings")) {
-		int i = 0;
-		int ret;
-		int native_index;
-		char* screen_name = NULL;
-		struct videomode vm;
-		struct display_timings *disp;
-		struct drm_display_mode *mode;
-		struct device_node * dt_np;
+	of_property_read_u32(np, "panel_type", &desc->type);
 
-		mode = devm_kzalloc(dev, sizeof(*mode), GFP_KERNEL);
-		if (!mode)
-			return -ENOMEM;
-
-		disp = of_get_display_timings(np);
-		if (!disp) {
-			dev_err(dev,"%pOF: no timings specified\n", np);
-			return -EINVAL;
-		}
-
-		if(desc->type == SCREEN_LVDS)
-			screen_name = rockchip_drm_get_screen_name("lvds");
-		else if(desc->type == SCREEN_EDP)
-			screen_name = rockchip_drm_get_screen_name("edp");
-
-		if(screen_name){
-			for (i = 0; i <disp->num_timings; i++){
-				if(strlen(disp->timings[i]->name) != strlen(screen_name))
-					continue;
-
-				if(!memcmp(disp->timings[i]->name,screen_name,strlen(screen_name)))
-					break;
-			}
-
-			if(i < disp->num_timings){
-				native_index = i;
-			}else{
-				native_index = disp->native_mode;
-			}
-		}else{
-			native_index = disp->native_mode;
-		}
-
-		if(native_index >= 0){
-			//we set the real screen name form display timing node
-			screen_name = strdup(disp->timings[native_index]->name);
-
-			ret = videomode_from_timings(disp, &vm, native_index);
-			display_timings_release(disp);
-			if (ret){
-				dev_err(dev,"%pOF: videomode_from_timings failed \n", np);
-				return ret;
-			}
-
-			drm_display_mode_from_videomode(&vm, mode);
-			drm_bus_flags_from_videomode(&vm, &bus_flags);
-
-			desc->modes = mode;
-			desc->num_modes = 1;
-			desc->bus_flags = bus_flags;
-
-			dt_np = of_get_display_timing_node(np, screen_name);
-			if(dt_np){
-				data = of_get_property(dt_np, "panel-init-sequence", &len);
-				if (data) {
-					desc->init_seq = devm_kzalloc(dev, sizeof(*desc->init_seq),
-						      GFP_KERNEL);
-					if (!desc->init_seq)
-						return -ENOMEM;
-
-					err = panel_simple_parse_cmd_seq(dev, data, len,
-							 desc->init_seq);
-					if (err) {
-						dev_err(dev, "failed to parse init sequence\n");
-						return err;
-					}
-				}
-
-				data = of_get_property(dt_np, "panel-exit-sequence", &len);
-				if (data) {
-					desc->exit_seq = devm_kzalloc(dev, sizeof(*desc->exit_seq),
-								      GFP_KERNEL);
-					if (!desc->exit_seq)
-						return -ENOMEM;
-
-					err = panel_simple_parse_cmd_seq(dev, data, len,
-							 desc->exit_seq);
-					if (err) {
-						dev_err(dev, "failed to parse exit sequence\n");
-						return err;
-					}
-				}
-			}
+	if (of_property_is_present(np, "display-timings")) {
+		err = adv_panel_of_get_display_timings(dev, desc);
+		if(err){
+			dev_info(dev, "get adv display panel failed with %d\n", err);
 		}
 	} else if (of_child_node_is_present(np, "panel-timing")) {
 		struct display_timing *timing;
@@ -4809,7 +4835,6 @@ static int panel_simple_of_get_desc_data(struct device *dev,
 	of_property_read_u32(np, "unprepare-delay-ms", &desc->delay.unprepare);
 	of_property_read_u32(np, "reset-delay-ms", &desc->delay.reset);
 	of_property_read_u32(np, "init-delay-ms", &desc->delay.init);
-	of_property_read_u32(np, "panel_type", &desc->type);
 
 	return 0;
 }

@@ -261,27 +261,14 @@ EXPORT_SYMBOL_GPL(of_get_display_timings);
 
 #ifdef CONFIG_ARCH_ADVANTECH
 struct device_node * of_get_display_timing_node(const struct device_node *np, const char *name){
-	struct device_node *timings_np;
-	struct device_node *dt_node = NULL;
-
 	if(name == NULL) return NULL;
 
-	timings_np = of_get_child_by_name(np, "display-timings");
-	if (!timings_np) {
-		pr_err("%pOF: could not find display-timings node\n", np);
+	if(of_get_child_count(np)== 0){
+		pr_err("%pOF: no timings specified\n", np);
 		return NULL;
 	}
 
-	if(of_get_child_count(timings_np)== 0){
-		pr_err("%pOF: no timings specified\n", np);
-		goto dtn_out;
-	}
-
-	dt_node = of_get_child_by_name(timings_np, name);
-
-dtn_out:
-	of_node_put(timings_np);
-	return dt_node;
+	return of_get_child_by_name(np, name);
 }
 EXPORT_SYMBOL_GPL(of_get_display_timing_node);
 #endif
