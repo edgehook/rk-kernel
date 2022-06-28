@@ -29,6 +29,40 @@
 	model = "Advantech ITB201 A1";
 	compatible = "rockchip,rk3399-itb201-a1", "rockchip,rk3399";
 
+	aliases {
+		edp = &edp;
+		hdmi = &hdmi;
+		dp = &cdn_dp;
+		dsi = &dsi;
+		dsi1 = &dsi1;
+
+		edp_in_vopb = &edp_in_vopb;
+		edp_in_vopl = &edp_in_vopl;
+		hdmi_in_vopb = &hdmi_in_vopb;
+		hdmi_in_vopl = &hdmi_in_vopl;
+		dp_in_vopb = &dp_in_vopb;
+		dp_in_vopl = &dp_in_vopl;
+		dsi_in_vopb = &dsi_in_vopb;
+		dsi_in_vopl = &dsi_in_vopl;
+		dsi1_in_vopb = &dsi1_in_vopb;
+		dsi1_in_vopl = &dsi1_in_vopl;
+
+		dsi_backlight = &backlight1;
+
+		dsi_vcc = &dsi_vdd_core;
+		dsi_vcc_io = &dsi_vdd_io;
+		lvds_pwr_vcc = &lvds_pwr_vcc;
+		lvds_bkl_vcc = &lvds_bkl_vcc;
+
+		edp_route = &route_edp;
+		dsi_route = &route_dsi;
+		hdmi_route = &route_hdmi;
+
+		hdmi_sound = &hdmi_sound;
+		hdmi_i2s = &i2s2;
+		dp_phy = &tcphy0;
+	};
+
 	rk_key: rockchip-key {
 		compatible = "rockchip,key";
 		status = "okay";
@@ -139,7 +173,7 @@
 		unprepare-delay-ms = <1>;
 		panel_type = <SCREEN_EDP>;
 
-		ports {
+		port {
 			panel_in_edp: endpoint {
 				remote-endpoint = <&edp_out_panel>;
 			};
@@ -658,6 +692,30 @@
 
 		panel_type = <2>;
 		display-timings = <&disp_timings>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				panel_in_dsi: endpoint {
+					remote-endpoint = <&dsi_out_panel>;
+				};
+			};
+		};
+	};
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@1 {
+			reg = <1>;
+			dsi_out_panel: endpoint {
+				remote-endpoint = <&panel_in_dsi>;
+			};
+		};
 	};
 };
 
