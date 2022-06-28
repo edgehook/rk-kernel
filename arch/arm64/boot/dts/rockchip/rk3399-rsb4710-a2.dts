@@ -238,9 +238,15 @@
 
 		display-timings = <&disp_timings>;
 
-		port {
-			panel_in_edp: endpoint {
-				remote-endpoint = <&edp_out_panel>;
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				panel_in_edp: endpoint {
+					remote-endpoint = <&edp_out_panel>;
+				};
 			};
 		};
 	};
