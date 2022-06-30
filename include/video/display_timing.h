@@ -73,6 +73,9 @@ struct display_timing {
 	struct timing_entry vback_porch;	/* ver. back porch */
 	struct timing_entry vsync_len;		/* ver. sync len */
 
+#if defined(CONFIG_ARCH_ADVANTECH)
+        char *name;
+#endif
 	enum display_flags flags;		/* display flags */
 };
 

@@ -58,6 +58,9 @@ static int of_parse_display_timing(const struct device_node *np,
 {
 	u32 val = 0;
 	int ret = 0;
+#ifdef CONFIG_ARCH_ADVANTECH
+	int name_length;
+#endif
 
 	memset(dt, 0, sizeof(*dt));
 
@@ -100,6 +103,14 @@ static int of_parse_display_timing(const struct device_node *np,
 		dt->flags |= DISPLAY_FLAGS_DOUBLESCAN;
 	if (of_property_read_bool(np, "doubleclk"))
 		dt->flags |= DISPLAY_FLAGS_DOUBLECLK;
+
+#ifdef CONFIG_ARCH_ADVANTECH
+	name_length = strlen(np->name);
+	dt->name= kzalloc(name_length+1, GFP_KERNEL);
+	if (dt->name)
+		memcpy(dt->name,np->name,name_length);
+#endif
+
 
 	if (ret) {
 		pr_err("%pOF: error reading timing properties\n", np);
@@ -247,3 +258,17 @@ dispfail:
 	return NULL;
 }
 EXPORT_SYMBOL_GPL(of_get_display_timings);
+
+#ifdef CONFIG_ARCH_ADVANTECH
+struct device_node * of_get_display_timing_node(const struct device_node *np, const char *name){
+	if(name == NULL) return NULL;
+
+	if(of_get_child_count(np)== 0){
+		pr_err("%pOF: no timings specified\n", np);
+		return NULL;
+	}
+
+	return of_get_child_by_name(np, name);
+}
+EXPORT_SYMBOL_GPL(of_get_display_timing_node);
+#endif
