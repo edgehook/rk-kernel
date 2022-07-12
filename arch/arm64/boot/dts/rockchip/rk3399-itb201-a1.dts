@@ -1684,24 +1684,26 @@
 		drive-strength = <26>;
 	};
 
-	gpios_export_pins: gpios_export_pins {
-		rockchip,pins = 
-			<2 20 RK_FUNC_GPIO &pcfg_pull_up>,
-			<2 21 RK_FUNC_GPIO &pcfg_pull_up>,
-			<2 22 RK_FUNC_GPIO &pcfg_pull_up>,
-			<2 23 RK_FUNC_GPIO &pcfg_pull_up>,
-			<2 24 RK_FUNC_GPIO &pcfg_pull_up>,
-			<2 25 RK_FUNC_GPIO &pcfg_pull_up>,
-			<0 8 RK_FUNC_GPIO &pcfg_pull_up>,
-			<2 27 RK_FUNC_GPIO &pcfg_pull_up>,
-			<3 28 RK_FUNC_GPIO &pcfg_pull_up>,
-			<3 29 RK_FUNC_GPIO &pcfg_pull_up>,
-			<4 3 RK_FUNC_GPIO &pcfg_pull_up>,
-			<4 4 RK_FUNC_GPIO &pcfg_pull_up>,
-			<2 2 RK_FUNC_GPIO &pcfg_pull_up>,
-			<2 3 RK_FUNC_GPIO &pcfg_pull_up>,
-			<2 4 RK_FUNC_GPIO &pcfg_pull_up>,
-			<2 6 RK_FUNC_GPIO &pcfg_pull_up>;
+	gpio_export {
+		gpios_export_pins: gpios_export_pins {
+			rockchip,pins = 
+				<2 20 RK_FUNC_GPIO &pcfg_pull_up>,
+				<2 21 RK_FUNC_GPIO &pcfg_pull_up>,
+				<2 22 RK_FUNC_GPIO &pcfg_pull_up>,
+				<2 23 RK_FUNC_GPIO &pcfg_pull_up>,
+				<2 24 RK_FUNC_GPIO &pcfg_pull_up>,
+				<2 25 RK_FUNC_GPIO &pcfg_pull_up>,
+				<0 8 RK_FUNC_GPIO &pcfg_pull_up>,
+				<2 27 RK_FUNC_GPIO &pcfg_pull_up>,
+				<3 28 RK_FUNC_GPIO &pcfg_pull_up>,
+				<3 29 RK_FUNC_GPIO &pcfg_pull_up>,
+				<4 3 RK_FUNC_GPIO &pcfg_pull_up>,
+				<4 4 RK_FUNC_GPIO &pcfg_pull_up>,
+				<2 2 RK_FUNC_GPIO &pcfg_pull_up>,
+				<2 3 RK_FUNC_GPIO &pcfg_pull_up>,
+				<2 4 RK_FUNC_GPIO &pcfg_pull_up>,
+				<2 6 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
 	};
 
 	lvds-panel {
