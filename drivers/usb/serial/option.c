@@ -97,6 +97,9 @@ static void option_instat_callback(struct urb *urb);
 #define YISO_VENDOR_ID				0x0EAB
 #define YISO_PRODUCT_U893			0xC893
 
+/* FIBOCOM */
+#define FIBOCOM_VENDOR_ID			0x2CB7
+
 /*
  * NOVATEL WIRELESS PRODUCTS
  *
@@ -2125,6 +2128,15 @@ static const struct usb_device_id option_ids[] = {
 	{ USB_DEVICE_INTERFACE_CLASS(0x305a, 0x1404, 0xff) },			/* GosunCn GM500 RNDIS */
 	{ USB_DEVICE_INTERFACE_CLASS(0x305a, 0x1405, 0xff) },			/* GosunCn GM500 MBIM */
 	{ USB_DEVICE_INTERFACE_CLASS(0x305a, 0x1406, 0xff) },			/* GosunCn GM500 ECM/NCM */
+
+	{USB_DEVICE(FIBOCOM_VENDOR_ID, 0x0104) },
+	{USB_DEVICE(FIBOCOM_VENDOR_ID, 0x0105) },
+	{USB_DEVICE(FIBOCOM_VENDOR_ID, 0x0107) },
+	{USB_DEVICE(FIBOCOM_VENDOR_ID, 0x0108) },
+	{USB_DEVICE(FIBOCOM_VENDOR_ID, 0x0109) },
+	{USB_DEVICE(FIBOCOM_VENDOR_ID, 0x010A) },
+	{USB_DEVICE(FIBOCOM_VENDOR_ID, 0x0110) },
+	{USB_DEVICE(FIBOCOM_VENDOR_ID, 0x0111) },
 	{ } /* Terminating entry */
 };
 MODULE_DEVICE_TABLE(usb, option_ids);
@@ -2182,6 +2194,7 @@ static int option_probe(struct usb_serial *serial,
 {
 	struct usb_interface_descriptor *iface_desc =
 				&serial->interface->cur_altsetting->desc;
+	struct usb_device_descriptor *dev_desc = &serial->dev->descriptor;
 	unsigned long device_flags = id->driver_info;
 
 	/* Never bind to the CD-Rom emulation interface	*/
@@ -2202,6 +2215,24 @@ static int option_probe(struct usb_serial *serial,
 	 */
 	if (device_flags & NUMEP2 && iface_desc->bNumEndpoints != 2)
 		return -ENODEV;
+
+	if(dev_desc->idVendor == FIBOCOM_VENDOR_ID &&
+		(((dev_desc->idProduct == cpu_to_le16(0x0104) ||
+		dev_desc->idProduct == cpu_to_le16(0x0105)) &&
+		iface_desc->bInterfaceNumber >= 4)||
+		((dev_desc->idProduct == cpu_to_le16(0x0109) ||
+		dev_desc->idProduct == cpu_to_le16(0x010A)) &&
+		iface_desc->bInterfaceNumber >= 2))){
+		printk(KERN_INFO "Discovery the interface for FIBOCOM .");
+		return -ENODEV;
+	}
+
+	if(((dev_desc->idProduct == cpu_to_le16(0x0110) ||
+		dev_desc->idProduct == cpu_to_le16(0x0111)) &&
+		iface_desc->bInterfaceNumber < 2)){
+		printk(KERN_INFO "Discovery the interface for FIBOCOM .");
+		return -ENODEV;
+	}
 
 	/* Store the device flags so we can use them during attach. */
 	usb_set_serial_data(serial, (void *)device_flags);

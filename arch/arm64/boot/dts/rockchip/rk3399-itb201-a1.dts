@@ -504,67 +504,6 @@
 	status = "okay";
 };
 
-/******************** 
-* USB 3.0 for LTE
-********************/
-&tcphy0 {
-	status = "okay";
-};
-
-&usbdrd3_0 {
-	status = "okay";
-};
-
-&usbdrd_dwc3_0 {
-	status = "okay";
-	dr_mode = "host";
-};
-
-&u2phy0 {
-	status = "okay";
-
-	u2phy0_otg: otg-port {
-		vbus-supply = <&vcc_otg_vbus>;
-		status = "okay";
-	};
-};
-
-/*
-* USB2.0 interface.
-* 0: LAN2
-* 1: USB2.0 HUB.
-*/
-&usb_host0_ehci {
-	status = "okay";
-};
-
-&usb_host0_ohci {
-	status = "okay";
-};
-
-&u2phy0 {
-	status = "okay";
-	u2phy0_host: host-port {
-		status = "okay";
-	};
-};
-
-&usb_host1_ehci {
-	status = "okay";
-};
-
-&usb_host1_ohci {
-	status = "okay";
-};
-
-&u2phy1 {
-	status = "okay";
-
-	u2phy1_host: host-port {
-		status = "okay";
-	};
-};
-
 &spi2 {
 	status = "okay";
 	max-freq = <48000000>;
