@@ -60,3 +60,4 @@ obj-$(CONFIG_HISI_HIKEY_USB)	+= hisi_hikey_usb.o
 obj-$(CONFIG_UID_SYS_STATS)	+= uid_sys_stats.o
 obj-$(CONFIG_RK803)		+= rk803.o
 obj-$(CONFIG_GPIOS_EXPORT_SYS) += gpios_export.o
+obj-$(CONFIG_ARCH_ADVANTECH) += board.o gpio-adv.o 
