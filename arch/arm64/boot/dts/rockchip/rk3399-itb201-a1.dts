@@ -62,6 +62,12 @@
 		hdmi_sound = &hdmi_sound;
 		hdmi_i2s = &i2s2;
 		dp_phy = &tcphy0;
+		/delete-property/ mmc0;
+		/delete-property/ mmc1;
+		/delete-property/ mmc2;
+		mmc0 = &sdio0;
+		mmc1 = &sdhci;
+		mmc2 = &sdmmc;
 	};
 
 	rk_key: rockchip-key {
