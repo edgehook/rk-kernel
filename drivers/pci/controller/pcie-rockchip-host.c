@@ -338,6 +338,9 @@ static int rockchip_pcie_host_init_port(struct rockchip_pcie *rockchip)
 	u32 status;
 	int timeouts = 500;
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	if (!IS_ERR(rockchip->ep_gpio))
+#endif
 	gpiod_set_value_cansleep(rockchip->ep_gpio, 0);
 
 	err = rockchip_pcie_init_port(rockchip);
@@ -365,8 +368,11 @@ static int rockchip_pcie_host_init_port(struct rockchip_pcie *rockchip)
 	/* Enable Gen1 training */
 	rockchip_pcie_write(rockchip, PCIE_CLIENT_LINK_TRAIN_ENABLE,
 			    PCIE_CLIENT_CONFIG);
-
-	gpiod_set_value_cansleep(rockchip->ep_gpio, 1);
+	
+#ifdef CONFIG_ARCH_ADVANTECH
+	if (!IS_ERR(rockchip->ep_gpio))
+#endif
+gpiod_set_value_cansleep(rockchip->ep_gpio, 1);
 
 	if (rockchip->wait_ep)
 		timeouts = 10000;
