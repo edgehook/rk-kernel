@@ -755,6 +755,25 @@ static int smsc75xx_ioctl(struct net_device *netdev, struct ifreq *rq, int cmd)
 	return generic_mii_ioctl(&dev->mii, if_mii(rq), cmd, NULL);
 }
 
+#ifdef CONFIG_ARCH_ADVANTECH
+static unsigned char g_mac_addr[ETH_ALEN]={0};
+
+static int __init setup_usblan_addr(char *buf)
+{
+	int i=0;
+
+	if (!buf)
+		return -EINVAL;
+
+	for(i=0;i<ETH_ALEN;i++)
+		g_mac_addr[i] = simple_strtol(buf+i*3, NULL, 16);
+
+	return 0;
+}
+
+early_param("usblan_addr", setup_usblan_addr);
+#endif
+
 static void smsc75xx_init_mac_address(struct usbnet *dev)
 {
 	/* maybe the boot loader passed the MAC address in devicetree */
@@ -777,6 +796,12 @@ static void smsc75xx_init_mac_address(struct usbnet *dev)
 			return;
 		}
 	}
+
+#ifdef CONFIG_ARCH_ADVANTECH
+	if (is_valid_ether_addr(g_mac_addr))
+		memcpy(dev->net->dev_addr,g_mac_addr,ETH_ALEN);
+	else
+#endif
 
 	/* no useful static MAC address found. generate a random one */
 	eth_hw_addr_random(dev->net);
