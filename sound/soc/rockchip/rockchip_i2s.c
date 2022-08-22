@@ -772,8 +772,8 @@ static int rockchip_i2s_reboot_notify(struct notifier_block *this,
 
 	if(i2s->clk_enabled)
 	{
-		clk_disable_unprepare(i2s->mclk);
-		clk_disable_unprepare(i2s->hclk);
+		//clk_disable_unprepare(i2s->mclk);
+		//clk_disable_unprepare(i2s->hclk);
 	}
 
 	if (gpio_is_valid(i2s->amp_mute_gpio))

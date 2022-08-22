@@ -1,0 +1,5 @@
+config BT_RTL8822CE
+	tristate "Realtek 8822CE USB BlueTooth Driver"
+	select USB
+	help
+	  Help message of RTL8821AE

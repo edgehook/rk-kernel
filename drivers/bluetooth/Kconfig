@@ -425,4 +425,6 @@ config BT_HCIRSI
 	  Say Y here to compile support for HCI over Redpine into the
 	  kernel or say M to compile as a module.
 
+source "drivers/bluetooth/rtl8822ce/Kconfig"
+
 endmenu
