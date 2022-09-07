@@ -1302,7 +1302,7 @@ static int rt5660_i2c_probe(struct i2c_client *i2c,
 	if (val != RT5660_DEVICE_ID) {
 		dev_err(&i2c->dev,
 			"Device with ID register %#x is not rt5660\n", val);
-		return -ENODEV;
+		return -EPROBE_DEFER;
 	}
 
 	regmap_write(rt5660->regmap, RT5660_RESET, 0);
