@@ -1583,6 +1583,12 @@ static int rk808_regulator_dt_parse_pdata(struct device *dev,
 	struct device_node *np;
 	int tmp, ret = 0, i;
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	i = of_property_read_u32(client_dev->of_node, "bulk-ilmax", &tmp);
+	if (!i)
+		regmap_write(map, RK808_IO_POL_REG, tmp);
+#endif
+
 	np = of_get_child_by_name(client_dev->of_node, "regulators");
 	if (!np)
 		return -ENXIO;
