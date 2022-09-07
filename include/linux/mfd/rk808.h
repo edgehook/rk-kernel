@@ -111,7 +111,7 @@ enum rk808_reg {
 #define RK808_INT_STS_MSK_REG1	0x4d
 #define RK808_INT_STS_REG2	0x4e
 #define RK808_INT_STS_MSK_REG2	0x4f
-#define RK808_IO_POL_REG	0x50
+#define RK808_IO_POL_REG	0x90
 
 /* RK816 */
 enum rk816_reg {
