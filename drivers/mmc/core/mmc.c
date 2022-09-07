@@ -559,6 +559,9 @@ static int mmc_decode_ext_csd(struct mmc_card *card, u8 *ext_csd)
 
 		card->ext_csd.rel_param = ext_csd[EXT_CSD_WR_REL_PARAM];
 		card->ext_csd.rst_n_function = ext_csd[EXT_CSD_RST_N_FUNCTION];
+#ifdef CONFIG_ARCH_ADVANTECH
+		card->ext_csd.write_reliability = ext_csd[EXT_CSD_WRITE_RELIABLIITY];
+#endif
 
 		/*
 		 * RPMB regions are defined in multiples of 128K.
@@ -1786,6 +1789,13 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		/* Erase size depends on CSD and Extended CSD */
 		mmc_set_erase_size(card);
 	}
+
+#ifdef CONFIG_ARCH_ADVANTECH
+	if (card->ext_csd.write_reliability !=0x1f) {
+		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
+				EXT_CSD_WRITE_RELIABLIITY, 0x1f,card->ext_csd.generic_cmd6_time);
+	}
+#endif
 
 	/* Enable ERASE_GRP_DEF. This bit is lost after a reset or power off. */
 	if (card->ext_csd.rev >= 3) {
