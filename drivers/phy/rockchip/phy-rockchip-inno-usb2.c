@@ -2629,6 +2629,10 @@ static int rk3399_usb2phy_tuning(struct rockchip_usb2phy *rphy)
 		 */
 		ret |= regmap_write(rphy->grf, 0x4480,
 				    GENMASK(30, 30) | 0x4000);
+
+		#ifdef CONFIG_ARCH_ADVANTECH
+			ret |= regmap_write(rphy->grf, 0x4488,0xffff8ee3);
+		#endif
 	} else {
 		/*
 		 * Set max ODT compensation voltage and
