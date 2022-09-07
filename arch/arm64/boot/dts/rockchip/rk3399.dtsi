@@ -2446,6 +2446,11 @@
 			drive-strength = <20>;
 		};
 
+		pcfg_pull_none_26ma: pcfg-pull-none-26ma {
+			bias-disable;
+			drive-strength = <26>;
+		};
+
 		pcfg_output_high: pcfg-output-high {
 			output-high;
 		};
@@ -2471,13 +2476,13 @@
 			rgmii_pins: rgmii-pins {
 				rockchip,pins =
 					/* mac_txclk */
-					<3 RK_PC1 1 &pcfg_pull_none_13ma>,
+					<3 RK_PC1 1 &pcfg_pull_none_26ma>,
 					/* mac_rxclk */
 					<3 RK_PB6 1 &pcfg_pull_none>,
 					/* mac_mdio */
 					<3 RK_PB5 1 &pcfg_pull_none>,
 					/* mac_txen */
-					<3 RK_PB4 1 &pcfg_pull_none_13ma>,
+					<3 RK_PB4 1 &pcfg_pull_none_26ma>,
 					/* mac_clk */
 					<3 RK_PB3 1 &pcfg_pull_none>,
 					/* mac_rxdv */
@@ -2489,17 +2494,17 @@
 					/* mac_rxd0 */
 					<3 RK_PA6 1 &pcfg_pull_none>,
 					/* mac_txd1 */
-					<3 RK_PA5 1 &pcfg_pull_none_13ma>,
+					<3 RK_PA5 1 &pcfg_pull_none_26ma>,
 					/* mac_txd0 */
-					<3 RK_PA4 1 &pcfg_pull_none_13ma>,
+					<3 RK_PA4 1 &pcfg_pull_none_26ma>,
 					/* mac_rxd3 */
 					<3 RK_PA3 1 &pcfg_pull_none>,
 					/* mac_rxd2 */
 					<3 RK_PA2 1 &pcfg_pull_none>,
 					/* mac_txd3 */
-					<3 RK_PA1 1 &pcfg_pull_none_13ma>,
+					<3 RK_PA1 1 &pcfg_pull_none_26ma>,
 					/* mac_txd2 */
-					<3 RK_PA0 1 &pcfg_pull_none_13ma>;
+					<3 RK_PA0 1 &pcfg_pull_none_26ma>;
 			};
 
 			rmii_pins: rmii-pins {
