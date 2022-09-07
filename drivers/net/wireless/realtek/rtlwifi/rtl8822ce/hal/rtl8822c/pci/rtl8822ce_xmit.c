@@ -1338,7 +1338,7 @@ int rtl8822ce_init_txbd_ring(_adapter *padapter, unsigned int q_idx,
 	_rtw_init_queue(&t_priv->tx_ring[q_idx].queue);
 	t_priv->tx_ring[q_idx].qlen = 0;
 
-	RTW_INFO("%s queue:%d, ring_addr:%p\n", __func__, q_idx, txbd);
+	RTW_INFO("%s queue:%d, ring_addr:%px\n", __func__, q_idx, txbd);
 
 
 	return _SUCCESS;
