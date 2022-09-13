@@ -71,6 +71,7 @@ void rtl8822ce_reset_bd(_adapter *padapter)
 		}
 	}
 
+	_rtw_spinlock_init(&pdvobjpriv->irq_th_lock);
 	_enter_critical(&pdvobjpriv->irq_th_lock, &irqL);
 	for (i = 0; i < PCI_MAX_TX_QUEUE_COUNT; i++) {
 		if (t_priv->tx_ring[i].buf_desc) {
@@ -106,6 +107,7 @@ void rtl8822ce_reset_bd(_adapter *padapter)
 		}
 	}
 	_exit_critical(&pdvobjpriv->irq_th_lock, &irqL);
+	_rtw_spinlock_free(&pdvobjpriv->irq_th_lock);
 }
 
 static void intf_chip_configure(PADAPTER padapter)
