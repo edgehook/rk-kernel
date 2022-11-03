@@ -89,7 +89,7 @@
 		compatible = "misc-adv-gpio";
 		status = "okay";
 		pinctrl-names = "default";
-		pinctrl-0 = <&m2_pwr_h &system_rst_h &adv_gpios>;
+		pinctrl-0 = <&m2_pwr_h &system_rst_h>;
 		m2-pwr-gpio = <&gpio4 21 GPIO_ACTIVE_HIGH>;
 		system-reset-gpio = <&gpio1 6 GPIO_ACTIVE_HIGH>;
 		timing-interval = <110>;
