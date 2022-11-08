@@ -70,19 +70,9 @@
 		mmc2 = &sdmmc;
 	};
 
-	rk_key: rockchip-key {
-		compatible = "rockchip,key";
-		status = "okay";
-		pinctrl-names = "default";
-		pinctrl-0 = <&pmic_pwr_key>;
-
-		power-key {
-			gpios = <&gpio0 5 GPIO_ACTIVE_LOW>;
-			linux,code = <116>;
-			label = "GPIO Power Key";
-			gpio-key,wakeup = <1>;
-			polling-release-time = <1000>;//unit:ms
-		};
+	chosen {
+		/* This is for uboot console. */
+		stdout-path = "serial2:115200n8";
 	};
 
 	misc-adv-gpio {
@@ -1579,7 +1569,7 @@
 };
 
 &route_edp {
-	status = "okay";
+	status = "disabled";
 };
 
 &pinctrl {
