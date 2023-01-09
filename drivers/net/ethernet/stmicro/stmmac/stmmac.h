@@ -22,6 +22,9 @@
 #include <linux/net_tstamp.h>
 #include <linux/reset.h>
 #include <net/page_pool.h>
+// #ifdef CONFIG_ARCH_ADVANTECH
+// #include <linux/workqueue.h>
+// #endif
 
 struct stmmac_resources {
 	void __iomem *addr;
@@ -226,6 +229,10 @@ struct stmmac_priv {
 
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *dbgfs_dir;
+#endif
+#ifdef CONFIG_ARCH_ADVANTECH
+	struct delayed_work delay_work;
+	int exit;
 #endif
 
 	unsigned long state;

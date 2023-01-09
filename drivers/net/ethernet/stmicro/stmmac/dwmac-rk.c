@@ -2305,6 +2305,21 @@ out:
 	dev_err(dev, "%s: mac address: %pM\n", __func__, addr);
 }
 
+// #ifdef CONFIG_ARCH_ADVANTECH
+// #define RTL8211F_PHY_ID		0x001cc916
+
+// static int rtl8211f_phy_fixup(struct phy_device *phydev)
+// {
+// 	if (phydev->interface == PHY_INTERFACE_MODE_RGMII){
+// 		phy_write(phydev, 0x1f, 0x0d04);
+// 		phy_write(phydev, 0x10, 0x8910);
+// 		phy_write(phydev, 0x1f, 0x0000);
+// 	}
+
+// 	return 0;
+// }
+// #endif
+
 static int rk_gmac_probe(struct platform_device *pdev)
 {
 	struct plat_stmmacenet_data *plat_dat;
