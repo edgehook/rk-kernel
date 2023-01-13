@@ -1,0 +1,53 @@
+From 798c04478994fc8e3da1cbcbbf8c578ffa5b5f36 Mon Sep 17 00:00:00 2001
+From: "ning.pan" <ning.pan@advantech.com.cn>
+Date: Sat, 7 May 2022 14:21:39 +0800
+Subject: [PATCH 3/3] Fix all desktop applications cannot be displayed in full
+ screen by click the maximize button
+
+---
+ .../boot/dts/rockchip/rk3399-rsb4710-a2.dts   |  2 +-
+ .../rtl8822be/include/hal_com_h2c.h.rej       | 19 -------------------
+ 2 files changed, 1 insertion(+), 20 deletions(-)
+ delete mode 100755 drivers/net/wireless/rockchip_wlan/rtl8822be/include/hal_com_h2c.h.rej
+
+diff --git a/arch/arm64/boot/dts/rockchip/rk3399-rsb4710-a2.dts b/arch/arm64/boot/dts/rockchip/rk3399-rsb4710-a2.dts
+index 3dd240ac6..63c543a00 100755
+--- a/arch/arm64/boot/dts/rockchip/rk3399-rsb4710-a2.dts
++++ b/arch/arm64/boot/dts/rockchip/rk3399-rsb4710-a2.dts
+@@ -599,7 +599,7 @@
+ //	native-mode = <&lvds_g215hvn01>;
+ 
+ 	use-dts-screen = <1>;
+-	prmry-screen = <&hdmi_default>;
++	prmry-screen = <&edp_1920x1080>;
+ 	extend-screen = <&edp_1920x1080>;
+ };
+ 
+diff --git a/drivers/net/wireless/rockchip_wlan/rtl8822be/include/hal_com_h2c.h.rej b/drivers/net/wireless/rockchip_wlan/rtl8822be/include/hal_com_h2c.h.rej
+deleted file mode 100755
+index 15cb14d99..000000000
+--- a/drivers/net/wireless/rockchip_wlan/rtl8822be/include/hal_com_h2c.h.rej
++++ /dev/null
+@@ -1,19 +0,0 @@
+---- include/hal_com_h2c.h
+-+++ include/hal_com_h2c.h
+-@@ -585,7 +585,15 @@ s32 rtw_hal_customer_str_write(_adapter *adapter, const u8 *cs);
+- #define SET_H2CCMD_LPSPG_IQK_INFO_LOC(__pH2CCmd, __Value)	SET_BITS_TO_LE_1BYTE((__pH2CCmd) + 3, 0, 8, __Value)/*Loc_IQK_result*/
+- #endif
+- 
+--#define SET_H2CCMD_BT_UNKNOWN_DEVICE_WA_PARM(__pH2CCmd, __Value) SET_BITS_TO_LE_1BYTE(__pH2CCmd, 1, 1, __Value)
+-+/* BT_UNKNOWN_DEVICE_WA_0xD1 */
+-+#define SET_H2CCMD_BT_UNKNOWN_DEVICE_WA_HANG_CHK_EN(__pH2CCmd, __Value) \
+-+	SET_BITS_TO_LE_1BYTE(__pH2CCmd, 0, 1, __Value)
+-+#define SET_H2CCMD_BT_UNKNOWN_DEVICE_WA_FORCE_IB_EN(__pH2CCmd, __Value) \
+-+	SET_BITS_TO_LE_1BYTE(__pH2CCmd, 1, 1, __Value)
+-+#define SET_H2CCMD_BT_UNKNOWN_DEVICE_WA_HWID_CHK_EN(__pH2CCmd, __Value) \
+-+	SET_BITS_TO_LE_1BYTE(__pH2CCmd, 2, 1, __Value)
+-+#define SET_H2CCMD_BT_UNKNOWN_DEVICE_WA_ONE_TIME_CHK(__pH2CCmd, __Value) \
+-+	SET_BITS_TO_LE_1BYTE(__pH2CCmd, 3, 1, __Value)
+- 
+- #ifdef DBG_FW_DEBUG_MSG_PKT
+- #define SET_H2CCMD_FW_DBG_MSG_PKT_EN(__pH2CCmd, __Value)	SET_BITS_TO_LE_1BYTE(__pH2CCmd, 0, 1, __Value)/*sniffer_dbg_en*/
+-- 
+2.17.1
+

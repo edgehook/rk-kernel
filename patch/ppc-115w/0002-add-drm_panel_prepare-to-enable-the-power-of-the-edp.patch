@@ -1,0 +1,53 @@
+From 06eda17aa4f97423698d83ebf2b2c5afc70e48fb Mon Sep 17 00:00:00 2001
+From: "yao.kang" <yao.kang@advantech.com.cn>
+Date: Fri, 1 Apr 2022 17:26:14 +0800
+Subject: [PATCH 2/3] add drm_panel_prepare to enable the power of the edp
+ pannel before we get the edid
+
+---
+ arch/arm64/boot/dts/rockchip/rk3399-rsb4710-a2.dts | 2 +-
+ drivers/gpu/drm/bridge/analogix/analogix_dp_core.c | 8 +++++++-
+ 2 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/rockchip/rk3399-rsb4710-a2.dts b/arch/arm64/boot/dts/rockchip/rk3399-rsb4710-a2.dts
+index b749241cf..3dd240ac6 100755
+--- a/arch/arm64/boot/dts/rockchip/rk3399-rsb4710-a2.dts
++++ b/arch/arm64/boot/dts/rockchip/rk3399-rsb4710-a2.dts
+@@ -277,7 +277,7 @@
+ 		unprepare-delay-ms = <1>;
+ 		panel_type = <SCREEN_EDP>;
+ 
+-		display-timings = <&disp_timings>;
++		/*display-timings = <&disp_timings>;*/
+ 
+ 		ports {
+ 			panel_in_edp: endpoint {
+diff --git a/drivers/gpu/drm/bridge/analogix/analogix_dp_core.c b/drivers/gpu/drm/bridge/analogix/analogix_dp_core.c
+index 09bf1c843..4b0650dbe 100755
+--- a/drivers/gpu/drm/bridge/analogix/analogix_dp_core.c
++++ b/drivers/gpu/drm/bridge/analogix/analogix_dp_core.c
+@@ -837,7 +837,7 @@ static int analogix_dp_get_modes(struct drm_connector *connector)
+ {
+ 	struct analogix_dp_device *dp = to_dp(connector);
+ 	struct edid *edid;
+-	int num_modes = 0;
++	int ret, num_modes = 0;
+ 
+ 	if (dp->plat_data->panel) {
+ 		num_modes += drm_panel_get_modes(dp->plat_data->panel);
+@@ -846,6 +846,12 @@ static int analogix_dp_get_modes(struct drm_connector *connector)
+ 		/*
+ 		* Let's edp use edid.
+ 		*/
++		ret = drm_panel_prepare(dp->plat_data->panel);
++		if (ret) {
++			DRM_ERROR("Failed to prepare panel (%d)\n", ret);
++			return 0;
++		}
++
+ 		pm_runtime_get_sync(dp->dev);
+ 		edid = drm_get_edid(connector, &dp->aux.ddc);
+ 		pm_runtime_put(dp->dev);
+-- 
+2.17.1
+
