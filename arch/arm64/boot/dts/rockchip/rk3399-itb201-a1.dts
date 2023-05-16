@@ -994,6 +994,7 @@
 	i2c-scl-falling-time-ns = <15>;
 
 	rt5660: rt5660@1c {
+		status = "okay";
 		#sound-dai-cells = <0>;
 		compatible = "realtek,rt5660";
 		rockchip,cru = <&cru>;
@@ -1069,11 +1070,11 @@
 
 &i2s0 {
 	status = "okay";
-	pinctrl-0 = <&i2s0_8ch_bus_1 &codec_lout_mute>;
+	#sound-dai-cells = <0>;
 	rockchip,i2s-broken-burst-len;
 	rockchip,playback-channels = <8>;
 	rockchip,capture-channels = <8>;
-	#sound-dai-cells = <0>;
+	pinctrl-0 = <&i2s0_8ch_bus_1 &codec_lout_mute>;
 	amp-mute-gpio = <&gpio3 30 GPIO_ACTIVE_HIGH>;
 };
 

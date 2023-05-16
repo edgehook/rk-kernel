@@ -1,9 +1,12 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * rt5660.h  --  RT5660 ALSA SoC audio driver
  *
  * Copyright 2016 Realtek Semiconductor Corp.
  * Author: Oder Chiou <oder_chiou@realtek.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 
 #ifndef _RT5660_H
@@ -822,6 +825,8 @@
 #define RT5660_PLL1_S_MCLK			0
 #define RT5660_PLL1_S_BCLK			1
 
+#define RT5660_REG_DISP_LEN 18
+
 enum {
 	RT5660_AIF1,
 	RT5660_AIFS,
@@ -832,6 +837,10 @@ struct rt5660_priv {
 	struct rt5660_platform_data pdata;
 	struct regmap *regmap;
 	struct clk *mclk;
+#ifdef CONFIG_ARCH_ADVANTECH
+	unsigned long	rk_cru_base;
+	unsigned long	rk_grf_base;
+#endif
 
 	int sysclk;
 	int sysclk_src;
@@ -842,6 +851,17 @@ struct rt5660_priv {
 	int pll_src;
 	int pll_in;
 	int pll_out;
+
+	int codec_avdd_gpio;
+	int codec_avdd_gpio_active;
+	int codec_micvdd_gpio;
+	int codec_micvdd_gpio_active;
+	int codec_spkvdd_gpio;
+	int codec_spkvdd_gpio_active;
+	int amp_shutdown_gpio;
+	int amp_shutdown_gpio_active;
+	int amp_mute_gpio;
+	int amp_mute_gpio_active;
 };
 
 #endif

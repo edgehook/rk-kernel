@@ -1,10 +1,13 @@
-// SPDX-License-Identifier: GPL-2.0-only
 /* sound/soc/rockchip/rockchip_i2s.c
  *
  * ALSA SoC Audio Layer - Rockchip I2S Controller driver
  *
  * Copyright (c) 2014 Rockchip Electronics Co. Ltd.
  * Author: Jianqun <jay.xu@rock-chips.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 
 #include <linux/module.h>
@@ -15,9 +18,17 @@
 #include <linux/clk.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
+#include <linux/reset.h>
 #include <linux/spinlock.h>
 #include <sound/pcm_params.h>
 #include <sound/dmaengine_pcm.h>
+#ifdef CONFIG_ARCH_ADVANTECH
+#include <dt-bindings/gpio/gpio.h>
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
+#include <linux/workqueue.h>
+#include <linux/reboot.h>
+#endif
 
 #include "rockchip_i2s.h"
 
@@ -39,6 +50,8 @@ struct rk_i2s_dev {
 
 	struct regmap *regmap;
 	struct regmap *grf;
+	struct reset_control *reset_m;
+	struct reset_control *reset_h;
 
 	bool has_capture;
 	bool has_playback;
@@ -52,10 +65,21 @@ struct rk_i2s_dev {
 	bool rx_start;
 	bool is_master_mode;
 	const struct rk_i2s_pins *pins;
+	unsigned int bclk_fs;
+	unsigned int clk_trcm;
 	unsigned int bclk_ratio;
 	spinlock_t lock; /* tx/rx lock */
-	unsigned int clk_trcm;
+#ifdef CONFIG_ARCH_ADVANTECH
+	int amp_mute_gpio;
+	int amp_mute_gpio_active;
+	struct delayed_work work;
+	struct notifier_block reboot_notifier;
+	bool clk_enabled;
+#endif
 };
+
+/* txctrl/rxctrl lock */
+//static DEFINE_SPINLOCK(lock);
 
 static int i2s_runtime_suspend(struct device *dev)
 {
@@ -91,6 +115,21 @@ static int i2s_runtime_resume(struct device *dev)
 static inline struct rk_i2s_dev *to_info(struct snd_soc_dai *dai)
 {
 	return snd_soc_dai_get_drvdata(dai);
+}
+
+static void rockchip_i2s_reset(struct rk_i2s_dev *i2s)
+{
+	if (!IS_ERR(i2s->reset_m))
+		reset_control_assert(i2s->reset_m);
+	if (!IS_ERR(i2s->reset_h))
+		reset_control_assert(i2s->reset_h);
+	udelay(1);
+	if (!IS_ERR(i2s->reset_m))
+		reset_control_deassert(i2s->reset_m);
+	if (!IS_ERR(i2s->reset_h))
+		reset_control_deassert(i2s->reset_h);
+	regcache_mark_dirty(i2s->regmap);
+	regcache_sync(i2s->regmap);
 }
 
 static void rockchip_snd_txctrl(struct rk_i2s_dev *i2s, int on)
@@ -133,7 +172,8 @@ static void rockchip_snd_txctrl(struct rk_i2s_dev *i2s, int on)
 				regmap_read(i2s->regmap, I2S_CLR, &val);
 				retry--;
 				if (!retry) {
-					dev_warn(i2s->dev, "fail to clear\n");
+					dev_warn(i2s->dev, "reset\n");
+					rockchip_i2s_reset(i2s);
 					break;
 				}
 			}
@@ -182,7 +222,8 @@ static void rockchip_snd_rxctrl(struct rk_i2s_dev *i2s, int on)
 				regmap_read(i2s->regmap, I2S_CLR, &val);
 				retry--;
 				if (!retry) {
-					dev_warn(i2s->dev, "fail to clear\n");
+					dev_warn(i2s->dev, "reset\n");
+					rockchip_i2s_reset(i2s);
 					break;
 				}
 			}
@@ -421,10 +462,20 @@ static int rockchip_i2s_trigger(struct snd_pcm_substream *substream,
 			rockchip_snd_rxctrl(i2s, 1);
 		else
 			rockchip_snd_txctrl(i2s, 1);
+#ifdef CONFIG_ARCH_ADVANTECH
+		if (gpio_is_valid(i2s->amp_mute_gpio))
+			mod_delayed_work(system_wq, &i2s->work, msecs_to_jiffies(50));
+#endif
 		break;
 	case SNDRV_PCM_TRIGGER_SUSPEND:
 	case SNDRV_PCM_TRIGGER_STOP:
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
+#ifdef CONFIG_ARCH_ADVANTECH
+		if (gpio_is_valid(i2s->amp_mute_gpio))
+		{
+			gpio_direction_output(i2s->amp_mute_gpio, !i2s->amp_mute_gpio_active);
+		}
+#endif
 		if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
 			rockchip_snd_rxctrl(i2s, 0);
 		else
@@ -467,10 +518,16 @@ static int rockchip_i2s_set_sysclk(struct snd_soc_dai *cpu_dai, int clk_id,
 static int rockchip_i2s_dai_probe(struct snd_soc_dai *dai)
 {
 	struct rk_i2s_dev *i2s = snd_soc_dai_get_drvdata(dai);
-
 	snd_soc_dai_init_dma_data(dai,
 		i2s->has_playback ? &i2s->playback_dma_data : NULL,
 		i2s->has_capture  ? &i2s->capture_dma_data  : NULL);
+#ifdef CONFIG_ARCH_ADVANTECH
+	clk_prepare_enable(i2s->hclk);
+	clk_prepare_enable(i2s->mclk);
+	i2s->clk_enabled = true;
+#endif
+	dai->capture_dma_data = &i2s->capture_dma_data;
+	dai->playback_dma_data = &i2s->playback_dma_data;
 
 	return 0;
 }
@@ -485,6 +542,28 @@ static const struct snd_soc_dai_ops rockchip_i2s_dai_ops = {
 
 static struct snd_soc_dai_driver rockchip_i2s_dai = {
 	.probe = rockchip_i2s_dai_probe,
+	.playback = {
+		.stream_name = "Playback",
+		.channels_min = 2,
+		.channels_max = 8,
+		.rates = SNDRV_PCM_RATE_8000_192000,
+		.formats = (SNDRV_PCM_FMTBIT_S8 |
+			    SNDRV_PCM_FMTBIT_S16_LE |
+			    SNDRV_PCM_FMTBIT_S20_3LE |
+			    SNDRV_PCM_FMTBIT_S24_LE |
+			    SNDRV_PCM_FMTBIT_S32_LE),
+	},
+	.capture = {
+		.stream_name = "Capture",
+		.channels_min = 2,
+		.channels_max = 2,
+		.rates = SNDRV_PCM_RATE_8000_192000,
+		.formats = (SNDRV_PCM_FMTBIT_S8 |
+			    SNDRV_PCM_FMTBIT_S16_LE |
+			    SNDRV_PCM_FMTBIT_S20_3LE |
+			    SNDRV_PCM_FMTBIT_S24_LE |
+			    SNDRV_PCM_FMTBIT_S32_LE),
+	},
 	.ops = &rockchip_i2s_dai_ops,
 };
 
@@ -580,47 +659,18 @@ static const struct rk_i2s_pins rk3399_i2s_pins = {
 	.shift = 11,
 };
 
-static const struct of_device_id rockchip_i2s_match[] __maybe_unused = {
-#ifdef CONFIG_CPU_PX30
+static const struct of_device_id rockchip_i2s_match[] = {
 	{ .compatible = "rockchip,px30-i2s", },
-#endif
-#ifdef CONFIG_CPU_RK1808
 	{ .compatible = "rockchip,rk1808-i2s", },
-#endif
-#ifdef CONFIG_CPU_RK3036
 	{ .compatible = "rockchip,rk3036-i2s", },
-#endif
 	{ .compatible = "rockchip,rk3066-i2s", },
-#ifdef CONFIG_CPU_RK312X
 	{ .compatible = "rockchip,rk3128-i2s", },
-#endif
-#ifdef CONFIG_CPU_RK3188
 	{ .compatible = "rockchip,rk3188-i2s", },
-#endif
-#ifdef CONFIG_CPU_RK322X
-	{ .compatible = "rockchip,rk3228-i2s", },
-#endif
-#ifdef CONFIG_CPU_RK3288
 	{ .compatible = "rockchip,rk3288-i2s", },
-#endif
-#ifdef CONFIG_CPU_RK3308
 	{ .compatible = "rockchip,rk3308-i2s", },
-#endif
-#ifdef CONFIG_CPU_RK3328
 	{ .compatible = "rockchip,rk3328-i2s", },
-#endif
-#ifdef CONFIG_CPU_RK3366
-	{ .compatible = "rockchip,rk3366-i2s", },
-#endif
-#ifdef CONFIG_CPU_RK3368
 	{ .compatible = "rockchip,rk3368-i2s", },
-#endif
-#ifdef CONFIG_CPU_RK3399
 	{ .compatible = "rockchip,rk3399-i2s", .data = &rk3399_i2s_pins },
-#endif
-#ifdef CONFIG_CPU_RV1126
-	{ .compatible = "rockchip,rv1126-i2s", },
-#endif
 	{},
 };
 
@@ -705,19 +755,56 @@ static int rockchip_i2s_init_dai(struct rk_i2s_dev *i2s, struct resource *res,
 	return 0;
 }
 
+#ifdef CONFIG_ARCH_ADVANTECH
+static void i2s_mute_work_func(struct work_struct *work)
+{
+	struct rk_i2s_dev *i2s =
+		container_of(work, struct rk_i2s_dev, work.work);
+
+	if(gpio_is_valid(i2s->amp_mute_gpio))
+	{
+		gpio_direction_output(i2s->amp_mute_gpio, i2s->amp_mute_gpio_active);
+	}
+}
+
+static int rockchip_i2s_reboot_notify(struct notifier_block *this,
+			      unsigned long mode, void *cmd)
+{
+	struct rk_i2s_dev *i2s =
+			container_of(this, struct rk_i2s_dev, reboot_notifier);
+
+	if(i2s->clk_enabled)
+	{
+		//clk_disable_unprepare(i2s->mclk);
+		//clk_disable_unprepare(i2s->hclk);
+	}
+
+	if (gpio_is_valid(i2s->amp_mute_gpio))
+			cancel_delayed_work(&i2s->work);
+
+	return NOTIFY_DONE;
+}
+#endif
+
 static int rockchip_i2s_probe(struct platform_device *pdev)
 {
 	struct device_node *node = pdev->dev.of_node;
 	const struct of_device_id *of_id;
 	struct rk_i2s_dev *i2s;
-	struct snd_soc_dai_driver *dai;
+	struct snd_soc_dai_driver *soc_dai;
 	struct resource *res;
 	void __iomem *regs;
 	int ret;
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	enum of_gpio_flags flags;
+#endif
+
 	i2s = devm_kzalloc(&pdev->dev, sizeof(*i2s), GFP_KERNEL);
-	if (!i2s)
+	if (!i2s) {
+		dev_err(&pdev->dev, "Can't allocate rk_i2s_dev\n");
 		return -ENOMEM;
+	}
 
 	spin_lock_init(&i2s->lock);
 	i2s->dev = &pdev->dev;
@@ -730,6 +817,9 @@ static int rockchip_i2s_probe(struct platform_device *pdev)
 
 		i2s->pins = of_id->data;
 	}
+
+	i2s->reset_m = devm_reset_control_get(&pdev->dev, "reset-m");
+	i2s->reset_h = devm_reset_control_get(&pdev->dev, "reset-h");
 
 	regs = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
 	if (IS_ERR(regs))
@@ -753,17 +843,73 @@ static int rockchip_i2s_probe(struct platform_device *pdev)
 		return PTR_ERR(i2s->mclk);
 	}
 
+#ifdef CONFIG_ARCH_ADVANTECH
+	//clk_disable_unprepare(i2s->mclk);
+	clk_disable_unprepare(i2s->hclk);
+	i2s->clk_enabled = false;
+	i2s->amp_mute_gpio = of_get_named_gpio_flags(node, "amp-mute-gpio", 0, &flags);
+	if (gpio_is_valid(i2s->amp_mute_gpio)) {
+		ret = devm_gpio_request(&pdev->dev, i2s->amp_mute_gpio, "amp-mute-gpio");
+		if(ret){
+			dev_err(&pdev->dev,"amp_mute_gpio request ERROR:%d\n",ret);
+			return ret;
+		}
+		i2s->amp_mute_gpio_active = (flags == GPIO_ACTIVE_HIGH)? 1:0;
+		dev_err(&pdev->dev,"XXX amp gpio val :%d\n",i2s->amp_mute_gpio_active);
+		ret = gpio_direction_output(i2s->amp_mute_gpio, !i2s->amp_mute_gpio_active);
+		if(ret){
+			dev_err(&pdev->dev,"amp_mute_gpio set ERROR:%d\n",ret);
+			return ret;
+		}
+		INIT_DELAYED_WORK(&i2s->work, i2s_mute_work_func);
+	} else {
+		dev_err(&pdev->dev,"Can not read property amp-mute-gpio\n");
+	}
+	i2s->reboot_notifier.notifier_call = rockchip_i2s_reboot_notify;
+	register_reboot_notifier(&i2s->reboot_notifier);
+#endif
 	/* try to prepare related clocks */
 	i2s->hclk = devm_clk_get(&pdev->dev, "i2s_hclk");
 	if (IS_ERR(i2s->hclk)) {
 		dev_err(&pdev->dev, "Can't retrieve i2s bus clock\n");
 		return PTR_ERR(i2s->hclk);
 	}
+#ifndef CONFIG_ARCH_ADVANTECH
 	ret = clk_prepare_enable(i2s->hclk);
 	if (ret) {
 		dev_err(i2s->dev, "hclock enable failed %d\n", ret);
 		return ret;
 	}
+#endif
+
+	i2s->mclk = devm_clk_get(&pdev->dev, "i2s_clk");
+	if (IS_ERR(i2s->mclk)) {
+		dev_err(&pdev->dev, "Can't retrieve i2s master clock\n");
+		return PTR_ERR(i2s->mclk);
+	}
+
+	// res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	// regs = devm_ioremap_resource(&pdev->dev, res);
+	// if (IS_ERR(regs))
+	// 	return PTR_ERR(regs);
+
+	// i2s->regmap = devm_regmap_init_mmio(&pdev->dev, regs,
+	// 				    &rockchip_i2s_regmap_config);
+	// if (IS_ERR(i2s->regmap)) {
+	// 	dev_err(&pdev->dev,
+	// 		"Failed to initialise managed register map\n");
+	// 	return PTR_ERR(i2s->regmap);
+	// }
+
+	i2s->playback_dma_data.addr = res->start + I2S_TXDR;
+	i2s->playback_dma_data.addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
+	i2s->playback_dma_data.maxburst = 8;
+
+	i2s->capture_dma_data.addr = res->start + I2S_RXDR;
+	i2s->capture_dma_data.addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
+	i2s->capture_dma_data.maxburst = 8;
+
+	dev_set_drvdata(&pdev->dev, i2s);
 
 	pm_runtime_enable(&pdev->dev);
 	if (!pm_runtime_enabled(&pdev->dev)) {
@@ -772,13 +918,13 @@ static int rockchip_i2s_probe(struct platform_device *pdev)
 			goto err_pm_disable;
 	}
 
-	ret = rockchip_i2s_init_dai(i2s, res, &dai);
+	ret = rockchip_i2s_init_dai(i2s, res, &soc_dai);
 	if (ret)
 		goto err_pm_disable;
 
 	ret = devm_snd_soc_register_component(&pdev->dev,
 					      &rockchip_i2s_component,
-					      dai, 1);
+					      soc_dai, 1);
 
 	if (ret) {
 		dev_err(&pdev->dev, "Could not register DAI\n");
@@ -786,12 +932,11 @@ static int rockchip_i2s_probe(struct platform_device *pdev)
 	}
 
 	if (of_property_read_bool(node, "rockchip,no-dmaengine"))
-		return 0;
-
+		return ret;
 	ret = devm_snd_dmaengine_pcm_register(&pdev->dev, NULL, 0);
 	if (ret) {
 		dev_err(&pdev->dev, "Could not register PCM\n");
-		goto err_suspend;
+		return ret;
 	}
 
 	return 0;
@@ -815,26 +960,70 @@ static int rockchip_i2s_remove(struct platform_device *pdev)
 	if (!pm_runtime_status_suspended(&pdev->dev))
 		i2s_runtime_suspend(&pdev->dev);
 
+	clk_disable_unprepare(i2s->mclk);
 	clk_disable_unprepare(i2s->hclk);
 
 	return 0;
 }
 
+#ifdef CONFIG_PM_SLEEP
+static int rockchip_i2s_suspend(struct device *dev)
+{
+	struct rk_i2s_dev *i2s = dev_get_drvdata(dev);
+
+	regcache_mark_dirty(i2s->regmap);
+
+	return 0;
+}
+
+static int rockchip_i2s_resume(struct device *dev)
+{
+	struct rk_i2s_dev *i2s = dev_get_drvdata(dev);
+	int ret;
+
+	ret = pm_runtime_get_sync(dev);
+	if (ret < 0)
+		return ret;
+	ret = regcache_sync(i2s->regmap);
+	pm_runtime_put(dev);
+
+	return ret;
+}
+#endif
+
 static const struct dev_pm_ops rockchip_i2s_pm_ops = {
 	SET_RUNTIME_PM_OPS(i2s_runtime_suspend, i2s_runtime_resume,
 			   NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(rockchip_i2s_suspend, rockchip_i2s_resume)
 };
 
 static struct platform_driver rockchip_i2s_driver = {
 	.probe = rockchip_i2s_probe,
 	.remove = rockchip_i2s_remove,
+
 	.driver = {
 		.name = DRV_NAME,
 		.of_match_table = of_match_ptr(rockchip_i2s_match),
 		.pm = &rockchip_i2s_pm_ops,
 	},
 };
+
+#ifdef CONFIG_ARCH_ADVANTECH
+static int __init rockchip_i2s_driver_init(void)
+{
+	return platform_driver_register(&rockchip_i2s_driver);
+}
+
+static void __exit rockchip_i2s_driver_exit(void)
+{
+	platform_driver_unregister(&rockchip_i2s_driver);
+}
+
+device_initcall_sync(rockchip_i2s_driver_init);
+module_exit(rockchip_i2s_driver_exit);
+#else
 module_platform_driver(rockchip_i2s_driver);
+#endif
 
 MODULE_DESCRIPTION("ROCKCHIP IIS ASoC Interface");
 MODULE_AUTHOR("jianqun <jay.xu@rock-chips.com>");

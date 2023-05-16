@@ -1,9 +1,12 @@
-// SPDX-License-Identifier: GPL-2.0-only
 /*
  * rt5660.c  --  RT5660 ALSA SoC audio codec driver
  *
  * Copyright 2016 Realtek Semiconductor Corp.
  * Author: Oder Chiou <oder_chiou@realtek.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 
 #include <linux/module.h>
@@ -19,6 +22,7 @@
 #include <linux/platform_device.h>
 #include <linux/spi/spi.h>
 #include <linux/acpi.h>
+#include <linux/device.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -26,6 +30,12 @@
 #include <sound/soc-dapm.h>
 #include <sound/initval.h>
 #include <sound/tlv.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
+#ifdef CONFIG_ARCH_ADVANTECH
+#include <linux/of_address.h>
+#endif
 
 #include "rl6231.h"
 #include "rt5660.h"
@@ -51,6 +61,28 @@ static const struct reg_sequence rt5660_patch[] = {
 	{ RT5660_ALC_PGA_CTRL2,		0x44c3 },
 	{ RT5660_PR_BASE + 0x3d,	0x2600 },
 };
+
+
+static const struct reg_default rt5660_init_reg[] = {
+	{ 0x01, 0x0000 },
+	{ 0x02, 0x0000 },
+	{ 0x0d, 0x1111 },
+	{ 0x0e, 0x1110 },
+	{ 0x1c, 0x5959 },
+	{ 0x1e, 0x5000 },
+	{ 0x27, 0x2020 },
+	{ 0x2a, 0x0202 },
+	{ 0x3c, 0x007d },
+	{ 0x3e, 0x007d },
+	{ 0x45, 0xa000 },
+	{ 0x46, 0x001a },
+	{ 0x48, 0xe800 },
+	{ 0x4f, 0x01fe },
+	{ 0x52, 0x01fe },
+	{ 0x6a, 0x00f3 },
+	{ 0x6c, 0x0000 },
+};
+
 
 static const struct reg_default rt5660_reg[] = {
 	{ 0x00, 0x0000 },
@@ -305,8 +337,13 @@ static const struct snd_kcontrol_new rt5660_snd_controls[] = {
 	/* Speaker Output Volume */
 	SOC_SINGLE("Speaker Playback Switch", RT5660_SPK_VOL, RT5660_L_MUTE_SFT,
 		1, 1),
+#ifdef CONFIG_ARCH_ADVANTECH
+	SOC_SINGLE_TLV("DAC1 Playback Volume", RT5660_SPK_VOL,
+		RT5660_L_VOL_SFT, 39, 1, rt5660_out_vol_tlv),
+#else
 	SOC_SINGLE_TLV("Speaker Playback Volume", RT5660_SPK_VOL,
 		RT5660_L_VOL_SFT, 39, 1, rt5660_out_vol_tlv),
+#endif
 
 	/* OUTPUT Control */
 	SOC_DOUBLE("OUT Playback Switch", RT5660_LOUT_VOL, RT5660_L_MUTE_SFT,
@@ -315,9 +352,15 @@ static const struct snd_kcontrol_new rt5660_snd_controls[] = {
 		RT5660_R_VOL_SFT, 39, 1, rt5660_out_vol_tlv),
 
 	/* DAC Digital Volume */
+#ifdef CONFIG_ARCH_ADVANTECH
+	SOC_DOUBLE_TLV("Speaker Playback Volume", RT5660_DAC1_DIG_VOL,
+		RT5660_DAC_L1_VOL_SFT, RT5660_DAC_R1_VOL_SFT, 87, 0,
+		rt5660_dac_vol_tlv),
+#else
 	SOC_DOUBLE_TLV("DAC1 Playback Volume", RT5660_DAC1_DIG_VOL,
 		RT5660_DAC_L1_VOL_SFT, RT5660_DAC_R1_VOL_SFT, 87, 0,
 		rt5660_dac_vol_tlv),
+#endif
 
 	/* IN1/IN2/IN3 Control */
 	SOC_SINGLE_TLV("IN1 Boost Volume", RT5660_IN1_IN2, RT5660_BST_SFT1, 69,
@@ -539,15 +582,26 @@ static int rt5660_lout_event(struct snd_soc_dapm_widget *w,
 	struct snd_kcontrol *kcontrol, int event)
 {
 	struct snd_soc_component *component = snd_soc_dapm_to_component(w->dapm);
+	struct rt5660_priv *rt5660 = snd_soc_card_get_drvdata(component->card);
 
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
 		snd_soc_component_update_bits(component, RT5660_LOUT_AMP_CTRL,
 			RT5660_LOUT_CO_MASK | RT5660_LOUT_CB_MASK,
 			RT5660_LOUT_CO_EN | RT5660_LOUT_CB_PU);
+		if (gpio_is_valid(rt5660->amp_mute_gpio))
+		{
+			mdelay(50);
+			gpio_direction_output(rt5660->amp_mute_gpio, rt5660->amp_mute_gpio_active);
+		}
 		break;
 
 	case SND_SOC_DAPM_PRE_PMD:
+		if (gpio_is_valid(rt5660->amp_mute_gpio))
+		{
+			gpio_direction_output(rt5660->amp_mute_gpio, !rt5660->amp_mute_gpio_active);
+			mdelay(50);
+		}
 		snd_soc_component_update_bits(component, RT5660_LOUT_AMP_CTRL,
 			RT5660_LOUT_CO_MASK | RT5660_LOUT_CB_MASK,
 			RT5660_LOUT_CO_DIS | RT5660_LOUT_CB_PD);
@@ -1119,11 +1173,82 @@ static int rt5660_set_bias_level(struct snd_soc_component *component,
 	return 0;
 }
 
+static ssize_t rt5660_codec_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct rt5660_priv *rt5660 = i2c_get_clientdata(client);
+	struct snd_soc_component *component = rt5660->component;
+	unsigned int val;
+	int cnt = 0, i;
+
+	for (i = 0; i <= RT5660_VENDOR_ID2; i++) {
+		if (cnt + RT5660_REG_DISP_LEN >= PAGE_SIZE)
+			break;
+		val = snd_soc_component_read(component, i);
+		if ((!val) || (-1 == val))
+			continue;
+		cnt += snprintf(buf + cnt, RT5660_REG_DISP_LEN,
+				"reg=%02x  val=%04x\n", i, val);
+	}
+
+	if (cnt >= PAGE_SIZE)
+		cnt = PAGE_SIZE - 1;
+
+	return cnt;
+}
+
+static ssize_t rt5660_codec_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct rt5660_priv *rt5660 = i2c_get_clientdata(client);
+	struct snd_soc_component *component = rt5660->component;
+	unsigned int val = 0, addr = 0;
+	int i;
+
+	for (i = 0; i < count; i++) {
+		if (*(buf + i) <= '9' && *(buf + i) >= '0')
+			addr = (addr << 4) | (*(buf + i) - '0');
+		else if (*(buf + i) <= 'f' && *(buf + i) >= 'a')
+			addr = (addr << 4) | ((*(buf + i)-'a') + 0xa);
+		else if (*(buf + i) <= 'F' && *(buf + i) >= 'A')
+			addr = (addr << 4) | ((*(buf + i)-'A') + 0xa);
+		else
+			break;
+	}
+
+	for (i = i + 1; i < count; i++) {
+		if (*(buf + i) <= '9' && *(buf + i) >= '0')
+			val = (val << 4) | (*(buf + i)-'0');
+		else if (*(buf + i) <= 'f' && *(buf + i) >= 'a')
+			val = (val << 4) | ((*(buf + i)-'a') + 0xa);
+		else if (*(buf + i) <= 'F' && *(buf + i) >= 'A')
+			val = (val << 4) | ((*(buf + i)-'A') + 0xa);
+		else
+			break;
+	}
+	pr_debug("addr=0x%x val=0x%x\n", addr, val);
+	if (addr > RT5660_VENDOR_ID2 || val > 0xffff || val < 0)
+		return count;
+
+	if (i == count)
+		pr_info("0x%02x = 0x%04x\n", addr, snd_soc_component_read(component, addr));
+	else
+		snd_soc_component_write(component, addr, val);
+
+
+	return count;
+}
+
+static DEVICE_ATTR(codec_reg, 0664, rt5660_codec_show, rt5660_codec_store);
+
 static int rt5660_probe(struct snd_soc_component *component)
 {
 	struct rt5660_priv *rt5660 = snd_soc_component_get_drvdata(component);
 
 	rt5660->component = component;
+	device_create_file(component->dev, &dev_attr_codec_reg);
 
 	return 0;
 }
@@ -1200,6 +1325,7 @@ static const struct snd_soc_component_driver soc_component_dev_rt5660 = {
 	.suspend		= rt5660_suspend,
 	.resume			= rt5660_resume,
 	.set_bias_level		= rt5660_set_bias_level,
+	.idle_bias_on = false,
 	.controls		= rt5660_snd_controls,
 	.num_controls		= ARRAY_SIZE(rt5660_snd_controls),
 	.dapm_widgets		= rt5660_dapm_widgets,
@@ -1241,17 +1367,119 @@ static const struct of_device_id rt5660_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, rt5660_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id rt5660_acpi_match[] = {
 	{ "10EC5660", 0 },
-	{ "10EC3277", 0 },
 	{ },
 };
 MODULE_DEVICE_TABLE(acpi, rt5660_acpi_match);
-#endif
 
 static int rt5660_parse_dt(struct rt5660_priv *rt5660, struct device *dev)
 {
+#ifdef CONFIG_ARCH_ADVANTECH
+	struct device_node *node = dev->of_node;
+	int ret;
+	int delay_time;
+	enum of_gpio_flags flags;
+
+	if (!node)
+		return -ENODEV;
+
+	rt5660->codec_spkvdd_gpio = of_get_named_gpio_flags(node, "codec-spkvdd-gpio", 0, &flags);
+	if (gpio_is_valid(rt5660->codec_spkvdd_gpio)) {
+		ret = devm_gpio_request(dev, rt5660->codec_spkvdd_gpio, "codec-spkvdd-gpio");
+		if(ret){
+			dev_err(dev,"codec_spkvdd_gpio request ERROR:%d\n",ret);
+			return ret;
+		}
+		rt5660->codec_spkvdd_gpio_active = (flags == GPIO_ACTIVE_HIGH)? 1:0;
+		ret = gpio_direction_output(rt5660->codec_spkvdd_gpio, rt5660->codec_spkvdd_gpio_active);
+		if(ret){
+			dev_err(dev,"codec_spkvdd_gpio set ERROR:%d\n",ret);
+			return ret;
+		}
+		mdelay(5);
+	} else {
+		dev_err(dev,"Can not read property codec-spkvdd-gpio\n");
+	}
+
+	rt5660->codec_avdd_gpio = of_get_named_gpio_flags(node, "codec-avdd-gpio", 0, &flags);
+	if (gpio_is_valid(rt5660->codec_avdd_gpio)) {
+		ret = devm_gpio_request(dev, rt5660->codec_avdd_gpio, "codec-avdd-gpio");
+		if(ret){
+			dev_err(dev,"codec_avdd_gpio request ERROR:%d\n",ret);
+			return ret;
+		}
+		rt5660->codec_avdd_gpio_active = (flags == GPIO_ACTIVE_HIGH)? 1:0;
+		ret = gpio_direction_output(rt5660->codec_avdd_gpio, rt5660->codec_avdd_gpio_active);
+		if(ret){
+			dev_err(dev,"codec_avdd_gpio set ERROR:%d\n",ret);
+			return ret;
+		}
+
+		if(of_property_read_u32(node,"codec-avdd-delay",&delay_time))
+		{
+			dev_err(dev,"codec-avdd-delay time get error,use default delay time\n");
+			delay_time = 5;
+		}
+		dev_dbg(dev,"codec-avdd-delay delay time=%d\n",delay_time);
+		mdelay(delay_time);
+	} else {
+		dev_err(dev,"Can not read property codec-avdd-gpio\n");
+	}
+
+	rt5660->codec_micvdd_gpio = of_get_named_gpio_flags(node, "codec-micvdd-gpio", 0, &flags);
+	if (gpio_is_valid(rt5660->codec_micvdd_gpio)) {
+		ret = devm_gpio_request(dev, rt5660->codec_micvdd_gpio, "codec-micvdd-gpio");
+		if(ret){
+			dev_err(dev,"codec_micvdd_gpio request ERROR:%d\n",ret);
+			return ret;
+		}
+		rt5660->codec_micvdd_gpio_active = (flags == GPIO_ACTIVE_HIGH)? 1:0;
+		ret = gpio_direction_output(rt5660->codec_micvdd_gpio, rt5660->codec_micvdd_gpio_active);
+		if(ret){
+			dev_err(dev,"codec_micvdd_gpio set ERROR:%d\n",ret);
+			return ret;
+		}
+	} else {
+		dev_err(dev,"Can not read property codec-micvdd-gpio\n");
+	}
+
+	// rt5660->amp_shutdown_gpio = of_get_named_gpio_flags(node, "amp-shutdown-gpio", 0, &flags);
+	// if (gpio_is_valid(rt5660->amp_shutdown_gpio)) {
+	// 	ret = devm_gpio_request(dev, rt5660->amp_shutdown_gpio, "amp-shutdown-gpio");
+	// 	if(ret){
+	// 		dev_err(dev,"amp_shutdown_gpio request ERROR:%d\n",ret);
+	// 		return ret;
+	// 	}
+	// 	rt5660->amp_shutdown_gpio_active = (flags == GPIO_ACTIVE_HIGH)? 1:0;
+	// 	//always enable
+	// 	ret = gpio_direction_output(rt5660->amp_shutdown_gpio, rt5660->amp_shutdown_gpio_active);
+	// 	if(ret){
+	// 		dev_err(dev,"amp_shutdown_gpio set ERROR:%d\n",ret);
+	// 		return ret;
+	// 	}
+	// } else {
+	// 	dev_err(dev,"Can not read property amp-shutdown-gpio\n");
+	// }
+
+	// rt5660->amp_mute_gpio = of_get_named_gpio_flags(node, "amp-mute-gpio", 0, &flags);
+	// if (gpio_is_valid(rt5660->amp_mute_gpio)) {
+	// 	ret = devm_gpio_request(dev, rt5660->amp_mute_gpio, "amp-mute-gpio");
+	// 	if(ret){
+	// 		dev_err(dev,"amp_mute_gpio request ERROR:%d\n",ret);
+	// 		return ret;
+	// 	}
+	// 	rt5660->amp_mute_gpio_active = (flags == GPIO_ACTIVE_HIGH)? 1:0;
+	// 	ret = gpio_direction_output(rt5660->amp_mute_gpio, rt5660->amp_mute_gpio_active);
+	// 	if(ret){
+	// 		dev_err(dev,"amp_mute_gpio set ERROR:%d\n",ret);
+	// 		return ret;
+	// 	}
+	// } else {
+	// 	dev_err(dev,"Can not read property amp-mute-gpio\n");
+	// }
+#endif
+
 	rt5660->pdata.in1_diff = device_property_read_bool(dev,
 					"realtek,in1-differential");
 	rt5660->pdata.in3_diff = device_property_read_bool(dev,
@@ -1264,6 +1492,20 @@ static int rt5660_parse_dt(struct rt5660_priv *rt5660, struct device *dev)
 	return 0;
 }
 
+static void rt5660_init(struct regmap *init_regmap)
+{
+    int i = 0;
+	int ret;
+	int count = ARRAY_SIZE(rt5660_init_reg);
+	
+	for(i = 0; i < count; i++)
+	{
+		ret = regmap_write(init_regmap, rt5660_init_reg[i].reg, rt5660_init_reg[i].def);
+	}
+    
+}
+
+
 static int rt5660_i2c_probe(struct i2c_client *i2c,
 		    const struct i2c_device_id *id)
 {
@@ -1271,6 +1513,9 @@ static int rt5660_i2c_probe(struct i2c_client *i2c,
 	struct rt5660_priv *rt5660;
 	int ret;
 	unsigned int val;
+#ifdef CONFIG_ARCH_ADVANTECH
+	struct device_node *node;
+#endif
 
 	rt5660 = devm_kzalloc(&i2c->dev, sizeof(struct rt5660_priv),
 		GFP_KERNEL);
@@ -1289,6 +1534,19 @@ static int rt5660_i2c_probe(struct i2c_client *i2c,
 		rt5660->pdata = *pdata;
 	else if (i2c->dev.of_node)
 		rt5660_parse_dt(rt5660, &i2c->dev);
+
+#ifdef CONFIG_ARCH_ADVANTECH
+	node = of_parse_phandle(i2c->dev.of_node, "rockchip,cru", 0);
+	if(node)
+		rt5660->rk_cru_base = (unsigned long)of_iomap(node, 0);
+	else
+		dev_err(&i2c->dev, "No rockchip,cru phandle specified");
+	node = of_parse_phandle(i2c->dev.of_node, "rockchip,grf", 0);
+	if(node)
+		rt5660->rk_grf_base = (unsigned long)of_iomap(node, 0);
+	else
+		dev_err(&i2c->dev, "No rockchip,grf phandle specified");
+#endif
 
 	rt5660->regmap = devm_regmap_init_i2c(i2c, &rt5660_regmap);
 	if (IS_ERR(rt5660->regmap)) {
@@ -1330,10 +1588,40 @@ static int rt5660_i2c_probe(struct i2c_client *i2c,
 				RT5660_SEL_DMIC_DATA_IN1P);
 	}
 
+	rt5660_init(rt5660->regmap);
 	return devm_snd_soc_register_component(&i2c->dev,
 				      &soc_component_dev_rt5660,
 				      rt5660_dai, ARRAY_SIZE(rt5660_dai));
 }
+
+static int rt5660_i2c_remove(struct i2c_client *i2c)
+{
+	snd_soc_unregister_component(&i2c->dev);
+
+	return 0;
+}
+
+#ifdef CONFIG_ARCH_ADVANTECH
+void rt5660_i2c_shutdown(struct i2c_client *client)
+{
+	struct rt5660_priv *rt5660 = i2c_get_clientdata(client);
+	struct snd_soc_component *component = rt5660->component;
+
+	if (component != NULL)
+		rt5660_set_bias_level(component, SND_SOC_BIAS_OFF);
+
+	mdelay(230);
+
+	if(gpio_is_valid(rt5660->codec_micvdd_gpio))
+		gpio_direction_output(rt5660->codec_micvdd_gpio, !rt5660->codec_micvdd_gpio_active);
+	mdelay(40);
+	if(gpio_is_valid(rt5660->codec_avdd_gpio))
+		gpio_direction_output(rt5660->codec_avdd_gpio, !rt5660->codec_avdd_gpio_active);
+	mdelay(5);
+	if(gpio_is_valid(rt5660->codec_spkvdd_gpio))
+		gpio_direction_output(rt5660->codec_spkvdd_gpio, !rt5660->codec_spkvdd_gpio_active);
+}
+#endif
 
 static struct i2c_driver rt5660_i2c_driver = {
 	.driver = {
@@ -1342,6 +1630,10 @@ static struct i2c_driver rt5660_i2c_driver = {
 		.of_match_table = of_match_ptr(rt5660_of_match),
 	},
 	.probe = rt5660_i2c_probe,
+	.remove   = rt5660_i2c_remove,
+#ifdef CONFIG_ARCH_ADVANTECH
+	.shutdown = rt5660_i2c_shutdown,
+#endif
 	.id_table = rt5660_i2c_id,
 };
 module_i2c_driver(rt5660_i2c_driver);

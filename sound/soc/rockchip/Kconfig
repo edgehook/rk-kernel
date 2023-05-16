@@ -99,6 +99,15 @@ config SND_SOC_ROCKCHIP_RT5645
 	  Say Y or M here if you want to add support for SoC audio on Rockchip
 	  boards using the RT5645/RT5650 codec, such as Veyron.
 
+config SND_SOC_ROCKCHIP_RT5660
+	tristate "ASoC support for Rockchip boards using a RT5660 codec"
+	depends on SND_SOC_ROCKCHIP && I2C && GPIOLIB && CLKDEV_LOOKUP
+	select SND_SOC_ROCKCHIP_I2S
+	select SND_SOC_RT5660
+	help
+	  Say Y or M here if you want to add support for SoC audio on Rockchip
+	  boards using the RT5645/RT5650 codec, such as Veyron.
+
 config SND_SOC_ROCKCHIP_HDMI
 	tristate "ASoC support for Rockchip HDMI audio"
 	depends on SND_SOC_ROCKCHIP && CLKDEV_LOOKUP
