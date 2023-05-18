@@ -65,24 +65,6 @@
 #include "console_cmdline.h"
 #include "braille.h"
 
-#ifdef CONFIG_PRINTK_TIME_FROM_ARM_ARCH_TIMER
-#include <clocksource/arm_arch_timer.h>
-static u64 get_local_clock(void)
-{
-	u64 ns;
-
-	ns = arch_timer_read_counter() * 1000;
-	do_div(ns, 24);
-
-	return ns;
-}
-#else
-static inline u64 get_local_clock(void)
-{
-	return local_clock();
-}
-#endif
-
 int console_printk[4] = {
 	CONSOLE_LOGLEVEL_DEFAULT,	/* console_loglevel */
 	MESSAGE_LOGLEVEL_DEFAULT,	/* default_message_loglevel */

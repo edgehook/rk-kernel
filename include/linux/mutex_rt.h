@@ -18,6 +18,22 @@ struct mutex {
 #endif
 };
 
+struct ww_class;
+struct ww_acquire_ctx;
+
+/*
+ * This is the control structure for tasks blocked on mutex,
+ * which resides on the blocked task's kernel stack:
+ */
+struct mutex_waiter {
+       struct list_head        list;
+       struct task_struct      *task;
+       struct ww_acquire_ctx   *ww_ctx;
+#ifdef CONFIG_DEBUG_MUTEXES
+       void                    *magic;
+#endif
+};
+
 #define __MUTEX_INITIALIZER(mutexname)					\
 	{								\
 		.lock = __RT_MUTEX_INITIALIZER(mutexname.lock)		\
