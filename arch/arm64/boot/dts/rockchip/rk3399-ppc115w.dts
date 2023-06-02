@@ -26,8 +26,8 @@
 #include <dt-bindings/display/screen-timing/lcd-lvds2hdmi-1920x1080.dtsi>
 
 / {
-	model = "Advantech RSB4710 A2";
-	compatible = "rockchip,rk3399-rsb4710-a2", "rockchip,rk3399";
+	model = "Advantech PPC115W";
+	compatible = "rockchip,rk3399-ppc115w", "rockchip,rk3399";
 	
 	aliases {
 		edp = &edp;
@@ -74,16 +74,27 @@
 		mmc2 = &sdmmc;
 	};
 
-	chosen {
-		stdout-path = "serial2:115200n8";
-	};
-
 	fdt_dummy {
 		status = "disabled";
 		value = < 0 1 2 3 4 5 6 7 8 9
 				  0 1 2 3 4 5 6 7 8 9
 				  0 1 2 3 4 5 6 7 8 9
 				  0 1 2 3 4 5 6 7 8 9 >;
+	};
+
+	rk_key: rockchip-key {
+		compatible = "rockchip,key";
+		status = "okay";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pmic_pwr_key>;
+
+		power-key {
+			gpios = <&gpio0 5 GPIO_ACTIVE_LOW>;
+			linux,code = <116>;
+			label = "GPIO Power Key";
+			gpio-key,wakeup = <1>;
+			polling-release-time = <1000>;//unit:ms
+		};
 	};
 
 	misc-adv-gpio {
@@ -231,8 +242,6 @@
 		unprepare-delay-ms = <1>;
 		panel_type = <9>;
 
-		display-timings = <&disp_timings>;
-
 		ports {
 			#address-cells = <1>;
 			#size-cells = <0>;
@@ -301,6 +310,7 @@
 		status = "disabled";
 	};
 
+    /* DP hot plug detect */
 	vpd0: virtual-pd0 {
 		compatible = "linux,extcon-pd-virtual";
 		dp-det-gpios = <&gpio4 25 GPIO_ACTIVE_LOW>;
@@ -359,6 +369,7 @@
 		};
 	};
 
+	/* 1000M PHY */
 	clkin_gmac: external-gmac-clock {
 		compatible = "fixed-clock";
 		clock-frequency = <125000000>;
@@ -366,6 +377,7 @@
 		#clock-cells = <0>;
 	};
 
+    /* WIFI */
 	sdio_pwrseq: sdio-pwrseq {
 		compatible = "mmc-pwrseq-simple";
 		clocks = <&rk808 1>;
@@ -558,9 +570,9 @@
 //	native-mode = <&lvds_g150xgel05>;
 //	native-mode = <&lvds_g215hvn01>;
 
-	use-dts-screen = <0>;
-	prmry-screen = <&hdmi_default>;
-	extend-screen = <&dp_default>;
+	use-dts-screen = <1>;
+	prmry-screen = <&edp_1920x1080>;
+	extend-screen = <&edp_1920x1080>;
 };
 
 // edp
@@ -711,6 +723,7 @@
 	status = "disabled";
 };
 
+/*1000M PHY*/
 &gmac {
 	phy-supply = <&vcc_phy>;
 	phy-mode = "rgmii";
@@ -1144,6 +1157,7 @@
 	status = "okay";
 };
 
+/* flash & emmc & sdcard*/
 &sdhci {
 	bus-width = <8>;
 	mmc-hs400-1_8v;
@@ -1209,6 +1223,7 @@
 	status = "disabled";
 };
 
+/* USB */
 &tcphy0 {
 	extcon = <&vpd0>;
 	status = "okay";
