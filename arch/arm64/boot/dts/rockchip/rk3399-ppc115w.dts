@@ -1258,7 +1258,6 @@
 };
 
 &usbdrd3_0 {
-	extcon = <&u2phy0>;
 	status = "okay";
 };
 
@@ -1267,9 +1266,12 @@
 };
 
 &usbdrd_dwc3_0 {
+	extcon = <&u2phy0>;
+	status = "okay";
 	dr_mode = "otg";
 	maximum-speed = "high-speed";
-	status = "okay";
+	phys = <&u2phy0_otg>;
+	phy-names = "usb2-phy";
 };
 
 &usbdrd_dwc3_1 {
