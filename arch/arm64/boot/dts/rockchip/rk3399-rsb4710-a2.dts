@@ -1211,7 +1211,7 @@
 
 &tcphy0 {
 	extcon = <&vpd0>;
-	status = "okay";
+	status = "disabled";
 };
 
 &tcphy1 {
@@ -1220,15 +1220,9 @@
 
 &u2phy0 {
 	status = "okay";
-	rockchip,u2phy-tuning;
 
 	u2phy0_otg: otg-port {
 		vbus-supply = <&vcc_otg_vbus>;
-		status = "okay";
-	};
-
-	u2phy0_host: host-port {
-		phy-supply = <&vcc5v0_host>;
 		status = "okay";
 	};
 };
@@ -1243,7 +1237,6 @@
 };
 
 &usbdrd3_0 {
-	extcon = <&u2phy0>;
 	status = "okay";
 };
 
@@ -1252,9 +1245,12 @@
 };
 
 &usbdrd_dwc3_0 {
+	extcon = <&u2phy0>;
+	status = "okay";
 	dr_mode = "otg";
 	maximum-speed = "high-speed";
-	status = "okay";
+	phys = <&u2phy0_otg>;
+	phy-names = "usb2-phy";
 };
 
 &usbdrd_dwc3_1 {

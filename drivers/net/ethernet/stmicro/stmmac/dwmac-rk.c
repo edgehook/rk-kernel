@@ -2306,17 +2306,17 @@ out:
 }
 
 #ifdef CONFIG_ARCH_ADVANTECH
-#define RTL8211F_PHY_ID		0x001cc916
+#define RTL8211F_PHY_ID             0x001cc916
 
 static int rtl8211f_phy_fixup(struct phy_device *phydev)
 {
-	if (phydev->interface == PHY_INTERFACE_MODE_RGMII){
-		phy_write(phydev, 0x1f, 0x0d04);
-		phy_write(phydev, 0x10, 0x8910);
-		phy_write(phydev, 0x1f, 0x0000);
-	}
+    if (phydev->interface == PHY_INTERFACE_MODE_RGMII){
+            phy_write(phydev, 0x1f, 0x0d04);
+            phy_write(phydev, 0x10, 0x8910);
+            phy_write(phydev, 0x1f, 0x0000);
+    }
 
-	return 0;
+    return 0;
 }
 #endif
 

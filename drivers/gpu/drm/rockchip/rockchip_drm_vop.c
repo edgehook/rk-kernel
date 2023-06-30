@@ -1933,8 +1933,8 @@ static void vop_plane_atomic_update(struct drm_plane *plane,
 
 	dsp_w = drm_rect_width(dest);
 	if (dest->x1 + dsp_w > adjusted_mode->hdisplay) {
-		DRM_ERROR("%s win%d dest->x1[%d] + dsp_w[%d] exceed mode hdisplay[%d]\n",
-			  crtc->name, win->win_id, dest->x1, dsp_w, adjusted_mode->hdisplay);
+		// DRM_ERROR("%s win%d dest->x1[%d] + dsp_w[%d] exceed mode hdisplay[%d]\n",
+		// 	  crtc->name, win->win_id, dest->x1, dsp_w, adjusted_mode->hdisplay);
 		dsp_w = adjusted_mode->hdisplay - dest->x1;
 		if (dsp_w < 4)
 			dsp_w = 4;
@@ -1942,8 +1942,8 @@ static void vop_plane_atomic_update(struct drm_plane *plane,
 	}
 	dsp_h = drm_rect_height(dest);
 	if (dest->y1 + dsp_h > adjusted_mode->vdisplay) {
-		DRM_ERROR("%s win%d dest->y1[%d] + dsp_h[%d] exceed mode vdisplay[%d]\n",
-			  crtc->name, win->win_id, dest->y1, dsp_h, adjusted_mode->vdisplay);
+		// DRM_ERROR("%s win%d dest->y1[%d] + dsp_h[%d] exceed mode vdisplay[%d]\n",
+		// 	  crtc->name, win->win_id, dest->y1, dsp_h, adjusted_mode->vdisplay);
 		dsp_h = adjusted_mode->vdisplay - dest->y1;
 		if (dsp_h < 4)
 			dsp_h = 4;
