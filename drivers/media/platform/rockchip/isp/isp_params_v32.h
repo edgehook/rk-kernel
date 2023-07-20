@@ -4,13 +4,17 @@
 #ifndef _RKISP_ISP_PARAM_V32_H
 #define _RKISP_ISP_PARAM_V32_H
 
-#include <linux/rkisp1-config.h>
+#include <linux/rk-isp1-config.h>
 #include <linux/rk-preisp.h>
 #include "common.h"
 #include "isp_params.h"
 
 #define ISP32_3DLUT_BUF_NUM			2
 #define ISP32_3DLUT_BUF_SIZE			(9 * 9 * 9 * 4)
+
+#define ISP32_LSC_LUT_BUF_NUM			2
+#define ISP32_LSC_LUT_TBL_SIZE			(9 * 17 * 4)
+#define ISP32_LSC_LUT_BUF_SIZE			(ISP32_LSC_LUT_TBL_SIZE * 4)
 
 #define ISP32_RAWHISTBIG_ROW_NUM		15
 #define ISP32_RAWHISTBIG_COLUMN_NUM		15
@@ -174,15 +178,28 @@ struct rkisp_isp_params_val_v32 {
 	struct rkisp_dummy_buffer buf_3dlut[ISP32_3DLUT_BUF_NUM];
 	u32 buf_3dlut_idx;
 
+	struct rkisp_dummy_buffer buf_lsclut[ISP32_LSC_LUT_BUF_NUM];
+	u32 buf_lsclut_idx;
+
 	struct rkisp_dummy_buffer buf_ldch[ISP3X_MESH_BUF_NUM];
 	u32 buf_ldch_idx;
 
 	struct rkisp_dummy_buffer buf_cac[ISP3X_MESH_BUF_NUM];
 	u32 buf_cac_idx;
 
+	struct rkisp_dummy_buffer buf_info[RKISP_INFO2DDR_BUF_MAX];
+	u32 buf_info_owner;
+	u32 buf_info_cnt;
+	int buf_info_idx;
+
+	u32 bay3d_cur_size;
+	u32 bay3d_cur_wsize;
+	u32 bay3d_cur_wrap_line;
 	struct rkisp_dummy_buffer buf_3dnr_iir;
 	struct rkisp_dummy_buffer buf_3dnr_cur;
 	struct rkisp_dummy_buffer buf_3dnr_ds;
+
+	struct rkisp_dummy_buffer buf_frm;
 
 	struct isp32_hdrmge_cfg last_hdrmge;
 	struct isp32_drc_cfg last_hdrdrc;
@@ -197,6 +214,7 @@ struct rkisp_isp_params_val_v32 {
 	bool bay3d_en;
 	bool is_bigmode;
 	bool is_lo8x8;
+	bool is_sram;
 };
 
 #if IS_ENABLED(CONFIG_VIDEO_ROCKCHIP_ISP_VERSION_V32)

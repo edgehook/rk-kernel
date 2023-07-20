@@ -8,7 +8,6 @@
 #include <linux/spinlock.h>
 #include <linux/v4l2-mediabus.h>
 
-#include "hw.h"
 #include "dev.h"
 #include "procfs.h"
 
@@ -290,6 +289,7 @@ static void rkcif_show_format(struct rkcif_device *dev, struct seq_file *f)
 
 		seq_printf(f, "\thdr mode: %s\n",
 			   dev->hdr.hdr_mode == NO_HDR ? "normal" :
+			   dev->hdr.hdr_mode == HDR_COMPR ? "hdr_compr" :
 			   dev->hdr.hdr_mode == HDR_X2 ? "hdr_x2" : "hdr_x3");
 
 		seq_printf(f, "\tformat:%s/%ux%u@%d\n",
@@ -315,11 +315,12 @@ static void rkcif_show_format(struct rkcif_device *dev, struct seq_file *f)
 			   dev->channels[0].width, dev->channels[0].height,
 			   dev->channels[0].crop_st_x, dev->channels[0].crop_st_y);
 		seq_printf(f, "\tcompact:%s\n", stream->is_compact ? "enable" : "disabled");
-		seq_printf(f, "\tframe amount:%d\n", stream->frame_idx);
+		seq_printf(f, "\tframe amount:%d\n", stream->frame_idx - 1);
 		if (dev->inf_id == RKCIF_MIPI_LVDS) {
 			time_val = div_u64(stream->readout.early_time, 1000000);
 			seq_printf(f, "\tearly:%u ms\n", time_val);
-			if (dev->hdr.hdr_mode == NO_HDR) {
+			if (dev->hdr.hdr_mode == NO_HDR ||
+			    dev->hdr.hdr_mode == HDR_COMPR) {
 				time_val = div_u64(stream->readout.readout_time, 1000000);
 				seq_printf(f, "\treadout:%u ms\n", time_val);
 			} else {
@@ -335,22 +336,46 @@ static void rkcif_show_format(struct rkcif_device *dev, struct seq_file *f)
 		seq_printf(f, "\tfps:%llu\n", fps);
 		seq_puts(f, "\tirq statistics:\n");
 		seq_printf(f, "\t\t\ttotal:%llu\n",
-			   dev->irq_stats.all_frm_end_cnt + dev->irq_stats.all_err_cnt);
+			   dev->irq_stats.frm_end_cnt[0] +
+			   dev->irq_stats.frm_end_cnt[1] +
+			   dev->irq_stats.frm_end_cnt[2] +
+			   dev->irq_stats.frm_end_cnt[3] +
+			   dev->irq_stats.all_err_cnt);
 		if (sensor->mbus.type == V4L2_MBUS_PARALLEL ||
 		    sensor->mbus.type == V4L2_MBUS_BT656) {
 			seq_printf(f, "\t\t\tdvp bus err:%llu\n", dev->irq_stats.dvp_bus_err_cnt);
 			seq_printf(f, "\t\t\tdvp pix err:%llu\n", dev->irq_stats.dvp_pix_err_cnt);
 			seq_printf(f, "\t\t\tdvp line err:%llu\n", dev->irq_stats.dvp_line_err_cnt);
 			seq_printf(f, "\t\t\tdvp over flow:%llu\n", dev->irq_stats.dvp_overflow_cnt);
-			seq_printf(f, "\t\t\tdvp bandwidth lack:%llu\n", dev->irq_stats.dvp_bwidth_lack_cnt);
+			seq_printf(f, "\t\t\tdvp bandwidth lack:%llu\n",
+				   dev->irq_stats.dvp_bwidth_lack_cnt);
 			seq_printf(f, "\t\t\tdvp size err:%llu\n", dev->irq_stats.dvp_size_err_cnt);
 		} else {
 			seq_printf(f, "\t\t\tcsi over flow:%llu\n", dev->irq_stats.csi_overflow_cnt);
-			seq_printf(f, "\t\t\tcsi bandwidth lack:%llu\n", dev->irq_stats.csi_bwidth_lack_cnt);
+			seq_printf(f, "\t\t\tcsi bandwidth lack:%llu\n",
+				   dev->irq_stats.csi_bwidth_lack_cnt);
 			seq_printf(f, "\t\t\tcsi size err:%llu\n", dev->irq_stats.csi_size_err_cnt);
 		}
+		seq_printf(f, "\t\t\tnot active buf cnt:%llu %llu %llu %llu\n",
+			   dev->irq_stats.not_active_buf_cnt[0],
+			   dev->irq_stats.not_active_buf_cnt[1],
+			   dev->irq_stats.not_active_buf_cnt[2],
+			   dev->irq_stats.not_active_buf_cnt[3]);
 		seq_printf(f, "\t\t\tall err count:%llu\n", dev->irq_stats.all_err_cnt);
-		seq_printf(f, "\t\t\tframe dma end:%llu\n", dev->irq_stats.all_frm_end_cnt);
+		seq_printf(f, "\t\t\tframe dma end:%llu %llu %llu %llu\n",
+			   dev->irq_stats.frm_end_cnt[0],
+			   dev->irq_stats.frm_end_cnt[1],
+			   dev->irq_stats.frm_end_cnt[2],
+			   dev->irq_stats.frm_end_cnt[3]);
+		seq_printf(f, "irq time: %llu ns\n", dev->hw_dev->irq_time);
+		seq_printf(f, "dma enable: 0x%x 0x%x 0x%x 0x%x\n",
+			   dev->stream[0].dma_en, dev->stream[1].dma_en,
+			   dev->stream[2].dma_en, dev->stream[3].dma_en);
+		seq_printf(f, "buf_cnt in drv: %d %d %d %d\n",
+			   atomic_read(&dev->stream[0].buf_cnt),
+			   atomic_read(&dev->stream[1].buf_cnt),
+			   atomic_read(&dev->stream[2].buf_cnt),
+			   atomic_read(&dev->stream[3].buf_cnt));
 	}
 }
 

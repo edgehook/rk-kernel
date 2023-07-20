@@ -682,19 +682,6 @@ cryptodev_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-static int
-clonefd(struct file *filp)
-{
-	int ret;
-	ret = get_unused_fd_flags(0);
-	if (ret >= 0) {
-			get_file(filp);
-			fd_install(ret, filp);
-	}
-
-	return ret;
-}
-
 #ifdef ENABLE_ASYNC
 /* enqueue a job for asynchronous completion
  *
@@ -961,18 +948,19 @@ cryptodev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg_)
 	case CIOCASYMFEAT:
 		return put_user(0, p);
 	case CRIOGET:
-		fd = clonefd(filp);
+		fd = get_unused_fd_flags(0);
+		if (unlikely(fd < 0))
+			return fd;
+
 		ret = put_user(fd, p);
 		if (unlikely(ret)) {
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0))
-			sys_close(fd);
-#elif (LINUX_VERSION_CODE < KERNEL_VERSION(5, 11, 0))
-			ksys_close(fd);
-#else
-			close_fd(fd);
-#endif
+			put_unused_fd(fd);
 			return ret;
 		}
+
+		get_file(filp);
+		fd_install(fd, filp);
+
 		return ret;
 	case CIOCGSESSION:
 		if (unlikely(copy_from_user(&sop, arg, sizeof(sop))))
@@ -1148,6 +1136,7 @@ cryptodev_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg_)
 	struct session_op sop;
 	struct compat_session_op compat_sop;
 	struct kernel_crypt_op kcop;
+	struct kernel_crypt_auth_op kcaop;
 	int ret;
 
 	if (unlikely(!pcr))
@@ -1190,6 +1179,20 @@ cryptodev_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg_)
 			return ret;
 
 		return compat_kcop_to_user(&kcop, fcr, arg);
+
+	case COMPAT_CIOCAUTHCRYPT:
+		ret = compat_kcaop_from_user(&kcaop, fcr, arg);
+		if (unlikely(ret)) {
+			dwarning(1, "Error copying from user");
+			return ret;
+		}
+
+		ret = crypto_auth_run(fcr, &kcaop);
+		if (unlikely(ret)) {
+			dwarning(1, "Error in crypto_auth_run");
+			return ret;
+		}
+		return compat_kcaop_to_user(&kcaop, fcr, arg);
 #ifdef ENABLE_ASYNC
 	case COMPAT_CIOCASYNCCRYPT:
 		if (unlikely(ret = compat_kcop_from_user(&kcop, fcr, arg)))

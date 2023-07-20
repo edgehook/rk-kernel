@@ -16,13 +16,6 @@
 	model = "Rockchip RK3566 EVB2 LP4X V10 Board";
 	compatible = "rockchip,rk3566-evb2-lp4x-v10", "rockchip,rk3566";
 
-	rk_headset: rk-headset {
-		compatible = "rockchip_headset";
-		headset_gpio = <&gpio3 RK_PA1 GPIO_ACTIVE_LOW>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&hp_det>;
-	};
-
 	vcc_camera: vcc-camera-regulator {
 		compatible = "regulator-fixed";
 		gpio = <&gpio0 RK_PC1 GPIO_ACTIVE_HIGH>;
@@ -43,6 +36,13 @@
 		gpio = <&gpio0 RK_PC2 GPIO_ACTIVE_HIGH>;
 		startup-delay-us = <5000>;
 		vin-supply = <&dc_12v>;
+	};
+};
+
+&bt_sound {
+	status = "disabled";
+	simple-audio-card,cpu {
+		sound-dai = <&i2s2_2ch>;
 	};
 };
 
@@ -78,6 +78,18 @@
 				remote-endpoint = <&gc8034_out>;
 				data-lanes = <1 2 3 4>;
 			};
+
+			mipi_in_ucam1: endpoint@2 {
+				reg = <2>;
+				remote-endpoint = <&ov5695_out>;
+				data-lanes = <1 2>;
+			};
+
+			mipi_in_ucam2: endpoint@3 {
+				reg = <3>;
+				remote-endpoint = <&gc5025_out>;
+				data-lanes = <1 2>;
+			};
 		};
 
 		port@1 {
@@ -112,7 +124,7 @@
 
 			dphy1_in: endpoint@1 {
 				reg = <1>;
-				remote-endpoint = <&ov5695_out>;
+				//remote-endpoint = <&ov5695_out>;
 				data-lanes = <1 2>;
 			};
 		};
@@ -149,7 +161,7 @@
 
 			dphy2_in: endpoint@1 {
 				reg = <1>;
-				remote-endpoint = <&gc5025_out>;
+				//remote-endpoint = <&gc5025_out>;
 				data-lanes = <1 2>;
 			};
 		};
@@ -263,7 +275,7 @@
 		rockchip,camera-module-lens-name = "CHT842-MD";
 		port {
 			ov5695_out: endpoint {
-				remote-endpoint = <&dphy1_in>;
+				remote-endpoint = <&mipi_in_ucam1>;
 				data-lanes = <1 2>;
 			};
 		};
@@ -288,7 +300,7 @@
 		rockchip,camera-module-lens-name = "CHT842-MD";
 		port {
 			gc5025_out: endpoint {
-				remote-endpoint = <&dphy2_in>;
+				remote-endpoint = <&mipi_in_ucam2>;
 				data-lanes = <1 2>;
 			};
 		};
@@ -355,6 +367,12 @@
 			};
 		};
 	};
+};
+
+&i2s2_2ch {
+	pinctrl-0 = <&i2s2m0_sclktx &i2s2m0_lrcktx &i2s2m0_sdi &i2s2m0_sdo>;
+	rockchip,bclk-fs = <32>;
+	status = "disabled";
 };
 
 &mdio1 {
@@ -427,12 +445,6 @@
 			rockchip,pins =
 				/* camera power en */
 				<0 RK_PC1 RK_FUNC_GPIO &pcfg_pull_none>;
-		};
-	};
-
-	headphone {
-		hp_det: hp-det {
-			rockchip,pins = <3 RK_PA1 RK_FUNC_GPIO &pcfg_pull_down>;
 		};
 	};
 
@@ -581,6 +593,7 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&wifi_host_wake_irq>;
 	WIFI,host_wake_irq = <&gpio2 RK_PB2 GPIO_ACTIVE_HIGH>;
+	WIFI,poweren_gpio = <&gpio2 RK_PB1 GPIO_ACTIVE_HIGH>;
 };
 
 &work_led {

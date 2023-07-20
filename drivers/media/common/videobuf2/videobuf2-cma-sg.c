@@ -113,7 +113,7 @@ static int vb2_cma_sg_alloc_contiguous(struct vb2_cma_sg_buf *buf)
 			page = cma_alloc(dev_get_cma_area(buf->dev), buf->num_pages,
 					 get_order(buf->size), GFP_KERNEL);
 	}
-	if (!page) {
+	if (IS_ERR_OR_NULL(page)) {
 		pr_err("%s: cma_en:%d alloc pages fail\n", __func__, cma_en);
 		return -ENOMEM;
 	}
@@ -501,7 +501,7 @@ vb2_cma_sg_dmabuf_ops_begin_cpu_access(struct dma_buf *dbuf,
 	struct vb2_cma_sg_buf *buf = dbuf->priv;
 	struct sg_table *sgt = buf->dma_sgt;
 
-	dma_sync_sg_for_cpu(buf->dev, sgt->sgl, sgt->nents, buf->dma_dir);
+	dma_sync_sgtable_for_cpu(buf->dev, sgt, buf->dma_dir);
 	return 0;
 }
 
@@ -512,7 +512,7 @@ vb2_cma_sg_dmabuf_ops_end_cpu_access(struct dma_buf *dbuf,
 	struct vb2_cma_sg_buf *buf = dbuf->priv;
 	struct sg_table *sgt = buf->dma_sgt;
 
-	dma_sync_sg_for_device(buf->dev, sgt->sgl, sgt->nents, buf->dma_dir);
+	dma_sync_sgtable_for_device(buf->dev, sgt, buf->dma_dir);
 	return 0;
 }
 

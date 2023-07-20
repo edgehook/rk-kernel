@@ -4,7 +4,7 @@
 #ifndef _RKISPP_STATS_H
 #define _RKISPP_STATS_H
 
-#include <linux/rkispp-config.h>
+#include <linux/rk-ispp-config.h>
 #include <linux/interrupt.h>
 #include <linux/kfifo.h>
 #include "common.h"
@@ -16,6 +16,12 @@ struct rkispp_stats_vdev;
 
 enum rkispp_stats_readout_cmd {
 	RKISPP_READOUT_STATS,
+};
+
+enum rkispp_statsvdev_id {
+	STATS_VDEV_TNR = 0,
+	STATS_VDEV_NR,
+	STATS_VDEV_MAX
 };
 
 struct rkispp_stats_readout_work {
@@ -35,19 +41,20 @@ struct rkispp_stats_readout_work {
 struct rkispp_stats_vdev {
 	struct rkispp_vdev_node vnode;
 	struct rkispp_device *dev;
+	enum rkispp_statsvdev_id vdev_id;
 
 	spinlock_t irq_lock;
 	struct list_head stat;
 	struct rkispp_buffer *curr_buf;
-	struct rkispp_buffer *next_buf;
 	struct v4l2_format vdev_fmt;
+	u32 frame_id;
 	bool streamon;
 };
 
-void rkispp_stats_isr(struct rkispp_stats_vdev *stats_vdev, u32 mis);
+void rkispp_stats_isr(struct rkispp_stats_vdev *stats_vdev);
 
-int rkispp_register_stats_vdev(struct rkispp_device *dev);
+int rkispp_register_stats_vdevs(struct rkispp_device *dev);
 
-void rkispp_unregister_stats_vdev(struct rkispp_device *dev);
+void rkispp_unregister_stats_vdevs(struct rkispp_device *dev);
 
 #endif /* _RKISPP_STATS_H */

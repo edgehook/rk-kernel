@@ -2,10 +2,24 @@
 /*
  * Copyright (c) 2022 Rockchip Electronics Co., Ltd.
  */
+#include "rv1106-amp.dtsi"
 
 / {
 	chosen {
-		bootargs = "earlycon=uart8250,mmio32,0xff4c0000 console=ttyFIQ0 rootwait snd_soc_core.prealloc_buffer_size_kbytes=16";
+		bootargs = "earlycon=uart8250,mmio32,0xff4c0000 console=ttyFIQ0 rootwait snd_soc_core.prealloc_buffer_size_kbytes=16 coherent_pool=0";
+	};
+
+	acodec_sound: acodec-sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "rv-acodec";
+		simple-audio-card,format = "i2s";
+		simple-audio-card,mclk-fs = <256>;
+		simple-audio-card,cpu {
+			sound-dai = <&i2s0_8ch>;
+		};
+		simple-audio-card,codec {
+			sound-dai = <&acodec>;
+		};
 	};
 
 	vcc_1v8: vcc-1v8 {
@@ -25,6 +39,28 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 	};
+
+	vdd_arm: vdd-arm {
+		compatible = "pwm-regulator";
+		pwms = <&pwm0 0 5000 1>;
+		regulator-name = "vdd_arm";
+		regulator-min-microvolt = <724000>;
+		regulator-max-microvolt = <1078000>;
+		regulator-init-microvolt = <950000>;
+		regulator-always-on;
+		regulator-boot-on;
+		regulator-settling-time-up-us = <250>;
+	};
+};
+
+&acodec {
+	#sound-dai-cells = <0>;
+	pa-ctl-gpios = <&gpio1 RK_PA1 GPIO_ACTIVE_HIGH>;
+	status = "okay";
+};
+
+&cpu0 {
+	cpu-supply = <&vdd_arm>;
 };
 
 &csi2_dphy_hw {
@@ -113,8 +149,8 @@
 		pinctrl-0 = <&mipi_refclk_out0>;
 		rockchip,camera-module-index = <0>;
 		rockchip,camera-module-facing = "back";
-		rockchip,camera-module-name = "CMK-OT2117-PC1";
-		rockchip,camera-module-lens-name = "30IRC-F16";
+		rockchip,camera-module-name = "OT01";
+		rockchip,camera-module-lens-name = "40IRC_F16";
 		port {
 			sc4336_out: endpoint {
 				remote-endpoint = <&csi_dphy_input1>;
@@ -143,6 +179,11 @@
 			};
 		};
 	};
+};
+
+&i2s0_8ch {
+	#sound-dai-cells = <0>;
+	status = "okay";
 };
 
 &mipi0_csi2 {
@@ -174,6 +215,10 @@
 			};
 		};
 	};
+};
+
+&pwm0 {
+	status = "okay";
 };
 
 &rkcif {
@@ -218,6 +263,11 @@
 	};
 };
 
+&saradc {
+	status = "okay";
+	vref-supply = <&vcc_1v8>;
+};
+
 &sfc {
 	status = "okay";
 
@@ -238,8 +288,13 @@
 	cap-mmc-highspeed;
 	cap-sd-highspeed;
 	disable-wp;
-	pinctrl-names = "default";
+	pinctrl-names = "normal", "idle";
 	pinctrl-0 = <&sdmmc0_clk &sdmmc0_cmd &sdmmc0_det &sdmmc0_bus4>;
+	pinctrl-1 = <&sdmmc0_idle_pins &sdmmc0_det>;
+	status = "okay";
+};
+
+&tsadc {
 	status = "okay";
 };
 

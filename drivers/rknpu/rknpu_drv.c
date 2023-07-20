@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (C) Fuzhou Rockchip Electronics Co.Ltd
+ * Copyright (C) Rockchip Electronics Co.Ltd
  * Author: Felix Zeng <felix.zeng@rock-chips.com>
  */
 
@@ -10,6 +10,7 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/irqdomain.h>
+#include <linux/iopoll.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
@@ -32,25 +33,41 @@
 #include <linux/pm_runtime.h>
 #include <linux/devfreq_cooling.h>
 #include <linux/regmap.h>
-
-#include <drm/drm_device.h>
-#include <drm/drm_ioctl.h>
-#include <drm/drm_file.h>
-#include <drm/drm_drv.h>
+#include <linux/dma-iommu.h>
+#include <linux/of_address.h>
 
 #ifndef FPGA_PLATFORM
+#include <soc/rockchip/rockchip_iommu.h>
 #include <soc/rockchip/rockchip_opp_select.h>
 #include <soc/rockchip/rockchip_system_monitor.h>
 #include <soc/rockchip/rockchip_ipa.h>
+#ifdef CONFIG_PM_DEVFREQ
+#include <../drivers/devfreq/governor.h>
+#endif
 #endif
 
 #include "rknpu_ioctl.h"
 #include "rknpu_reset.h"
-#include "rknpu_gem.h"
 #include "rknpu_fence.h"
 #include "rknpu_drv.h"
+#include "rknpu_gem.h"
 
-#define POWER_DOWN_FREQ	200000000
+#ifdef CONFIG_ROCKCHIP_RKNPU_DRM_GEM
+#include <drm/drm_device.h>
+#include <drm/drm_ioctl.h>
+#include <drm/drm_file.h>
+#include <drm/drm_drv.h>
+#include "rknpu_gem.h"
+#endif
+
+#ifdef CONFIG_ROCKCHIP_RKNPU_DMA_HEAP
+#include <linux/rk-dma-heap.h>
+#include "rknpu_mem.h"
+#endif
+
+#define POWER_DOWN_FREQ 200000000
+#define NPU_MMU_DISABLED_POLL_PERIOD_US 1000
+#define NPU_MMU_DISABLED_POLL_TIMEOUT_US 20000
 
 static int bypass_irq_handler;
 module_param(bypass_irq_handler, int, 0644);
@@ -62,25 +79,25 @@ module_param(bypass_soft_reset, int, 0644);
 MODULE_PARM_DESC(bypass_soft_reset,
 		 "bypass RKNPU soft reset if set it to 1, disabled by default");
 
-struct npu_irqs_data {
+struct rknpu_irqs_data {
 	const char *name;
 	irqreturn_t (*irq_hdl)(int irq, void *ctx);
 };
 
-static const struct npu_irqs_data rk356x_npu_irqs[] = {
-	{ "npu0_irq", rknpu_core0_irq_handler }
+static const struct rknpu_irqs_data rknpu_irqs[] = {
+	{ "npu_irq", rknpu_core0_irq_handler }
 };
 
-static const struct npu_irqs_data rk3588_npu_irqs[] = {
+static const struct rknpu_irqs_data rk3588_npu_irqs[] = {
 	{ "npu0_irq", rknpu_core0_irq_handler },
 	{ "npu1_irq", rknpu_core1_irq_handler },
 	{ "npu2_irq", rknpu_core2_irq_handler }
 };
 
-static const struct npu_reset_data rk356x_npu_resets[] = { { "srst_a",
-							     "srst_h" } };
+static const struct rknpu_reset_data rknpu_resets[] = { { "srst_a",
+							  "srst_h" } };
 
-static const struct npu_reset_data rk3588_npu_resets[] = {
+static const struct rknpu_reset_data rk3588_npu_resets[] = {
 	{ "srst_a0", "srst_h0" },
 	{ "srst_a1", "srst_h1" },
 	{ "srst_a2", "srst_h2" }
@@ -90,24 +107,72 @@ static const struct rknpu_config rk356x_rknpu_config = {
 	.bw_priority_addr = 0xfe180008,
 	.bw_priority_length = 0x10,
 	.dma_mask = DMA_BIT_MASK(32),
-	.pc_data_extra_amount = 4,
+	.pc_data_amount_scale = 1,
+	.pc_task_number_bits = 12,
+	.pc_task_number_mask = 0xfff,
+	.pc_task_status_offset = 0x3c,
+	.pc_dma_ctrl = 0,
 	.bw_enable = 1,
-	.irqs = rk356x_npu_irqs,
-	.resets = rk356x_npu_resets,
-	.num_irqs = ARRAY_SIZE(rk356x_npu_irqs),
-	.num_resets = ARRAY_SIZE(rk356x_npu_resets)
+	.irqs = rknpu_irqs,
+	.resets = rknpu_resets,
+	.num_irqs = ARRAY_SIZE(rknpu_irqs),
+	.num_resets = ARRAY_SIZE(rknpu_resets),
+	.nbuf_phyaddr = 0,
+	.nbuf_size = 0
 };
 
 static const struct rknpu_config rk3588_rknpu_config = {
 	.bw_priority_addr = 0x0,
 	.bw_priority_length = 0x0,
 	.dma_mask = DMA_BIT_MASK(40),
-	.pc_data_extra_amount = 2,
+	.pc_data_amount_scale = 2,
+	.pc_task_number_bits = 12,
+	.pc_task_number_mask = 0xfff,
+	.pc_task_status_offset = 0x3c,
+	.pc_dma_ctrl = 0,
 	.bw_enable = 0,
 	.irqs = rk3588_npu_irqs,
 	.resets = rk3588_npu_resets,
 	.num_irqs = ARRAY_SIZE(rk3588_npu_irqs),
-	.num_resets = ARRAY_SIZE(rk3588_npu_resets)
+	.num_resets = ARRAY_SIZE(rk3588_npu_resets),
+	.nbuf_phyaddr = 0,
+	.nbuf_size = 0
+};
+
+static const struct rknpu_config rv1106_rknpu_config = {
+	.bw_priority_addr = 0x0,
+	.bw_priority_length = 0x0,
+	.dma_mask = DMA_BIT_MASK(32),
+	.pc_data_amount_scale = 2,
+	.pc_task_number_bits = 16,
+	.pc_task_number_mask = 0xffff,
+	.pc_task_status_offset = 0x3c,
+	.pc_dma_ctrl = 0,
+	.bw_enable = 1,
+	.irqs = rknpu_irqs,
+	.resets = rknpu_resets,
+	.num_irqs = ARRAY_SIZE(rknpu_irqs),
+	.num_resets = ARRAY_SIZE(rknpu_resets),
+	.nbuf_phyaddr = 0,
+	.nbuf_size = 0
+};
+
+static const struct rknpu_config rk3562_rknpu_config = {
+	.bw_priority_addr = 0x0,
+	.bw_priority_length = 0x0,
+	.dma_mask = DMA_BIT_MASK(40),
+	.pc_data_amount_scale = 2,
+	.pc_task_number_bits = 16,
+	.pc_task_number_mask = 0xffff,
+	.pc_task_status_offset = 0x48,
+	.pc_dma_ctrl = 1,
+	.bw_enable = 1,
+	.irqs = rknpu_irqs,
+	.resets = rknpu_resets,
+	.num_irqs = ARRAY_SIZE(rknpu_irqs),
+	.num_resets = ARRAY_SIZE(rknpu_resets),
+	.nbuf_phyaddr = 0xfe400000,
+	.nbuf_size = 256 * 1024
 };
 
 /* driver probe and init */
@@ -124,9 +189,306 @@ static const struct of_device_id rknpu_of_match[] = {
 		.compatible = "rockchip,rk3588-rknpu",
 		.data = &rk3588_rknpu_config,
 	},
+	{
+		.compatible = "rockchip,rv1106-rknpu",
+		.data = &rv1106_rknpu_config,
+	},
+	{
+		.compatible = "rockchip,rk3562-rknpu",
+		.data = &rk3562_rknpu_config,
+	},
 	{},
 };
 
+static int rknpu_get_drv_version(uint32_t *version)
+{
+	*version = RKNPU_GET_DRV_VERSION_CODE(DRIVER_MAJOR, DRIVER_MINOR,
+					      DRIVER_PATCHLEVEL);
+	return 0;
+}
+
+static int rknpu_power_on(struct rknpu_device *rknpu_dev);
+static int rknpu_power_off(struct rknpu_device *rknpu_dev);
+
+static void rknpu_power_off_delay_work(struct work_struct *power_off_work)
+{
+	struct rknpu_device *rknpu_dev =
+		container_of(to_delayed_work(power_off_work),
+			     struct rknpu_device, power_off_work);
+	mutex_lock(&rknpu_dev->power_lock);
+	if (atomic_dec_if_positive(&rknpu_dev->power_refcount) == 0)
+		rknpu_power_off(rknpu_dev);
+	mutex_unlock(&rknpu_dev->power_lock);
+}
+
+int rknpu_power_get(struct rknpu_device *rknpu_dev)
+{
+	int ret = 0;
+
+	cancel_delayed_work(&rknpu_dev->power_off_work);
+	mutex_lock(&rknpu_dev->power_lock);
+	if (atomic_inc_return(&rknpu_dev->power_refcount) == 1)
+		ret = rknpu_power_on(rknpu_dev);
+	mutex_unlock(&rknpu_dev->power_lock);
+
+	return ret;
+}
+
+int rknpu_power_put(struct rknpu_device *rknpu_dev)
+{
+	int ret = 0;
+
+	mutex_lock(&rknpu_dev->power_lock);
+	if (atomic_dec_if_positive(&rknpu_dev->power_refcount) == 0)
+		ret = rknpu_power_off(rknpu_dev);
+	mutex_unlock(&rknpu_dev->power_lock);
+
+	return ret;
+}
+
+static int rknpu_power_put_delay(struct rknpu_device *rknpu_dev)
+{
+	mutex_lock(&rknpu_dev->power_lock);
+	if (atomic_read(&rknpu_dev->power_refcount) == 1)
+		queue_delayed_work(
+			rknpu_dev->power_off_wq, &rknpu_dev->power_off_work,
+			msecs_to_jiffies(rknpu_dev->power_put_delay));
+	else
+		atomic_dec_if_positive(&rknpu_dev->power_refcount);
+	mutex_unlock(&rknpu_dev->power_lock);
+	return 0;
+}
+
+static int rknpu_action(struct rknpu_device *rknpu_dev,
+			struct rknpu_action *args)
+{
+	int ret = -EINVAL;
+
+	switch (args->flags) {
+	case RKNPU_GET_HW_VERSION:
+		ret = rknpu_get_hw_version(rknpu_dev, &args->value);
+		break;
+	case RKNPU_GET_DRV_VERSION:
+		ret = rknpu_get_drv_version(&args->value);
+		break;
+	case RKNPU_GET_FREQ:
+#ifndef FPGA_PLATFORM
+		args->value = clk_get_rate(rknpu_dev->clks[0].clk);
+#endif
+		ret = 0;
+		break;
+	case RKNPU_SET_FREQ:
+		break;
+	case RKNPU_GET_VOLT:
+#ifndef FPGA_PLATFORM
+		args->value = regulator_get_voltage(rknpu_dev->vdd);
+#endif
+		ret = 0;
+		break;
+	case RKNPU_SET_VOLT:
+		break;
+	case RKNPU_ACT_RESET:
+		ret = rknpu_soft_reset(rknpu_dev);
+		break;
+	case RKNPU_GET_BW_PRIORITY:
+		ret = rknpu_get_bw_priority(rknpu_dev, &args->value, NULL,
+					    NULL);
+		break;
+	case RKNPU_SET_BW_PRIORITY:
+		ret = rknpu_set_bw_priority(rknpu_dev, args->value, 0, 0);
+		break;
+	case RKNPU_GET_BW_EXPECT:
+		ret = rknpu_get_bw_priority(rknpu_dev, NULL, &args->value,
+					    NULL);
+		break;
+	case RKNPU_SET_BW_EXPECT:
+		ret = rknpu_set_bw_priority(rknpu_dev, 0, args->value, 0);
+		break;
+	case RKNPU_GET_BW_TW:
+		ret = rknpu_get_bw_priority(rknpu_dev, NULL, NULL,
+					    &args->value);
+		break;
+	case RKNPU_SET_BW_TW:
+		ret = rknpu_set_bw_priority(rknpu_dev, 0, 0, args->value);
+		break;
+	case RKNPU_ACT_CLR_TOTAL_RW_AMOUNT:
+		ret = rknpu_clear_rw_amount(rknpu_dev);
+		break;
+	case RKNPU_GET_DT_WR_AMOUNT:
+		ret = rknpu_get_rw_amount(rknpu_dev, &args->value, NULL, NULL);
+		break;
+	case RKNPU_GET_DT_RD_AMOUNT:
+		ret = rknpu_get_rw_amount(rknpu_dev, NULL, &args->value, NULL);
+		break;
+	case RKNPU_GET_WT_RD_AMOUNT:
+		ret = rknpu_get_rw_amount(rknpu_dev, NULL, NULL, &args->value);
+		break;
+	case RKNPU_GET_TOTAL_RW_AMOUNT:
+		ret = rknpu_get_total_rw_amount(rknpu_dev, &args->value);
+		break;
+	case RKNPU_GET_IOMMU_EN:
+		args->value = rknpu_dev->iommu_en;
+		ret = 0;
+		break;
+	case RKNPU_SET_PROC_NICE:
+		set_user_nice(current, *(int32_t *)&args->value);
+		ret = 0;
+		break;
+	case RKNPU_GET_TOTAL_SRAM_SIZE:
+		if (rknpu_dev->sram_mm)
+			args->value = rknpu_dev->sram_mm->total_chunks *
+				      rknpu_dev->sram_mm->chunk_size;
+		else
+			args->value = 0;
+		ret = 0;
+		break;
+	case RKNPU_GET_FREE_SRAM_SIZE:
+		if (rknpu_dev->sram_mm)
+			args->value = rknpu_dev->sram_mm->free_chunks *
+				      rknpu_dev->sram_mm->chunk_size;
+		else
+			args->value = 0;
+		ret = 0;
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+
+#ifdef CONFIG_ROCKCHIP_RKNPU_DMA_HEAP
+static int rknpu_open(struct inode *inode, struct file *file)
+{
+	struct rknpu_device *rknpu_dev =
+		container_of(file->private_data, struct rknpu_device, miscdev);
+	struct rknpu_session *session = NULL;
+
+	session = kzalloc(sizeof(*session), GFP_KERNEL);
+	if (!session) {
+		LOG_ERROR("rknpu session alloc failed\n");
+		return -ENOMEM;
+	}
+
+	session->rknpu_dev = rknpu_dev;
+	INIT_LIST_HEAD(&session->list);
+
+	file->private_data = (void *)session;
+
+	return nonseekable_open(inode, file);
+}
+
+static int rknpu_release(struct inode *inode, struct file *file)
+{
+	struct rknpu_mem_object *entry;
+	struct rknpu_session *session = file->private_data;
+	struct rknpu_device *rknpu_dev = session->rknpu_dev;
+	LIST_HEAD(local_list);
+
+	spin_lock(&rknpu_dev->lock);
+	list_replace_init(&session->list, &local_list);
+	file->private_data = NULL;
+	spin_unlock(&rknpu_dev->lock);
+
+	while (!list_empty(&local_list)) {
+		entry = list_first_entry(&local_list, struct rknpu_mem_object,
+					 head);
+
+		LOG_DEBUG(
+			"Fd close free rknpu_obj: %#llx, rknpu_obj->dma_addr: %#llx\n",
+			(__u64)(uintptr_t)entry, (__u64)entry->dma_addr);
+
+		vunmap(entry->kv_addr);
+		entry->kv_addr = NULL;
+
+		if (!entry->owner)
+			dma_buf_put(entry->dmabuf);
+
+		list_del(&entry->head);
+		kfree(entry);
+	}
+
+	kfree(session);
+
+	return 0;
+}
+
+static int rknpu_action_ioctl(struct rknpu_device *rknpu_dev,
+			      unsigned long data)
+{
+	struct rknpu_action args;
+	int ret = -EINVAL;
+
+	if (unlikely(copy_from_user(&args, (struct rknpu_action *)data,
+				    sizeof(struct rknpu_action)))) {
+		LOG_ERROR("%s: copy_from_user failed\n", __func__);
+		ret = -EFAULT;
+		return ret;
+	}
+
+	ret = rknpu_action(rknpu_dev, &args);
+
+	if (unlikely(copy_to_user((struct rknpu_action *)data, &args,
+				  sizeof(struct rknpu_action)))) {
+		LOG_ERROR("%s: copy_to_user failed\n", __func__);
+		ret = -EFAULT;
+		return ret;
+	}
+
+	return ret;
+}
+
+static long rknpu_ioctl(struct file *file, uint32_t cmd, unsigned long arg)
+{
+	long ret = -EINVAL;
+	struct rknpu_device *rknpu_dev = NULL;
+
+	if (!file->private_data)
+		return -EINVAL;
+
+	rknpu_dev = ((struct rknpu_session *)file->private_data)->rknpu_dev;
+
+	rknpu_power_get(rknpu_dev);
+
+	switch (cmd) {
+	case IOCTL_RKNPU_ACTION:
+		ret = rknpu_action_ioctl(rknpu_dev, arg);
+		break;
+	case IOCTL_RKNPU_SUBMIT:
+		ret = rknpu_submit_ioctl(rknpu_dev, arg);
+		break;
+	case IOCTL_RKNPU_MEM_CREATE:
+		ret = rknpu_mem_create_ioctl(rknpu_dev, arg, file);
+		break;
+	case RKNPU_MEM_MAP:
+		break;
+	case IOCTL_RKNPU_MEM_DESTROY:
+		ret = rknpu_mem_destroy_ioctl(rknpu_dev, arg, file);
+		break;
+	case IOCTL_RKNPU_MEM_SYNC:
+		ret = rknpu_mem_sync_ioctl(rknpu_dev, arg);
+		break;
+	default:
+		break;
+	}
+
+	rknpu_power_put_delay(rknpu_dev);
+
+	return ret;
+}
+const struct file_operations rknpu_fops = {
+	.owner = THIS_MODULE,
+	.open = rknpu_open,
+	.release = rknpu_release,
+	.unlocked_ioctl = rknpu_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl = rknpu_ioctl,
+#endif
+};
+#endif
+
+#ifdef CONFIG_ROCKCHIP_RKNPU_DRM_GEM
 static const struct vm_operations_struct rknpu_gem_vm_ops = {
 	.fault = rknpu_gem_fault,
 	.open = drm_gem_vm_open,
@@ -134,17 +496,42 @@ static const struct vm_operations_struct rknpu_gem_vm_ops = {
 };
 
 static int rknpu_action_ioctl(struct drm_device *dev, void *data,
-			      struct drm_file *file_priv);
+			      struct drm_file *file_priv)
+{
+	struct rknpu_device *rknpu_dev = dev_get_drvdata(dev->dev);
+
+	return rknpu_action(rknpu_dev, (struct rknpu_action *)data);
+}
+
+#define RKNPU_IOCTL(func)                                                      \
+	static int __##func(struct drm_device *dev, void *data,                \
+			    struct drm_file *file_priv)                        \
+	{                                                                      \
+		struct rknpu_device *rknpu_dev = dev_get_drvdata(dev->dev);    \
+		int ret = -EINVAL;                                             \
+		rknpu_power_get(rknpu_dev);                                    \
+		ret = func(dev, data, file_priv);                              \
+		rknpu_power_put_delay(rknpu_dev);                              \
+		return ret;                                                    \
+	}
+
+RKNPU_IOCTL(rknpu_action_ioctl);
+RKNPU_IOCTL(rknpu_submit_ioctl);
+RKNPU_IOCTL(rknpu_gem_create_ioctl);
+RKNPU_IOCTL(rknpu_gem_map_ioctl);
+RKNPU_IOCTL(rknpu_gem_destroy_ioctl);
+RKNPU_IOCTL(rknpu_gem_sync_ioctl);
 
 static const struct drm_ioctl_desc rknpu_ioctls[] = {
-	DRM_IOCTL_DEF_DRV(RKNPU_ACTION, rknpu_action_ioctl, DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(RKNPU_SUBMIT, rknpu_submit_ioctl, DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(RKNPU_MEM_CREATE, rknpu_gem_create_ioctl,
+	DRM_IOCTL_DEF_DRV(RKNPU_ACTION, __rknpu_action_ioctl, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(RKNPU_SUBMIT, __rknpu_submit_ioctl, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(RKNPU_MEM_CREATE, __rknpu_gem_create_ioctl,
 			  DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(RKNPU_MEM_MAP, rknpu_gem_map_ioctl, DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(RKNPU_MEM_DESTROY, rknpu_gem_destroy_ioctl,
+	DRM_IOCTL_DEF_DRV(RKNPU_MEM_MAP, __rknpu_gem_map_ioctl,
 			  DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(RKNPU_MEM_SYNC, rknpu_gem_sync_ioctl,
+	DRM_IOCTL_DEF_DRV(RKNPU_MEM_DESTROY, __rknpu_gem_destroy_ioctl,
+			  DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(RKNPU_MEM_SYNC, __rknpu_gem_sync_ioctl,
 			  DRM_RENDER_ALLOW),
 };
 
@@ -201,92 +588,51 @@ static struct drm_driver rknpu_drm_driver = {
 	.patchlevel = DRIVER_PATCHLEVEL,
 };
 
-static int rknpu_get_drv_version(uint32_t *version)
-{
-	*version = RKNPU_GET_DRV_VERSION_CODE(DRIVER_MAJOR, DRIVER_MINOR,
-					      DRIVER_PATCHLEVEL);
-	return 0;
-}
+#endif
 
-static int rknpu_action_ioctl(struct drm_device *dev, void *data,
-			      struct drm_file *file_priv)
+static enum hrtimer_restart hrtimer_handler(struct hrtimer *timer)
 {
-	struct rknpu_device *rknpu_dev = dev_get_drvdata(dev->dev);
-	struct rknpu_action *args = data;
-	int ret = -EINVAL;
+	struct rknpu_device *rknpu_dev =
+		container_of(timer, struct rknpu_device, timer);
+	struct rknpu_subcore_data *subcore_data = NULL;
+	struct rknpu_job *job = NULL;
+	ktime_t now = ktime_get();
+	unsigned long flags;
+	int i;
 
-	switch (args->flags) {
-	case RKNPU_GET_HW_VERSION:
-		ret = rknpu_get_hw_version(rknpu_dev, &args->value);
-		break;
-	case RKNPU_GET_DRV_VERSION:
-		ret = rknpu_get_drv_version(&args->value);
-		break;
-	case RKNPU_GET_FREQ:
-		args->value = rknpu_dev->current_freq;
-		ret = 0;
-		break;
-	case RKNPU_SET_FREQ:
-		break;
-	case RKNPU_GET_VOLT:
-		args->value = rknpu_dev->current_volt;
-		ret = 0;
-		break;
-	case RKNPU_SET_VOLT:
-		break;
-	case RKNPU_ACT_RESET:
-		ret = rknpu_soft_reset(rknpu_dev);
-		break;
-	case RKNPU_GET_BW_PRIORITY:
-		ret = rknpu_get_bw_priority(rknpu_dev, &args->value, NULL,
-					    NULL);
-		break;
-	case RKNPU_SET_BW_PRIORITY:
-		ret = rknpu_set_bw_priority(rknpu_dev, args->value, 0, 0);
-		break;
-	case RKNPU_GET_BW_EXPECT:
-		ret = rknpu_get_bw_priority(rknpu_dev, NULL, &args->value,
-					    NULL);
-		break;
-	case RKNPU_SET_BW_EXPECT:
-		ret = rknpu_set_bw_priority(rknpu_dev, 0, args->value, 0);
-		break;
-	case RKNPU_GET_BW_TW:
-		ret = rknpu_get_bw_priority(rknpu_dev, NULL, NULL,
-					    &args->value);
-		break;
-	case RKNPU_SET_BW_TW:
-		ret = rknpu_set_bw_priority(rknpu_dev, 0, 0, args->value);
-		break;
-	case RKNPU_ACT_CLR_TOTAL_RW_AMOUNT:
-		ret = rknpu_clear_rw_amount(rknpu_dev);
-		break;
-	case RKNPU_GET_DT_WR_AMOUNT:
-		ret = rknpu_get_rw_amount(rknpu_dev, &args->value, NULL, NULL);
-		break;
-	case RKNPU_GET_DT_RD_AMOUNT:
-		ret = rknpu_get_rw_amount(rknpu_dev, NULL, &args->value, NULL);
-		break;
-	case RKNPU_GET_WT_RD_AMOUNT:
-		ret = rknpu_get_rw_amount(rknpu_dev, NULL, NULL, &args->value);
-		break;
-	case RKNPU_GET_TOTAL_RW_AMOUNT:
-		ret = rknpu_get_total_rw_amount(rknpu_dev, &args->value);
-		break;
-	case RKNPU_GET_IOMMU_EN:
-		args->value = rknpu_dev->iommu_en;
-		ret = 0;
-		break;
-	case RKNPU_SET_PROC_NICE:
-		set_user_nice(current, *(int32_t *)&args->value);
-		ret = 0;
-		break;
-	default:
-		ret = -EINVAL;
-		break;
+	for (i = 0; i < rknpu_dev->config->num_irqs; i++) {
+		subcore_data = &rknpu_dev->subcore_datas[i];
+
+		spin_lock_irqsave(&rknpu_dev->irq_lock, flags);
+
+		job = subcore_data->job;
+		if (job) {
+			subcore_data->timer.busy_time +=
+				ktime_us_delta(now, job->hw_recoder_time);
+			job->hw_recoder_time = ktime_get();
+		}
+
+		subcore_data->timer.busy_time_record =
+			subcore_data->timer.busy_time;
+		subcore_data->timer.busy_time = 0;
+		spin_unlock_irqrestore(&rknpu_dev->irq_lock, flags);
 	}
 
-	return ret;
+	hrtimer_forward_now(timer, rknpu_dev->kt);
+	return HRTIMER_RESTART;
+}
+
+static void rknpu_init_timer(struct rknpu_device *rknpu_dev)
+{
+	rknpu_dev->kt = ktime_set(0, RKNPU_LOAD_INTERVAL);
+	hrtimer_init(&rknpu_dev->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	rknpu_dev->timer.function = hrtimer_handler;
+	hrtimer_start(&rknpu_dev->timer, rknpu_dev->kt, HRTIMER_MODE_REL);
+}
+
+static void rknpu_cancel_timer(struct rknpu_device *rknpu_dev)
+{
+	hrtimer_cancel(&rknpu_dev->timer);
 }
 
 static bool rknpu_is_iommu_enable(struct device *dev)
@@ -314,42 +660,7 @@ static bool rknpu_is_iommu_enable(struct device *dev)
 	return true;
 }
 
-static int drm_fake_dev_register(struct rknpu_device *rknpu_dev)
-{
-	const struct platform_device_info rknpu_dev_info = {
-		.name = "rknpu_dev",
-		.id = PLATFORM_DEVID_AUTO,
-		.dma_mask = rknpu_dev->config->dma_mask,
-	};
-	struct platform_device *pdev = NULL;
-	int ret = -EINVAL;
-
-	pdev = platform_device_register_full(&rknpu_dev_info);
-	if (pdev) {
-		ret = of_dma_configure(&pdev->dev, NULL, true);
-		if (ret) {
-			platform_device_unregister(pdev);
-			pdev = NULL;
-		}
-	}
-
-	rknpu_dev->fake_dev = pdev ? &pdev->dev : NULL;
-
-	return ret;
-}
-
-static void drm_fake_dev_unregister(struct rknpu_device *rknpu_dev)
-{
-	struct platform_device *pdev = NULL;
-
-	if (!rknpu_dev->fake_dev)
-		return;
-
-	pdev = to_platform_device(rknpu_dev->fake_dev);
-
-	platform_device_unregister(pdev);
-}
-
+#ifdef CONFIG_ROCKCHIP_RKNPU_DRM_GEM
 static int rknpu_drm_probe(struct rknpu_device *rknpu_dev)
 {
 	struct device *dev = rknpu_dev->dev;
@@ -368,8 +679,6 @@ static int rknpu_drm_probe(struct rknpu_device *rknpu_dev)
 	drm_dev->dev_private = rknpu_dev;
 	rknpu_dev->drm_dev = drm_dev;
 
-	drm_fake_dev_register(rknpu_dev);
-
 	return 0;
 
 err_free_drm:
@@ -386,8 +695,6 @@ static void rknpu_drm_remove(struct rknpu_device *rknpu_dev)
 {
 	struct drm_device *drm_dev = rknpu_dev->drm_dev;
 
-	drm_fake_dev_unregister(rknpu_dev);
-
 	drm_dev_unregister(drm_dev);
 
 #if KERNEL_VERSION(4, 15, 0) <= LINUX_VERSION_CODE
@@ -396,6 +703,7 @@ static void rknpu_drm_remove(struct rknpu_device *rknpu_dev)
 	drm_dev_unref(drm_dev);
 #endif
 }
+#endif
 
 static int rknpu_power_on(struct rknpu_device *rknpu_dev)
 {
@@ -403,12 +711,15 @@ static int rknpu_power_on(struct rknpu_device *rknpu_dev)
 	int ret = -EINVAL;
 
 #ifndef FPGA_PLATFORM
-	ret = regulator_enable(rknpu_dev->vdd);
-	if (ret) {
-		LOG_DEV_ERROR(dev,
-			      "failed to enable vdd reg for rknpu, ret = %d\n",
-			      ret);
-		return ret;
+	if (rknpu_dev->vdd) {
+		ret = regulator_enable(rknpu_dev->vdd);
+		if (ret) {
+			LOG_DEV_ERROR(
+				dev,
+				"failed to enable vdd reg for rknpu, ret: %d\n",
+				ret);
+			return ret;
+		}
 	}
 
 	if (rknpu_dev->mem) {
@@ -416,7 +727,7 @@ static int rknpu_power_on(struct rknpu_device *rknpu_dev)
 		if (ret) {
 			LOG_DEV_ERROR(
 				dev,
-				"failed to enable mem reg for rknpu, ret = %d\n",
+				"failed to enable mem reg for rknpu, ret: %d\n",
 				ret);
 			return ret;
 		}
@@ -425,53 +736,77 @@ static int rknpu_power_on(struct rknpu_device *rknpu_dev)
 
 	ret = clk_bulk_prepare_enable(rknpu_dev->num_clks, rknpu_dev->clks);
 	if (ret) {
-		LOG_DEV_ERROR(dev, "failed to enable clk for rknpu, ret = %d\n",
+		LOG_DEV_ERROR(dev, "failed to enable clk for rknpu, ret: %d\n",
 			      ret);
 		return ret;
 	}
 
+#ifndef FPGA_PLATFORM
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+	rockchip_monitor_volt_adjust_lock(rknpu_dev->mdev_info);
+#endif
+#endif
+
 	if (rknpu_dev->multiple_domains) {
 		if (rknpu_dev->genpd_dev_npu0) {
+#if KERNEL_VERSION(5, 5, 0) < LINUX_VERSION_CODE
 			ret = pm_runtime_resume_and_get(
 				rknpu_dev->genpd_dev_npu0);
+#else
+			ret = pm_runtime_get_sync(rknpu_dev->genpd_dev_npu0);
+#endif
 			if (ret < 0) {
 				LOG_DEV_ERROR(
 					dev,
-					"failed to get pm runtime for npu0, ret = %d\n",
+					"failed to get pm runtime for npu0, ret: %d\n",
 					ret);
-				return ret;
+				goto out;
 			}
 		}
 		if (rknpu_dev->genpd_dev_npu1) {
+#if KERNEL_VERSION(5, 5, 0) < LINUX_VERSION_CODE
 			ret = pm_runtime_resume_and_get(
 				rknpu_dev->genpd_dev_npu1);
+#else
+			ret = pm_runtime_get_sync(rknpu_dev->genpd_dev_npu1);
+#endif
 			if (ret < 0) {
 				LOG_DEV_ERROR(
 					dev,
-					"failed to get pm runtime for npu1, ret = %d\n",
+					"failed to get pm runtime for npu1, ret: %d\n",
 					ret);
-				return ret;
+				goto out;
 			}
 		}
 		if (rknpu_dev->genpd_dev_npu2) {
+#if KERNEL_VERSION(5, 5, 0) < LINUX_VERSION_CODE
 			ret = pm_runtime_resume_and_get(
 				rknpu_dev->genpd_dev_npu2);
+#else
+			ret = pm_runtime_get_sync(rknpu_dev->genpd_dev_npu2);
+#endif
 			if (ret < 0) {
 				LOG_DEV_ERROR(
 					dev,
-					"failed to get pm runtime for npu2, ret = %d\n",
+					"failed to get pm runtime for npu2, ret: %d\n",
 					ret);
-				return ret;
+				goto out;
 			}
 		}
 	}
 	ret = pm_runtime_get_sync(dev);
 	if (ret < 0) {
 		LOG_DEV_ERROR(dev,
-			      "failed to get pm runtime for rknpu, ret = %d\n",
+			      "failed to get pm runtime for rknpu, ret: %d\n",
 			      ret);
-		return ret;
 	}
+
+out:
+#ifndef FPGA_PLATFORM
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+	rockchip_monitor_volt_adjust_unlock(rknpu_dev->mdev_info);
+#endif
+#endif
 
 	return ret;
 }
@@ -480,9 +815,44 @@ static int rknpu_power_off(struct rknpu_device *rknpu_dev)
 {
 	struct device *dev = rknpu_dev->dev;
 
+#ifndef FPGA_PLATFORM
+	int ret;
+	bool val;
+
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+	rockchip_monitor_volt_adjust_lock(rknpu_dev->mdev_info);
+#endif
+#endif
+
 	pm_runtime_put_sync(dev);
 
 	if (rknpu_dev->multiple_domains) {
+#ifndef FPGA_PLATFORM
+		/*
+		 * Because IOMMU's runtime suspend callback is asynchronous,
+		 * So it may be executed after the NPU is turned off after PD/CLK/VD,
+		 * and the runtime suspend callback has a register access.
+		 * If the PD/VD/CLK is closed, the register access will crash.
+		 * As a workaround, it's safe to close pd stuff until iommu disabled.
+		 * If pm runtime framework can handle this issue in the future, remove
+		 * this.
+		 */
+		ret = readx_poll_timeout(rockchip_iommu_is_enabled, dev, val,
+					 !val, NPU_MMU_DISABLED_POLL_PERIOD_US,
+					 NPU_MMU_DISABLED_POLL_TIMEOUT_US);
+		if (ret) {
+			LOG_DEV_ERROR(dev, "iommu still enabled\n");
+			pm_runtime_get_sync(dev);
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+			rockchip_monitor_volt_adjust_unlock(
+				rknpu_dev->mdev_info);
+#endif
+			return ret;
+		}
+#else
+		if (rknpu_dev->iommu_en)
+			msleep(20);
+#endif
 		if (rknpu_dev->genpd_dev_npu2)
 			pm_runtime_put_sync(rknpu_dev->genpd_dev_npu2);
 		if (rknpu_dev->genpd_dev_npu1)
@@ -491,10 +861,17 @@ static int rknpu_power_off(struct rknpu_device *rknpu_dev)
 			pm_runtime_put_sync(rknpu_dev->genpd_dev_npu0);
 	}
 
+#ifndef FPGA_PLATFORM
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+	rockchip_monitor_volt_adjust_unlock(rknpu_dev->mdev_info);
+#endif
+#endif
+
 	clk_bulk_disable_unprepare(rknpu_dev->num_clks, rknpu_dev->clks);
 
 #ifndef FPGA_PLATFORM
-	regulator_disable(rknpu_dev->vdd);
+	if (rknpu_dev->vdd)
+		regulator_disable(rknpu_dev->vdd);
 
 	if (rknpu_dev->mem)
 		regulator_disable(rknpu_dev->mem);
@@ -505,12 +882,15 @@ static int rknpu_power_off(struct rknpu_device *rknpu_dev)
 
 #ifndef FPGA_PLATFORM
 static struct monitor_dev_profile npu_mdevp = {
-	.type = MONITOR_TPYE_DEV,
+	.type = MONITOR_TYPE_DEV,
 	.low_temp_adjust = rockchip_monitor_dev_low_temp_adjust,
 	.high_temp_adjust = rockchip_monitor_dev_high_temp_adjust,
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
 	.update_volt = rockchip_monitor_check_rate_volt,
+#endif
 };
 
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
 static int npu_opp_helper(struct dev_pm_set_opp_data *data)
 {
 	struct device *dev = data->dev;
@@ -525,10 +905,18 @@ static int npu_opp_helper(struct dev_pm_set_opp_data *data)
 	struct rockchip_opp_info *opp_info = &rknpu_dev->opp_info;
 	unsigned long old_freq = data->old_opp.rate;
 	unsigned long new_freq = data->new_opp.rate;
+	bool is_set_rm = true;
+	bool is_set_clk = true;
 	u32 target_rm = UINT_MAX;
 	int ret = 0;
 
-	ret = clk_bulk_prepare_enable(opp_info->num_clks,  opp_info->clks);
+	if (!pm_runtime_active(dev)) {
+		is_set_rm = false;
+		if (opp_info->scmi_clk)
+			is_set_clk = false;
+	}
+
+	ret = clk_bulk_prepare_enable(opp_info->num_clks, opp_info->clks);
 	if (ret < 0) {
 		LOG_DEV_ERROR(dev, "failed to enable opp clks\n");
 		return ret;
@@ -542,7 +930,7 @@ static int npu_opp_helper(struct dev_pm_set_opp_data *data)
 	/* Scaling up? Scale voltage before frequency */
 	if (new_freq >= old_freq) {
 		rockchip_set_intermediate_rate(dev, opp_info, clk, old_freq,
-					       new_freq, true, true);
+					       new_freq, true, is_set_clk);
 		ret = regulator_set_voltage(mem_reg, new_supply_mem->u_volt,
 					    INT_MAX);
 		if (ret) {
@@ -559,19 +947,19 @@ static int npu_opp_helper(struct dev_pm_set_opp_data *data)
 				      new_supply_vdd->u_volt);
 			goto restore_voltage;
 		}
-		rockchip_set_read_margin(dev, opp_info, target_rm, true);
-		ret = clk_set_rate(clk, new_freq);
-		if (ret) {
+		rockchip_set_read_margin(dev, opp_info, target_rm, is_set_rm);
+		if (is_set_clk && clk_set_rate(clk, new_freq)) {
+			ret = -EINVAL;
 			LOG_DEV_ERROR(dev, "failed to set clk rate: %d\n", ret);
 			goto restore_rm;
 		}
-	/* Scaling down? Scale voltage after frequency */
+		/* Scaling down? Scale voltage after frequency */
 	} else {
 		rockchip_set_intermediate_rate(dev, opp_info, clk, old_freq,
-					       new_freq, false, true);
-		rockchip_set_read_margin(dev, opp_info, target_rm, true);
-		ret = clk_set_rate(clk, new_freq);
-		if (ret) {
+					       new_freq, false, is_set_clk);
+		rockchip_set_read_margin(dev, opp_info, target_rm, is_set_rm);
+		if (is_set_clk && clk_set_rate(clk, new_freq)) {
+			ret = -EINVAL;
 			LOG_DEV_ERROR(dev, "failed to set clk rate: %d\n", ret);
 			goto restore_rm;
 		}
@@ -598,13 +986,14 @@ static int npu_opp_helper(struct dev_pm_set_opp_data *data)
 	return 0;
 
 restore_freq:
-	if (clk_set_rate(clk, old_freq))
+	if (is_set_clk && clk_set_rate(clk, old_freq))
 		LOG_DEV_ERROR(dev, "failed to restore old-freq %lu Hz\n",
 			      old_freq);
 restore_rm:
 	rockchip_get_read_margin(dev, opp_info, old_supply_vdd->u_volt,
 				 &target_rm);
-	rockchip_set_read_margin(dev, opp_info, opp_info->current_rm, true);
+	rockchip_set_read_margin(dev, opp_info, opp_info->current_rm,
+				 is_set_rm);
 restore_voltage:
 	regulator_set_voltage(mem_reg, old_supply_mem->u_volt, INT_MAX);
 	regulator_set_voltage(vdd_reg, old_supply_vdd->u_volt, INT_MAX);
@@ -630,7 +1019,9 @@ static int npu_devfreq_target(struct device *dev, unsigned long *freq,
 	opp_volt = dev_pm_opp_get_voltage(opp);
 	dev_pm_opp_put(opp);
 
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
 	rockchip_monitor_volt_adjust_lock(rknpu_dev->mdev_info);
+#endif
 	ret = dev_pm_opp_set_rate(dev, *freq);
 	if (!ret) {
 		rknpu_dev->current_freq = *freq;
@@ -638,11 +1029,98 @@ static int npu_devfreq_target(struct device *dev, unsigned long *freq,
 			rknpu_dev->devfreq->last_status.current_frequency =
 				*freq;
 		rknpu_dev->current_volt = opp_volt;
+		LOG_DEV_INFO(dev, "set rknpu freq: %lu, volt: %lu\n",
+			     rknpu_dev->current_freq, rknpu_dev->current_volt);
 	}
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
 	rockchip_monitor_volt_adjust_unlock(rknpu_dev->mdev_info);
+#endif
 
 	return ret;
 }
+
+#else
+
+static int npu_devfreq_target(struct device *dev, unsigned long *target_freq,
+			      u32 flags)
+{
+	struct rknpu_device *rknpu_dev = dev_get_drvdata(dev);
+	struct dev_pm_opp *opp = NULL;
+	unsigned long freq = *target_freq;
+	unsigned long old_freq = rknpu_dev->current_freq;
+	unsigned long volt, old_volt = rknpu_dev->current_volt;
+	int ret = -EINVAL;
+
+#if KERNEL_VERSION(4, 11, 0) > LINUX_VERSION_CODE
+	rcu_read_lock();
+#endif
+
+	opp = devfreq_recommended_opp(dev, &freq, flags);
+	if (IS_ERR(opp)) {
+#if KERNEL_VERSION(4, 11, 0) > LINUX_VERSION_CODE
+		rcu_read_unlock();
+#endif
+		LOG_DEV_ERROR(dev, "failed to get opp (%ld)\n", PTR_ERR(opp));
+		return PTR_ERR(opp);
+	}
+	volt = dev_pm_opp_get_voltage(opp);
+#if KERNEL_VERSION(4, 11, 0) > LINUX_VERSION_CODE
+	rcu_read_unlock();
+#endif
+
+	/*
+	 * Only update if there is a change of frequency
+	 */
+	if (old_freq == freq) {
+		*target_freq = freq;
+		if (old_volt == volt)
+			return 0;
+		ret = regulator_set_voltage(rknpu_dev->vdd, volt, INT_MAX);
+		if (ret) {
+			LOG_DEV_ERROR(dev, "failed to set volt %lu\n", volt);
+			return ret;
+		}
+		rknpu_dev->current_volt = volt;
+		return 0;
+	}
+
+	if (rknpu_dev->vdd && old_volt != volt && old_freq < freq) {
+		ret = regulator_set_voltage(rknpu_dev->vdd, volt, INT_MAX);
+		if (ret) {
+			LOG_DEV_ERROR(dev, "failed to increase volt %lu\n",
+				      volt);
+			return ret;
+		}
+	}
+	LOG_DEV_DEBUG(dev, "%luHz %luuV -> %luHz %luuV\n", old_freq, old_volt,
+		      freq, volt);
+	ret = clk_set_rate(rknpu_dev->clks[0].clk, freq);
+	if (ret) {
+		LOG_DEV_ERROR(dev, "failed to set clock %lu\n", freq);
+		return ret;
+	}
+	*target_freq = freq;
+	rknpu_dev->current_freq = freq;
+
+	if (rknpu_dev->devfreq)
+		rknpu_dev->devfreq->last_status.current_frequency = freq;
+
+	if (rknpu_dev->vdd && old_volt != volt && old_freq > freq) {
+		ret = regulator_set_voltage(rknpu_dev->vdd, volt, INT_MAX);
+		if (ret) {
+			LOG_DEV_ERROR(dev, "failed to decrease volt %lu\n",
+				      volt);
+			return ret;
+		}
+	}
+	rknpu_dev->current_volt = volt;
+
+	LOG_DEV_INFO(dev, "set rknpu freq: %lu, volt: %lu\n",
+		     rknpu_dev->current_freq, rknpu_dev->current_volt);
+
+	return ret;
+}
+#endif
 
 static int npu_devfreq_get_dev_status(struct device *dev,
 				      struct devfreq_dev_status *stat)
@@ -666,6 +1144,32 @@ static struct devfreq_dev_profile npu_devfreq_profile = {
 	.get_cur_freq = npu_devfreq_get_cur_freq,
 };
 
+#ifdef CONFIG_PM_DEVFREQ
+static int devfreq_rknpu_ondemand_func(struct devfreq *df, unsigned long *freq)
+{
+	struct rknpu_device *rknpu_dev = df->data;
+
+	if (rknpu_dev)
+		*freq = rknpu_dev->ondemand_freq;
+	else
+		*freq = df->previous_freq;
+
+	return 0;
+}
+
+static int devfreq_rknpu_ondemand_handler(struct devfreq *devfreq,
+					  unsigned int event, void *data)
+{
+	return 0;
+}
+
+static struct devfreq_governor devfreq_rknpu_ondemand = {
+	.name = "rknpu_ondemand",
+	.get_target_freq = devfreq_rknpu_ondemand_func,
+	.event_handler = devfreq_rknpu_ondemand_handler,
+};
+#endif
+
 static unsigned long npu_get_static_power(struct devfreq *devfreq,
 					  unsigned long voltage)
 {
@@ -681,6 +1185,67 @@ static unsigned long npu_get_static_power(struct devfreq *devfreq,
 static struct devfreq_cooling_power npu_cooling_power = {
 	.get_static_power = &npu_get_static_power,
 };
+
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+static int rk3588_npu_get_soc_info(struct device *dev, struct device_node *np,
+				   int *bin, int *process)
+{
+	int ret = 0;
+	u8 value = 0;
+
+	if (!bin)
+		return 0;
+
+	if (of_property_match_string(np, "nvmem-cell-names",
+				     "specification_serial_number") >= 0) {
+		ret = rockchip_nvmem_cell_read_u8(
+			np, "specification_serial_number", &value);
+		if (ret) {
+			LOG_DEV_ERROR(
+				dev,
+				"Failed to get specification_serial_number\n");
+			return ret;
+		}
+		/* RK3588M */
+		if (value == 0xd)
+			*bin = 1;
+		/* RK3588J */
+		else if (value == 0xa)
+			*bin = 2;
+	}
+	if (*bin < 0)
+		*bin = 0;
+	LOG_DEV_INFO(dev, "bin=%d\n", *bin);
+
+	return ret;
+}
+
+static int rk3588_npu_set_soc_info(struct device *dev, struct device_node *np,
+				   int bin, int process, int volt_sel)
+{
+	struct opp_table *opp_table;
+	u32 supported_hw[2];
+
+	if (volt_sel < 0)
+		return 0;
+	if (bin < 0)
+		bin = 0;
+
+	if (!of_property_read_bool(np, "rockchip,supported-hw"))
+		return 0;
+
+	/* SoC Version */
+	supported_hw[0] = BIT(bin);
+	/* Speed Grade */
+	supported_hw[1] = BIT(volt_sel);
+	opp_table = dev_pm_opp_set_supported_hw(dev, supported_hw, 2);
+	if (IS_ERR(opp_table)) {
+		LOG_DEV_ERROR(dev, "failed to set supported opp\n");
+		return PTR_ERR(opp_table);
+	}
+
+	return 0;
+}
 
 static int rk3588_npu_set_read_margin(struct device *dev,
 				      struct rockchip_opp_info *opp_info,
@@ -700,7 +1265,8 @@ static int rk3588_npu_set_read_margin(struct device *dev,
 	for (i = 0; i < 3; i++) {
 		ret = regmap_read(opp_info->grf, offset, &val);
 		if (ret < 0) {
-			dev_err(dev, "failed to get rm from 0x%x\n", offset);
+			LOG_DEV_ERROR(dev, "failed to get rm from 0x%x\n",
+				      offset);
 			return ret;
 		}
 		val &= ~0x1c;
@@ -713,6 +1279,8 @@ static int rk3588_npu_set_read_margin(struct device *dev,
 }
 
 static const struct rockchip_opp_data rk3588_npu_opp_data = {
+	.get_soc_info = rk3588_npu_get_soc_info,
+	.set_soc_info = rk3588_npu_set_soc_info,
 	.set_read_margin = rk3588_npu_set_read_margin,
 };
 
@@ -752,8 +1320,8 @@ static int rknpu_devfreq_init(struct rknpu_device *rknpu_dev)
 	}
 
 	rockchip_get_opp_data(rockchip_npu_of_match, &rknpu_dev->opp_info);
-	ret = rockchip_init_opp_table(dev, &rknpu_dev->opp_info,
-				      "npu_leakage", "rknpu");
+	ret = rockchip_init_opp_table(dev, &rknpu_dev->opp_info, "npu_leakage",
+				      "rknpu");
 	if (ret) {
 		LOG_DEV_ERROR(dev, "failed to init_opp_table\n");
 		return ret;
@@ -764,16 +1332,25 @@ static int rknpu_devfreq_init(struct rknpu_device *rknpu_dev)
 	opp = devfreq_recommended_opp(dev, &rknpu_dev->current_freq, 0);
 	if (IS_ERR(opp)) {
 		ret = PTR_ERR(opp);
-		return ret;
+		goto err_remove_table;
 	}
 	dev_pm_opp_put(opp);
 	dp->initial_freq = rknpu_dev->current_freq;
 
-	rknpu_dev->devfreq =
-		devm_devfreq_add_device(dev, dp, "userspace", NULL);
+#ifdef CONFIG_PM_DEVFREQ
+	ret = devfreq_add_governor(&devfreq_rknpu_ondemand);
+	if (ret) {
+		LOG_DEV_ERROR(dev, "failed to add rknpu_ondemand governor\n");
+		goto err_remove_table;
+	}
+#endif
+
+	rknpu_dev->devfreq = devm_devfreq_add_device(dev, dp, "rknpu_ondemand",
+						     (void *)rknpu_dev);
 	if (IS_ERR(rknpu_dev->devfreq)) {
 		LOG_DEV_ERROR(dev, "failed to add devfreq\n");
-		return PTR_ERR(rknpu_dev->devfreq);
+		ret = PTR_ERR(rknpu_dev->devfreq);
+		goto err_remove_governor;
 	}
 	devm_devfreq_register_opp_notifier(dev, rknpu_dev->devfreq);
 
@@ -816,7 +1393,171 @@ static int rknpu_devfreq_init(struct rknpu_device *rknpu_dev)
 
 out:
 	return 0;
+
+err_remove_governor:
+#ifdef CONFIG_PM_DEVFREQ
+	devfreq_remove_governor(&devfreq_rknpu_ondemand);
+#endif
+err_remove_table:
+	dev_pm_opp_of_remove_table(dev);
+
+	rknpu_dev->devfreq = NULL;
+
+	return ret;
 }
+
+#else
+
+static int npu_devfreq_adjust_current_freq_volt(struct device *dev,
+						struct rknpu_device *rknpu_dev)
+{
+	unsigned long volt, old_freq, freq;
+	struct dev_pm_opp *opp = NULL;
+	int ret = -EINVAL;
+
+	old_freq = clk_get_rate(rknpu_dev->clks[0].clk);
+	freq = old_freq;
+
+#if KERNEL_VERSION(4, 11, 0) > LINUX_VERSION_CODE
+	rcu_read_lock();
+#endif
+
+	opp = devfreq_recommended_opp(dev, &freq, 0);
+	volt = dev_pm_opp_get_voltage(opp);
+
+#if KERNEL_VERSION(4, 11, 0) > LINUX_VERSION_CODE
+	rcu_read_unlock();
+#endif
+
+	if (freq >= old_freq && rknpu_dev->vdd) {
+		ret = regulator_set_voltage(rknpu_dev->vdd, volt, INT_MAX);
+		if (ret) {
+			LOG_DEV_ERROR(dev, "failed to set volt %lu\n", volt);
+			return ret;
+		}
+	}
+	LOG_DEV_DEBUG(dev, "adjust current freq=%luHz, volt=%luuV\n", freq,
+		      volt);
+	ret = clk_set_rate(rknpu_dev->clks[0].clk, freq);
+	if (ret) {
+		LOG_DEV_ERROR(dev, "failed to set clock %lu\n", freq);
+		return ret;
+	}
+	if (freq < old_freq && rknpu_dev->vdd) {
+		ret = regulator_set_voltage(rknpu_dev->vdd, volt, INT_MAX);
+		if (ret) {
+			LOG_DEV_ERROR(dev, "failed to set volt %lu\n", volt);
+			return ret;
+		}
+	}
+	rknpu_dev->current_freq = freq;
+	rknpu_dev->current_volt = volt;
+
+	return 0;
+}
+
+static int rknpu_devfreq_init(struct rknpu_device *rknpu_dev)
+{
+	struct device *dev = rknpu_dev->dev;
+	struct devfreq_dev_profile *dp = &npu_devfreq_profile;
+	int ret = -EINVAL;
+
+	ret = rockchip_init_opp_table(dev, NULL, "npu_leakage", "rknpu");
+	if (ret) {
+		LOG_DEV_ERROR(dev, "failed to init_opp_table\n");
+		return ret;
+	}
+
+	ret = npu_devfreq_adjust_current_freq_volt(dev, rknpu_dev);
+	if (ret) {
+		LOG_DEV_ERROR(dev, "failed to adjust current freq volt\n");
+		goto err_remove_table;
+	}
+	dp->initial_freq = rknpu_dev->current_freq;
+
+#ifdef CONFIG_PM_DEVFREQ
+	ret = devfreq_add_governor(&devfreq_rknpu_ondemand);
+	if (ret) {
+		LOG_DEV_ERROR(dev, "failed to add rknpu_ondemand governor\n");
+		goto err_remove_table;
+	}
+#endif
+
+	rknpu_dev->devfreq = devm_devfreq_add_device(dev, dp, "rknpu_ondemand",
+						     (void *)rknpu_dev);
+	if (IS_ERR(rknpu_dev->devfreq)) {
+		LOG_DEV_ERROR(dev, "failed to add devfreq\n");
+		ret = PTR_ERR(rknpu_dev->devfreq);
+		goto err_remove_governor;
+	}
+	devm_devfreq_register_opp_notifier(dev, rknpu_dev->devfreq);
+
+	rknpu_dev->devfreq->last_status.current_frequency = dp->initial_freq;
+	rknpu_dev->devfreq->last_status.total_time = 1;
+	rknpu_dev->devfreq->last_status.busy_time = 1;
+
+	npu_mdevp.data = rknpu_dev->devfreq;
+	rknpu_dev->mdev_info =
+		rockchip_system_monitor_register(dev, &npu_mdevp);
+	if (IS_ERR(rknpu_dev->mdev_info)) {
+		LOG_DEV_DEBUG(dev, "without system monitor\n");
+		rknpu_dev->mdev_info = NULL;
+	}
+	rknpu_dev->current_freq = clk_get_rate(rknpu_dev->clks[0].clk);
+	rknpu_dev->current_volt = regulator_get_voltage(rknpu_dev->vdd);
+
+	of_property_read_u32(dev->of_node, "dynamic-power-coefficient",
+			     (u32 *)&npu_cooling_power.dyn_power_coeff);
+	rknpu_dev->model_data =
+		rockchip_ipa_power_model_init(dev, "npu_leakage");
+	if (IS_ERR_OR_NULL(rknpu_dev->model_data)) {
+		rknpu_dev->model_data = NULL;
+		LOG_DEV_ERROR(dev, "failed to initialize power model\n");
+	} else if (rknpu_dev->model_data->dynamic_coefficient) {
+		npu_cooling_power.dyn_power_coeff =
+			rknpu_dev->model_data->dynamic_coefficient;
+	}
+
+	if (!npu_cooling_power.dyn_power_coeff) {
+		LOG_DEV_ERROR(dev, "failed to get dynamic-coefficient\n");
+		goto out;
+	}
+
+	rknpu_dev->devfreq_cooling = of_devfreq_cooling_register_power(
+		dev->of_node, rknpu_dev->devfreq, &npu_cooling_power);
+	if (IS_ERR_OR_NULL(rknpu_dev->devfreq_cooling))
+		LOG_DEV_ERROR(dev, "failed to register cooling device\n");
+
+out:
+	return 0;
+
+err_remove_governor:
+#ifdef CONFIG_PM_DEVFREQ
+	devfreq_remove_governor(&devfreq_rknpu_ondemand);
+#endif
+err_remove_table:
+	dev_pm_opp_of_remove_table(dev);
+
+	rknpu_dev->devfreq = NULL;
+
+	return ret;
+}
+#endif
+
+static int rknpu_devfreq_remove(struct rknpu_device *rknpu_dev)
+{
+	if (rknpu_dev->devfreq) {
+		devfreq_unregister_opp_notifier(rknpu_dev->dev,
+						rknpu_dev->devfreq);
+		dev_pm_opp_of_remove_table(rknpu_dev->dev);
+#ifdef CONFIG_PM_DEVFREQ
+		devfreq_remove_governor(&devfreq_rknpu_ondemand);
+#endif
+	}
+
+	return 0;
+}
+
 #endif
 
 static int rknpu_register_irq(struct platform_device *pdev,
@@ -865,6 +1606,81 @@ static int rknpu_register_irq(struct platform_device *pdev,
 			return ret;
 		}
 	}
+
+	return 0;
+}
+
+static int rknpu_find_sram_resource(struct rknpu_device *rknpu_dev)
+{
+	struct device *dev = rknpu_dev->dev;
+	struct device_node *sram_node = NULL;
+	struct resource sram_res;
+	uint32_t sram_size = 0;
+	int ret = -EINVAL;
+
+	/* get sram device node */
+	sram_node = of_parse_phandle(dev->of_node, "rockchip,sram", 0);
+	rknpu_dev->sram_size = 0;
+	if (!sram_node)
+		return -EINVAL;
+
+	/* get sram start and size */
+	ret = of_address_to_resource(sram_node, 0, &sram_res);
+	of_node_put(sram_node);
+	if (ret)
+		return ret;
+
+	/* check sram start and size is PAGE_SIZE align */
+	rknpu_dev->sram_start = round_up(sram_res.start, PAGE_SIZE);
+	rknpu_dev->sram_end = round_down(
+		sram_res.start + resource_size(&sram_res), PAGE_SIZE);
+	if (rknpu_dev->sram_end <= rknpu_dev->sram_start) {
+		LOG_DEV_WARN(
+			dev,
+			"invalid sram resource, sram start %pa, sram end %pa\n",
+			&rknpu_dev->sram_start, &rknpu_dev->sram_end);
+		return -EINVAL;
+	}
+
+	sram_size = rknpu_dev->sram_end - rknpu_dev->sram_start;
+
+	rknpu_dev->sram_base_io =
+		devm_ioremap(dev, rknpu_dev->sram_start, sram_size);
+	if (IS_ERR(rknpu_dev->sram_base_io)) {
+		LOG_DEV_ERROR(dev, "failed to remap sram base io!\n");
+		rknpu_dev->sram_base_io = NULL;
+	}
+
+	rknpu_dev->sram_size = sram_size;
+
+	LOG_DEV_INFO(dev, "sram region: [%pa, %pa), sram size: %#x\n",
+		     &rknpu_dev->sram_start, &rknpu_dev->sram_end,
+		     rknpu_dev->sram_size);
+
+	return 0;
+}
+
+static int rknpu_find_nbuf_resource(struct rknpu_device *rknpu_dev)
+{
+	struct device *dev = rknpu_dev->dev;
+
+	if (rknpu_dev->config->nbuf_size == 0)
+		return -EINVAL;
+
+	rknpu_dev->nbuf_start = rknpu_dev->config->nbuf_phyaddr;
+	rknpu_dev->nbuf_size = rknpu_dev->config->nbuf_size;
+	rknpu_dev->nbuf_base_io =
+		devm_ioremap(dev, rknpu_dev->nbuf_start, rknpu_dev->nbuf_size);
+	if (IS_ERR(rknpu_dev->nbuf_base_io)) {
+		LOG_DEV_ERROR(dev, "failed to remap nbuf base io!\n");
+		rknpu_dev->nbuf_base_io = NULL;
+	}
+
+	rknpu_dev->nbuf_end = rknpu_dev->nbuf_start + rknpu_dev->nbuf_size;
+
+	LOG_DEV_INFO(dev, "nbuf region: [%pa, %pa), nbuf size: %#x\n",
+		     &rknpu_dev->nbuf_start, &rknpu_dev->nbuf_end,
+		     rknpu_dev->nbuf_size);
 
 	return 0;
 }
@@ -920,10 +1736,19 @@ static int rknpu_probe(struct platform_device *pdev)
 	rknpu_reset_get(rknpu_dev);
 
 	rknpu_dev->num_clks = devm_clk_bulk_get_all(dev, &rknpu_dev->clks);
-	if (strstr(__clk_get_name(rknpu_dev->clks[0].clk), "scmi"))
-		rknpu_dev->opp_info.scmi_clk = rknpu_dev->clks[0].clk;
+	if (rknpu_dev->num_clks < 1) {
+		LOG_DEV_ERROR(dev, "failed to get clk source for rknpu\n");
+#ifndef FPGA_PLATFORM
+		return -ENODEV;
+#endif
+	}
 
 #ifndef FPGA_PLATFORM
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+	if (strstr(__clk_get_name(rknpu_dev->clks[0].clk), "scmi"))
+		rknpu_dev->opp_info.scmi_clk = rknpu_dev->clks[0].clk;
+#endif
+
 	rknpu_dev->vdd = devm_regulator_get_optional(dev, "rknpu");
 	if (IS_ERR(rknpu_dev->vdd)) {
 		if (PTR_ERR(rknpu_dev->vdd) != -ENODEV) {
@@ -953,6 +1778,8 @@ static int rknpu_probe(struct platform_device *pdev)
 
 	spin_lock_init(&rknpu_dev->lock);
 	spin_lock_init(&rknpu_dev->irq_lock);
+	mutex_init(&rknpu_dev->power_lock);
+	mutex_init(&rknpu_dev->reset_lock);
 	for (i = 0; i < config->num_irqs; i++) {
 		INIT_LIST_HEAD(&rknpu_dev->subcore_datas[i].todo_list);
 		init_waitqueue_head(&rknpu_dev->subcore_datas[i].job_done_wq);
@@ -990,21 +1817,51 @@ static int rknpu_probe(struct platform_device *pdev)
 		}
 	}
 
-	if (!rknpu_dev->bypass_irq_handler)
-		rknpu_register_irq(pdev, rknpu_dev);
+	if (!rknpu_dev->bypass_irq_handler) {
+		ret = rknpu_register_irq(pdev, rknpu_dev);
+		if (ret)
+			return ret;
+	} else {
+		LOG_DEV_WARN(dev, "bypass irq handler!\n");
+	}
 
+#ifdef CONFIG_ROCKCHIP_RKNPU_DRM_GEM
 	ret = rknpu_drm_probe(rknpu_dev);
 	if (ret) {
 		LOG_DEV_ERROR(dev, "failed to probe device for rknpu\n");
 		return ret;
 	}
+#endif
+#ifdef CONFIG_ROCKCHIP_RKNPU_DMA_HEAP
+	rknpu_dev->miscdev.minor = MISC_DYNAMIC_MINOR;
+	rknpu_dev->miscdev.name = "rknpu";
+	rknpu_dev->miscdev.fops = &rknpu_fops;
 
+	ret = misc_register(&rknpu_dev->miscdev);
+	if (ret) {
+		LOG_DEV_ERROR(dev, "cannot register miscdev (%d)\n", ret);
+		return ret;
+	}
+
+	rknpu_dev->heap = rk_dma_heap_find("rk-dma-heap-cma");
+	if (!rknpu_dev->heap) {
+		LOG_DEV_ERROR(dev, "failed to find cma heap\n");
+		return -ENOMEM;
+	}
+	rk_dma_heap_set_dev(dev);
+	LOG_DEV_INFO(dev, "Initialized %s: v%d.%d.%d for %s\n", DRIVER_DESC,
+		     DRIVER_MAJOR, DRIVER_MINOR, DRIVER_PATCHLEVEL,
+		     DRIVER_DATE);
+#endif
+
+#ifdef CONFIG_ROCKCHIP_RKNPU_FENCE
 	ret = rknpu_fence_context_alloc(rknpu_dev);
 	if (ret) {
 		LOG_DEV_ERROR(dev,
 			      "failed to allocate fence context for rknpu\n");
-		goto err_remove_drm;
+		goto err_remove_drv;
 	}
+#endif
 
 	platform_set_drvdata(pdev, rknpu_dev);
 
@@ -1026,16 +1883,64 @@ static int rknpu_probe(struct platform_device *pdev)
 
 	ret = rknpu_power_on(rknpu_dev);
 	if (ret)
-		goto err_remove_drm;
+		goto err_remove_drv;
 
 #ifndef FPGA_PLATFORM
 	rknpu_devfreq_init(rknpu_dev);
 #endif
 
+	// set default power put delay to 3s
+	rknpu_dev->power_put_delay = 3000;
+	rknpu_dev->power_off_wq =
+		create_freezable_workqueue("rknpu_power_off_wq");
+	if (!rknpu_dev->power_off_wq) {
+		LOG_DEV_ERROR(dev, "rknpu couldn't create power_off workqueue");
+		ret = -ENOMEM;
+		goto err_devfreq_remove;
+	}
+	INIT_DEFERRABLE_WORK(&rknpu_dev->power_off_work,
+			     rknpu_power_off_delay_work);
+
+	if (IS_ENABLED(CONFIG_NO_GKI) &&
+	    IS_ENABLED(CONFIG_ROCKCHIP_RKNPU_SRAM) && rknpu_dev->iommu_en) {
+		if (!rknpu_find_sram_resource(rknpu_dev)) {
+			ret = rknpu_mm_create(rknpu_dev->sram_size, PAGE_SIZE,
+					      &rknpu_dev->sram_mm);
+			if (ret != 0)
+				goto err_remove_wq;
+		} else {
+			LOG_DEV_WARN(dev, "could not find sram resource!\n");
+		}
+	}
+
+	if (IS_ENABLED(CONFIG_NO_GKI) && rknpu_dev->iommu_en &&
+	    rknpu_dev->config->nbuf_size > 0)
+		rknpu_find_nbuf_resource(rknpu_dev);
+
+	rknpu_power_off(rknpu_dev);
+	atomic_set(&rknpu_dev->power_refcount, 0);
+	atomic_set(&rknpu_dev->cmdline_power_refcount, 0);
+
+	rknpu_debugger_init(rknpu_dev);
+	rknpu_init_timer(rknpu_dev);
+
 	return 0;
 
-err_remove_drm:
+err_remove_wq:
+	destroy_workqueue(rknpu_dev->power_off_wq);
+
+err_devfreq_remove:
+#ifndef FPGA_PLATFORM
+	rknpu_devfreq_remove(rknpu_dev);
+#endif
+
+err_remove_drv:
+#ifdef CONFIG_ROCKCHIP_RKNPU_DRM_GEM
 	rknpu_drm_remove(rknpu_dev);
+#endif
+#ifdef CONFIG_ROCKCHIP_RKNPU_DMA_HEAP
+	misc_deregister(&(rknpu_dev->miscdev));
+#endif
 
 	return ret;
 }
@@ -1045,14 +1950,35 @@ static int rknpu_remove(struct platform_device *pdev)
 	struct rknpu_device *rknpu_dev = platform_get_drvdata(pdev);
 	int i = 0;
 
+	cancel_delayed_work_sync(&rknpu_dev->power_off_work);
+	destroy_workqueue(rknpu_dev->power_off_wq);
+
+	if (IS_ENABLED(CONFIG_ROCKCHIP_RKNPU_SRAM) && rknpu_dev->sram_mm)
+		rknpu_mm_destroy(rknpu_dev->sram_mm);
+
+	rknpu_debugger_remove(rknpu_dev);
+	rknpu_cancel_timer(rknpu_dev);
+
 	for (i = 0; i < rknpu_dev->config->num_irqs; i++) {
 		WARN_ON(rknpu_dev->subcore_datas[i].job);
 		WARN_ON(!list_empty(&rknpu_dev->subcore_datas[i].todo_list));
 	}
 
+#ifdef CONFIG_ROCKCHIP_RKNPU_DRM_GEM
 	rknpu_drm_remove(rknpu_dev);
+#endif
+#ifdef CONFIG_ROCKCHIP_RKNPU_DMA_HEAP
+	misc_deregister(&(rknpu_dev->miscdev));
+#endif
 
-	rknpu_power_off(rknpu_dev);
+#ifndef FPGA_PLATFORM
+	rknpu_devfreq_remove(rknpu_dev);
+#endif
+
+	mutex_lock(&rknpu_dev->power_lock);
+	if (atomic_read(&rknpu_dev->power_refcount) > 0)
+		rknpu_power_off(rknpu_dev);
+	mutex_unlock(&rknpu_dev->power_lock);
 
 	if (rknpu_dev->multiple_domains) {
 		if (rknpu_dev->genpd_dev_npu0)
@@ -1068,6 +1994,8 @@ static int rknpu_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifndef FPGA_PLATFORM
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
 static int rknpu_runtime_suspend(struct device *dev)
 {
 	struct rknpu_device *rknpu_dev = dev_get_drvdata(dev);
@@ -1091,7 +2019,7 @@ static int rknpu_runtime_resume(struct device *dev)
 	if (!rknpu_dev->current_freq || !rknpu_dev->current_volt)
 		return 0;
 
-	ret = clk_bulk_prepare_enable(opp_info->num_clks,  opp_info->clks);
+	ret = clk_bulk_prepare_enable(opp_info->num_clks, opp_info->clks);
 	if (ret) {
 		LOG_DEV_ERROR(dev, "failed to enable opp clks\n");
 		return ret;
@@ -1113,8 +2041,11 @@ static int rknpu_runtime_resume(struct device *dev)
 static const struct dev_pm_ops rknpu_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
 				pm_runtime_force_resume)
-	SET_RUNTIME_PM_OPS(rknpu_runtime_suspend, rknpu_runtime_resume, NULL)
+		SET_RUNTIME_PM_OPS(rknpu_runtime_suspend, rknpu_runtime_resume,
+				   NULL)
 };
+#endif
+#endif
 
 static struct platform_driver rknpu_driver = {
 	.probe = rknpu_probe,
@@ -1122,7 +2053,11 @@ static struct platform_driver rknpu_driver = {
 	.driver = {
 		.owner = THIS_MODULE,
 		.name = "RKNPU",
+#ifndef FPGA_PLATFORM
+#if KERNEL_VERSION(5, 5, 0) < LINUX_VERSION_CODE
 		.pm = &rknpu_pm_ops,
+#endif
+#endif
 		.of_match_table = of_match_ptr(rknpu_of_match),
 	},
 };

@@ -18,6 +18,7 @@
 #include <linux/workqueue.h>
 #include <linux/rk-camera-module.h>
 #include <linux/rkcif-config.h>
+#include <linux/soc/rockchip/rockchip_thunderboot_service.h>
 
 #include "regs.h"
 #include "version.h"
@@ -25,6 +26,10 @@
 #include "mipi-csi2.h"
 #include "hw.h"
 #include "subdev-itf.h"
+
+#if IS_ENABLED(CONFIG_CPU_RV1106)
+#include <linux/soc/rockchip/rk_sdmmc.h>
+#endif
 
 #define CIF_DRIVER_NAME		"rkcif"
 #define CIF_VIDEODEVICE_NAME	"stream_cif"
@@ -73,8 +78,6 @@
 #define RKCIF_DEFAULT_HEIGHT	480
 #define RKCIF_FS_DETECTED_NUM	2
 
-#define RKCIF_RX_BUF_MAX	8
-
 #define RKCIF_MAX_INTERVAL_NS	5000000
 /*
  * for HDR mode sync buf
@@ -98,10 +101,12 @@ enum rkcif_workmode {
 };
 
 enum rkcif_stream_mode {
-	RKCIF_STREAM_MODE_NONE = 0x0,
-	RKCIF_STREAM_MODE_CAPTURE = 0x01,
-	RKCIF_STREAM_MODE_TOISP = 0x02,
-	RKCIF_STREAM_MODE_TOSCALE = 0x04
+	RKCIF_STREAM_MODE_NONE       = 0x0,
+	RKCIF_STREAM_MODE_CAPTURE    = 0x01,
+	RKCIF_STREAM_MODE_TOISP      = 0x02,
+	RKCIF_STREAM_MODE_TOSCALE    = 0x04,
+	RKCIF_STREAM_MODE_TOISP_RDBK = 0x08,
+	RKCIF_STREAM_MODE_ROCKIT     = 0x10
 };
 
 enum rkcif_yuvaddr_state {
@@ -122,7 +127,11 @@ enum rkcif_lvds_pad {
 	RKCIF_LVDS_PAD_SRC_ID1,
 	RKCIF_LVDS_PAD_SRC_ID2,
 	RKCIF_LVDS_PAD_SRC_ID3,
-	RKCIF_LVDS_PAD_MAX
+	RKCIF_LVDS_PAD_SCL_ID0,
+	RKCIF_LVDS_PAD_SCL_ID1,
+	RKCIF_LVDS_PAD_SCL_ID2,
+	RKCIF_LVDS_PAD_SCL_ID3,
+	RKCIF_LVDS_PAD_MAX,
 };
 
 enum rkcif_lvds_state {
@@ -178,20 +187,16 @@ struct rkcif_buffer {
 		u32 buff_addr[VIDEO_MAX_PLANES];
 		void *vaddr[VIDEO_MAX_PLANES];
 	};
+	struct dma_buf *dbuf;
+	u64 fe_timestamp;
 };
 
-struct rkcif_dummy_buffer {
+struct rkcif_tools_buffer {
+	struct vb2_v4l2_buffer *vb;
 	struct list_head list;
-	struct dma_buf *dbuf;
-	dma_addr_t dma_addr;
-	struct page **pages;
-	void *mem_priv;
-	void *vaddr;
-	u32 size;
-	int dma_fd;
-	bool is_need_vaddr;
-	bool is_need_dbuf;
-	bool is_need_dmafd;
+	u32 frame_idx;
+	u64 timestamp;
+	int use_cnt;
 };
 
 extern int rkcif_debug;
@@ -212,6 +217,7 @@ struct rkcif_sensor_info {
 	int lanes;
 	struct v4l2_rect raw_rect;
 	struct v4l2_subdev_selection selection;
+	int dsi_input_en;
 };
 
 enum cif_fmt_type {
@@ -275,6 +281,7 @@ struct csi_channel_info {
 	unsigned int virtual_width;
 	unsigned int crop_st_x;
 	unsigned int crop_st_y;
+	unsigned int dsi_input;
 	struct rkmodule_lvds_cfg lvds_cfg;
 };
 
@@ -349,7 +356,9 @@ struct rkcif_irq_stats {
 	u64 dvp_pix_err_cnt;
 	u64 dvp_size_err_cnt;
 	u64 dvp_bwidth_lack_cnt;
-	u64 all_frm_end_cnt;
+	u64 frm_end_cnt[RKCIF_MAX_STREAM_MIPI];
+	u64 not_active_buf_cnt[RKCIF_MAX_STREAM_MIPI];
+	u64 trig_simult_cnt[RKCIF_MAX_STREAM_MIPI];
 	u64 all_err_cnt;
 };
 
@@ -387,7 +396,7 @@ struct rkcif_timer {
 	unsigned int		run_cnt;
 	unsigned int		max_run_cnt;
 	unsigned int		stop_index_of_run_cnt;
-	unsigned int		last_buf_wakeup_cnt;
+	unsigned int		last_buf_wakeup_cnt[RKCIF_MAX_STREAM_MIPI];
 	unsigned long		csi2_err_cnt_even;
 	unsigned long		csi2_err_cnt_odd;
 	unsigned int		csi2_err_ref_cnt;
@@ -408,6 +417,7 @@ struct rkcif_timer {
 	bool			is_running;
 	bool			is_csi2_err_occurred;
 	bool			has_been_init;
+	bool			is_ctrl_by_user;
 	enum rkcif_monitor_mode	monitor_mode;
 	enum rkmodule_reset_src	reset_src;
 };
@@ -423,14 +433,39 @@ enum rkcif_capture_mode {
 	RKCIF_TO_ISP_DMA,
 };
 
+/*
+ * list: used for buf rotation
+ * list_free: only used to release buf asynchronously
+ */
 struct rkcif_rx_buffer {
+	int buf_idx;
+	struct list_head list;
+	struct list_head list_free;
 	struct rkisp_rx_buf dbufs;
 	struct rkcif_dummy_buffer dummy;
+	struct rkisp_thunderboot_shmem shmem;
+	u64 fe_timestamp;
 };
 
 enum rkcif_dma_en_mode {
 	RKCIF_DMAEN_BY_VICAP = 0x1,
 	RKCIF_DMAEN_BY_ISP = 0x2,
+	RKCIF_DMAEN_BY_VICAP_TO_ISP = 0x4,
+	RKCIF_DMAEN_BY_ISP_TO_VICAP = 0x8,
+	RKCIF_DMAEN_BY_ROCKIT = 0x10,
+};
+
+struct rkcif_skip_info {
+	u8 cap_m;
+	u8 skip_n;
+	bool skip_en;
+	bool skip_to_en;
+	bool skip_to_dis;
+};
+
+struct rkcif_sync_cfg {
+	u32 type;
+	u32 group;
 };
 
 /*
@@ -462,6 +497,9 @@ struct rkcif_stream {
 	struct rkcif_buffer		*next_buf;
 	struct rkcif_rx_buffer		*curr_buf_toisp;
 	struct rkcif_rx_buffer		*next_buf_toisp;
+	struct list_head		rockit_buf_head;
+	struct rkcif_buffer		*curr_buf_rockit;
+	struct rkcif_buffer		*next_buf_rockit;
 
 	spinlock_t vbq_lock; /* vfd lock */
 	spinlock_t fps_lock;
@@ -478,14 +516,27 @@ struct rkcif_stream {
 	unsigned int			fs_cnt_in_single_frame;
 	unsigned int			capture_mode;
 	struct rkcif_scale_vdev		*scale_vdev;
+	struct rkcif_tools_vdev		*tools_vdev;
 	int				dma_en;
 	int				to_en_dma;
 	int				to_stop_dma;
+	int				buf_owner;
+	int				buf_replace_cnt;
+	struct list_head		rx_buf_head_vicap;
 	unsigned int			cur_stream_mode;
-	struct rkcif_rx_buffer		rx_buf[RKCIF_RX_BUF_MAX];
+	struct rkcif_rx_buffer		rx_buf[RKISP_VICAP_BUF_CNT_MAX];
 	struct list_head		rx_buf_head;
 	int				buf_num_toisp;
 	u64				line_int_cnt;
+	int				lack_buf_cnt;
+	unsigned int			buf_wake_up_cnt;
+	struct rkcif_skip_info		skip_info;
+	struct tasklet_struct		vb_done_tasklet;
+	struct list_head		vb_done_list;
+	int				last_rx_buf_idx;
+	int				last_frame_idx;
+	int				new_fource_idx;
+	atomic_t			buf_cnt;
 	bool				stopping;
 	bool				crop_enable;
 	bool				crop_dyn_en;
@@ -498,6 +549,10 @@ struct rkcif_stream {
 	bool				is_buf_active;
 	bool				is_high_align;
 	bool				to_en_scale;
+	bool				is_finish_stop_dma;
+	bool				is_in_vblank;
+	bool				is_change_toisp;
+	bool				is_stop_capture;
 };
 
 struct rkcif_lvds_subdev {
@@ -563,6 +618,7 @@ static inline struct vb2_queue *to_vb2_queue(struct file *file)
 #define CIF_SCALE_CH3_VDEV_NAME CIF_DRIVER_NAME	"_scale_ch3"
 
 #define RKCIF_SCALE_ENUM_SIZE_MAX	3
+#define RKCIF_MAX_SDITF			4
 
 enum scale_ch_sw {
 	SCALE_MIPI0_ID0,
@@ -653,6 +709,87 @@ int rkcif_register_scale_vdevs(struct rkcif_device *cif_dev,
 void rkcif_unregister_scale_vdevs(struct rkcif_device *cif_dev,
 				   int stream_num);
 
+#define TOOLS_DRIVER_NAME		"rkcif_tools"
+
+#define RKCIF_TOOLS_CH0		0
+#define RKCIF_TOOLS_CH1		1
+#define RKCIF_TOOLS_CH2		2
+#define RKCIF_MAX_TOOLS_CH	3
+
+#define CIF_TOOLS_CH0_VDEV_NAME CIF_DRIVER_NAME	"_tools_id0"
+#define CIF_TOOLS_CH1_VDEV_NAME CIF_DRIVER_NAME	"_tools_id1"
+#define CIF_TOOLS_CH2_VDEV_NAME CIF_DRIVER_NAME	"_tools_id2"
+
+/*
+ * struct rkcif_tools_vdev - CIF Capture device
+ *
+ * @irq_lock: buffer queue lock
+ * @stat: stats buffer list
+ * @readout_wq: workqueue for statistics information read
+ */
+struct rkcif_tools_vdev {
+	unsigned int ch:3;
+	struct rkcif_device *cifdev;
+	struct rkcif_vdev_node vnode;
+	struct rkcif_stream *stream;
+	struct list_head buf_head;
+	struct list_head buf_done_head;
+	struct list_head src_buf_head;
+	spinlock_t vbq_lock; /* vfd lock */
+	wait_queue_head_t wq_stopped;
+	struct v4l2_pix_format_mplane	pixm;
+	const struct cif_output_fmt *tools_out_fmt;
+	struct rkcif_buffer *curr_buf;
+	struct work_struct work;
+	enum rkcif_state state;
+	int frame_phase;
+	unsigned int frame_idx;
+	bool stopping;
+};
+
+static inline
+struct rkcif_tools_vdev *to_rkcif_tools_vdev(struct rkcif_vdev_node *vnode)
+{
+	return container_of(vnode, struct rkcif_tools_vdev, vnode);
+}
+
+void rkcif_init_tools_vdev(struct rkcif_device *cif_dev, u32 ch);
+int rkcif_register_tools_vdevs(struct rkcif_device *cif_dev,
+				int stream_num,
+				bool is_multi_input);
+void rkcif_unregister_tools_vdevs(struct rkcif_device *cif_dev,
+				   int stream_num);
+
+enum rkcif_err_state {
+	RKCIF_ERR_ID0_NOT_BUF = 0x1,
+	RKCIF_ERR_ID1_NOT_BUF = 0x2,
+	RKCIF_ERR_ID2_NOT_BUF = 0x4,
+	RKCIF_ERR_ID3_NOT_BUF = 0x8,
+	RKCIF_ERR_ID0_TRIG_SIMULT = 0x10,
+	RKCIF_ERR_ID1_TRIG_SIMULT = 0x20,
+	RKCIF_ERR_ID2_TRIG_SIMULT = 0x40,
+	RKCIF_ERR_ID3_TRIG_SIMULT = 0x80,
+	RKCIF_ERR_SIZE = 0x100,
+	RKCIF_ERR_OVERFLOW = 0x200,
+	RKCIF_ERR_BANDWIDTH_LACK = 0x400,
+	RKCIF_ERR_BUS = 0X800,
+	RKCIF_ERR_ID0_MULTI_FS = 0x1000,
+	RKCIF_ERR_ID1_MULTI_FS = 0x2000,
+	RKCIF_ERR_ID2_MULTI_FS = 0x4000,
+	RKCIF_ERR_ID3_MULTI_FS = 0x8000,
+	RKCIF_ERR_PIXEL = 0x10000,
+	RKCIF_ERR_LINE = 0x20000,
+};
+
+struct rkcif_err_state_work {
+	struct work_struct	work;
+	u64 last_timestamp;
+	u32 err_state;
+	u32 intstat;
+	u32 lastline;
+	u32 lastpixel;
+};
+
 /*
  * struct rkcif_device - ISP platform device
  * @base_addr: base register address
@@ -673,19 +810,22 @@ struct rkcif_device {
 
 	struct rkcif_stream		stream[RKCIF_MULTI_STREAMS_NUM];
 	struct rkcif_scale_vdev		scale_vdev[RKCIF_MULTI_STREAMS_NUM];
+	struct rkcif_tools_vdev		tools_vdev[RKCIF_MAX_TOOLS_CH];
 	struct rkcif_pipeline		pipe;
 
 	struct csi_channel_info		channels[RKCIF_MAX_CSI_CHANNEL];
 	int				num_channels;
 	int				chip_id;
 	atomic_t			stream_cnt;
-	atomic_t			fh_cnt;
+	atomic_t			power_cnt;
 	struct mutex			stream_lock; /* lock between streams */
 	struct mutex			scale_lock; /* lock between scale dev */
+	struct mutex			tools_lock; /* lock between tools dev */
 	enum rkcif_workmode		workmode;
 	bool				can_be_reset;
 	struct rkmodule_hdr_cfg		hdr;
 	struct rkcif_buffer		*rdbk_buf[RDBK_MAX];
+	struct rkcif_rx_buffer		*rdbk_rx_buf[RDBK_MAX];
 	struct rkcif_luma_vdev		luma_vdev;
 	struct rkcif_lvds_subdev	lvds_subdev;
 	struct rkcif_dvp_sof_subdev	dvp_sof_subdev;
@@ -693,13 +833,12 @@ struct rkcif_device {
 	irqreturn_t (*isr_hdl)(int irq, struct rkcif_device *cif_dev);
 	int inf_id;
 
-	struct sditf_priv		*sditf;
+	struct sditf_priv		*sditf[RKCIF_MAX_SDITF];
 	struct proc_dir_entry		*proc_dir;
 	struct rkcif_irq_stats		irq_stats;
 	spinlock_t			hdr_lock; /* lock for hdr buf sync */
+	spinlock_t			buffree_lock;
 	struct rkcif_timer		reset_watchdog_timer;
-	unsigned int			buf_wake_up_cnt;
-	struct notifier_block		reset_notifier; /* reset for mipi csi crc err */
 	struct rkcif_work_struct	reset_work;
 	int				id_use_cnt;
 	unsigned int			csi_host_idx;
@@ -707,21 +846,40 @@ struct rkcif_device {
 	unsigned int			wait_line;
 	unsigned int			wait_line_bak;
 	unsigned int			wait_line_cache;
-	struct rkcif_dummy_buffer	dummy_buf;
+	struct completion		cmpl_ntf;
+	struct csi2_dphy_hw		*dphy_hw;
+	phys_addr_t			resmem_pa;
+	size_t				resmem_size;
+	struct rk_tb_client		tb_client;
 	bool				is_start_hdr;
 	bool				reset_work_cancel;
 	bool				iommu_en;
 	bool				is_use_dummybuf;
-	int				sync_type;
+	bool				is_notifier_isp;
+	bool				is_thunderboot;
+	bool				is_rdbk_to_online;
+	bool				is_support_tools;
+	int				rdbk_debug;
+	struct rkcif_sync_cfg		sync_cfg;
+	int				sditf_cnt;
+	u32				early_line;
+	int				isp_runtime_max;
+	int				sensor_linetime;
+	u32				err_state;
+	struct rkcif_err_state_work	err_state_work;
 };
 
 extern struct platform_driver rkcif_plat_drv;
+void rkcif_set_fps(struct rkcif_stream *stream, struct rkcif_fps *fps);
 int rkcif_do_start_stream(struct rkcif_stream *stream,
 				enum rkcif_stream_mode mode);
 void rkcif_do_stop_stream(struct rkcif_stream *stream,
 				enum rkcif_stream_mode mode);
 void rkcif_irq_handle_scale(struct rkcif_device *cif_dev,
 				  unsigned int intstat_glb);
+void rkcif_buf_queue(struct vb2_buffer *vb);
+
+void rkcif_vb_done_tasklet(struct rkcif_stream *stream, struct rkcif_buffer *buf);
 
 int rkcif_scale_start(struct rkcif_scale_vdev *scale_vdev);
 
@@ -754,8 +912,6 @@ void rkcif_irq_pingpong(struct rkcif_device *cif_dev);
 void rkcif_irq_pingpong_v1(struct rkcif_device *cif_dev);
 unsigned int rkcif_irq_global(struct rkcif_device *cif_dev);
 void rkcif_irq_handle_toisp(struct rkcif_device *cif_dev, unsigned int intstat_glb);
-void rkcif_soft_reset(struct rkcif_device *cif_dev,
-		      bool is_rst_iommu);
 int rkcif_register_lvds_subdev(struct rkcif_device *dev);
 void rkcif_unregister_lvds_subdev(struct rkcif_device *dev);
 int rkcif_register_dvp_sof_subdev(struct rkcif_device *dev);
@@ -772,14 +928,40 @@ void rkcif_config_dvp_clk_sampling_edge(struct rkcif_device *dev,
 void rkcif_enable_dvp_clk_dual_edge(struct rkcif_device *dev, bool on);
 void rkcif_reset_work(struct work_struct *work);
 
+void rkcif_vb_done_oneframe(struct rkcif_stream *stream,
+			    struct vb2_v4l2_buffer *vb_done);
+
 int rkcif_init_rx_buf(struct rkcif_stream *stream, int buf_num);
 void rkcif_free_rx_buf(struct rkcif_stream *stream, int buf_num);
 
 int rkcif_set_fmt(struct rkcif_stream *stream,
 		       struct v4l2_pix_format_mplane *pixm,
 		       bool try);
-void rkcif_enable_dma_capture(struct rkcif_stream *stream);
+void rkcif_enable_dma_capture(struct rkcif_stream *stream, bool is_only_enable);
+
+void rkcif_do_soft_reset(struct rkcif_device *dev);
 
 u32 rkcif_mbus_pixelcode_to_v4l2(u32 pixelcode);
+
+void rkcif_config_dvp_pin(struct rkcif_device *dev, bool on);
+
+s32 rkcif_get_sensor_vblank_def(struct rkcif_device *dev);
+s32 rkcif_get_sensor_vblank(struct rkcif_device *dev);
+int rkcif_get_linetime(struct rkcif_stream *stream);
+
+void rkcif_assign_check_buffer_update_toisp(struct rkcif_stream *stream);
+
+struct rkcif_rx_buffer *to_cif_rx_buf(struct rkisp_rx_buf *dbufs);
+
+int rkcif_clr_unready_dev(void);
+
+const struct
+cif_output_fmt *rkcif_find_output_fmt(struct rkcif_stream *stream, u32 pixelfmt);
+/* Rockit */
+int rkcif_rockit_buf_done(struct rkcif_stream *stream, struct rkcif_buffer *buf);
+void rkcif_rockit_dev_init(struct rkcif_device *dev);
+void rkcif_rockit_dev_deinit(void);
+
+void rkcif_err_print_work(struct work_struct *work);
 
 #endif

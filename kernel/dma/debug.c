@@ -448,7 +448,7 @@ void debug_dma_dump_mappings(struct device *dev)
  * other hand, consumes a single dma_debug_entry, but inserts 'nents'
  * entries into the tree.
  */
-static RADIX_TREE(dma_active_cacheline, GFP_NOWAIT);
+static RADIX_TREE(dma_active_cacheline, GFP_ATOMIC);
 static DEFINE_SPINLOCK(radix_lock);
 #define ACTIVE_CACHELINE_MAX_OVERLAP ((1 << RADIX_TREE_MAX_TAGS) - 1)
 #define CACHELINE_PER_PAGE_SHIFT (PAGE_SHIFT - L1_CACHE_SHIFT)
@@ -564,7 +564,7 @@ static void add_dma_entry(struct dma_debug_entry *entry)
 
 	rc = active_cacheline_insert(entry);
 	if (rc == -ENOMEM) {
-		pr_err("cacheline tracking ENOMEM, dma-debug disabled\n");
+		pr_err_once("cacheline tracking ENOMEM, dma-debug disabled\n");
 		global_disable = true;
 	}
 
@@ -928,7 +928,7 @@ static __init int dma_debug_cmdline(char *str)
 		global_disable = true;
 	}
 
-	return 0;
+	return 1;
 }
 
 static __init int dma_debug_entries_cmdline(char *str)
@@ -937,7 +937,7 @@ static __init int dma_debug_entries_cmdline(char *str)
 		return -EINVAL;
 	if (!get_option(&str, &nr_prealloc_entries))
 		nr_prealloc_entries = PREALLOC_DMA_DEBUG_ENTRIES;
-	return 0;
+	return 1;
 }
 
 __setup("dma_debug=", dma_debug_cmdline);
@@ -1147,10 +1147,11 @@ static void check_sync(struct device *dev,
 				dir2name[entry->direction],
 				dir2name[ref->direction]);
 
+	/* sg list count can be less than map count when partial cache sync */
 	if (ref->sg_call_ents && ref->type == dma_debug_sg &&
-	    ref->sg_call_ents != entry->sg_call_ents) {
+	    ref->sg_call_ents > entry->sg_call_ents) {
 		err_printk(ref->dev, entry, "device driver syncs "
-			   "DMA sg list with different entry count "
+			   "DMA sg list count larger than map count "
 			   "[map count=%d] [sync count=%d]\n",
 			   entry->sg_call_ents, ref->sg_call_ents);
 	}
@@ -1300,6 +1301,12 @@ void debug_dma_map_sg(struct device *dev, struct scatterlist *sg,
 	if (unlikely(dma_debug_disabled()))
 		return;
 
+	for_each_sg(sg, s, nents, i) {
+		check_for_stack(dev, sg_page(s), s->offset);
+		if (!PageHighMem(sg_page(s)))
+			check_for_illegal_area(dev, sg_virt(s), s->length);
+	}
+
 	for_each_sg(sg, s, mapped_ents, i) {
 		entry = dma_entry_alloc();
 		if (!entry)
@@ -1314,12 +1321,6 @@ void debug_dma_map_sg(struct device *dev, struct scatterlist *sg,
 		entry->direction      = direction;
 		entry->sg_call_ents   = nents;
 		entry->sg_mapped_ents = mapped_ents;
-
-		check_for_stack(dev, sg_page(s), s->offset);
-
-		if (!PageHighMem(sg_page(s))) {
-			check_for_illegal_area(dev, sg_virt(s), sg_dma_len(s));
-		}
 
 		check_sg_segment(dev, s);
 

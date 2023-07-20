@@ -16,11 +16,11 @@
 		#size-cells = <2>;
 		ranges;
 
-		/* Reserve 256MB memory for hdmirx-controller@fdee0000 */
+		/* Reserve 128MB memory for hdmirx-controller@fdee0000 */
 		cma {
 			compatible = "shared-dma-pool";
 			reusable;
-			reg = <0x0 (256 * 0x100000) 0x0 (256 * 0x100000)>;
+			reg = <0x0 (256 * 0x100000) 0x0 (128 * 0x100000)>;
 			linux,cma-default;
 		};
 	};
@@ -66,26 +66,26 @@
 		compatible = "pwm-fan";
 		#cooling-cells = <2>;
 		pwms = <&pwm3 0 50000 0>;
-	};
-
-	hdmiin_dc: hdmiin-dc {
-		compatible = "rockchip,dummy-codec";
-		#sound-dai-cells = <0>;
+		cooling-levels = <0 50 100 150 200 255>;
+		rockchip,temp-trips = <
+			50000	1
+			55000	2
+			60000	3
+			65000	4
+			70000	5
+		>;
 	};
 
 	hdmiin-sound {
-		compatible = "simple-audio-card";
-		simple-audio-card,format = "i2s";
-		simple-audio-card,name = "rockchip,hdmiin";
-		simple-audio-card,bitclock-master = <&dailink0_master>;
-		simple-audio-card,frame-master = <&dailink0_master>;
-		status = "okay";
-		simple-audio-card,cpu {
-			sound-dai = <&i2s7_8ch>;
-		};
-		dailink0_master: simple-audio-card,codec {
-			sound-dai = <&hdmiin_dc>;
-		};
+		compatible = "rockchip,hdmi";
+		rockchip,mclk-fs = <128>;
+		rockchip,format = "i2s";
+		rockchip,bitclock-master = <&hdmirx_ctrler>;
+		rockchip,frame-master = <&hdmirx_ctrler>;
+		rockchip,card-name = "rockchip,hdmiin";
+		rockchip,cpu = <&i2s7_8ch>;
+		rockchip,codec = <&hdmirx_ctrler 0>;
+		rockchip,jack-det;
 	};
 
 	pcie20_avdd0v85: pcie20-avdd0v85 {
@@ -231,14 +231,14 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&sd_s0_pwr>;
 		regulator-name = "vcc_3v3_sd_s0";
-		enable-active-low;
+		enable-active-high;
 	};
 
 	wireless_bluetooth: wireless-bluetooth {
 		compatible = "bluetooth-platdata";
 		clocks = <&hym8563>;
 		clock-names = "ext_clock";
-		uart_rts_gpios = <&gpio3 RK_PA4 GPIO_ACTIVE_LOW>;
+		uart_rts_gpios = <&gpio4 RK_PC4 GPIO_ACTIVE_LOW>;
 		pinctrl-names = "default", "rts_gpio";
 		pinctrl-0 = <&uart9m0_rtsn>, <&bt_reset_gpio>, <&bt_wake_gpio>, <&bt_irq_gpio>;
 		pinctrl-1 = <&uart9_gpios>;
@@ -404,9 +404,12 @@
 &hdmirx_ctrler {
 	status = "okay";
 
+	#sound-dai-cells = <1>;
 	/* Effective level used to trigger HPD: 0-low, 1-high */
 	hpd-trigger-level = <1>;
 	hdmirx-det-gpios = <&gpio1 RK_PD5 GPIO_ACTIVE_LOW>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&hdmim1_rx &hdmirx_det>;
 };
 
 &hdptxphy_hdmi0 {
@@ -512,22 +515,24 @@
 		poll_delay_ms = <100>;
 	};
 
-	mpu6500_acc: mpu_acc@68 {
-		compatible = "mpu6500_acc";
+	icm42607_acc: icm_acc@68 {
+		status = "okay";
+		compatible = "icm42607_acc";
 		reg = <0x68>;
 		irq-gpio = <&gpio4 RK_PC2 IRQ_TYPE_EDGE_RISING>;
 		irq_enable = <0>;
 		poll_delay_ms = <30>;
 		type = <SENSOR_TYPE_ACCEL>;
-		layout = <5>;
+		layout = <0>;
 	};
 
-	mpu6500_gyro: mpu_gyro@68 {
-		compatible = "mpu6500_gyro";
+	icm42607_gyro: icm_gyro@68 {
+		status = "okay";
+		compatible = "icm42607_gyro";
 		reg = <0x68>;
 		poll_delay_ms = <30>;
 		type = <SENSOR_TYPE_GYROSCOPE>;
-		layout = <5>;
+		layout = <0>;
 	};
 };
 
@@ -568,13 +573,18 @@
 		#sound-dai-cells = <0>;
 		compatible = "everest,es8388", "everest,es8323";
 		reg = <0x11>;
-		clocks = <&cru I2S0_8CH_MCLKOUT>;
+		clocks = <&mclkout_i2s0>;
 		clock-names = "mclk";
-		assigned-clocks = <&cru I2S0_8CH_MCLKOUT>;
+		assigned-clocks = <&mclkout_i2s0>;
 		assigned-clock-rates = <12288000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2s0_mclk>;
 	};
+};
+
+&i2s2_2ch {
+	pinctrl-0 = <&i2s2m0_sclk &i2s2m0_lrck &i2s2m0_sdi &i2s2m0_sdo>;
+	status = "disabled";
 };
 
 &i2s5_8ch {
@@ -645,6 +655,12 @@
 		};
 	};
 
+	hdmi {
+		hdmirx_det: hdmirx-det {
+			rockchip,pins = <1 RK_PD5 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+	};
+
 	headphone {
 		hp_det: hp-det {
 			rockchip,pins = <1 RK_PC4 RK_FUNC_GPIO &pcfg_pull_none>;
@@ -704,7 +720,7 @@
 		};
 
 		bt_irq_gpio: bt-irq-gpio {
-			rockchip,pins = <0 RK_PA0 RK_FUNC_GPIO &pcfg_pull_down>;
+			rockchip,pins = <0 RK_PA0 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};
 
@@ -766,6 +782,12 @@
 &sdmmc {
 	status = "okay";
 	vmmc-supply = <&vcc_3v3_sd_s0>;
+};
+
+&uart9 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart9m0_xfer &uart9m0_ctsn>;
 };
 
 &u2phy0_otg {

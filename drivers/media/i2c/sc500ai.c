@@ -165,6 +165,7 @@ struct sc500ai {
 	struct v4l2_ctrl	*pixel_rate;
 	struct v4l2_ctrl	*link_freq;
 	struct mutex		mutex;
+	struct v4l2_fract	cur_fps;
 	bool			streaming;
 	bool			power_on;
 	const struct sc500ai_mode *cur_mode;
@@ -174,6 +175,7 @@ struct sc500ai {
 	const char		*len_name;
 	bool			has_init_exp;
 	struct preisp_hdrae_exp_s init_hdrae_exp;
+	u32			cur_vts;
 };
 
 #define to_sc500ai(sd) container_of(sd, struct sc500ai, subdev)
@@ -268,6 +270,7 @@ static const struct regval sc500ai_linear_10_2880x1620_regs[] = {
 	{0x3e17, 0x80},
 	{0x4500, 0x88},
 	{0x4509, 0x20},
+	{0x4800, 0x04},
 	{0x5799, 0x00},
 	{0x59e0, 0x60},
 	{0x59e1, 0x08},
@@ -293,7 +296,6 @@ static const struct regval sc500ai_linear_10_2880x1620_regs[] = {
 	{0x59ff, 0x02},
 	{0x36e9, 0x20},
 	{0x36f9, 0x53},
-	{0x0100, 0x01},
 	{REG_NULL, 0x00},
 };
 
@@ -399,7 +401,6 @@ static const struct regval sc500ai_hdr_10_2880x1620_regs[] = {
 	{0x4853, 0xfd},
 	{0x36e9, 0x53},
 	{0x36f9, 0x53},
-	{0x0100, 0x01},
 	{REG_NULL, 0x00},
 };
 
@@ -589,6 +590,8 @@ static int sc500ai_set_fmt(struct v4l2_subdev *sd,
 		__v4l2_ctrl_s_ctrl(sc500ai->link_freq, mode->mipi_freq_idx);
 		pixel_rate = (u32)link_freq_items[mode->mipi_freq_idx] / mode->bpp * 2 * SC500AI_LANES;
 		__v4l2_ctrl_s_ctrl_int64(sc500ai->pixel_rate, pixel_rate);
+		sc500ai->cur_fps = mode->max_fps;
+		sc500ai->cur_vts = mode->vts_def;
 	}
 
 	mutex_unlock(&sc500ai->mutex);
@@ -664,14 +667,15 @@ static int sc500ai_g_frame_interval(struct v4l2_subdev *sd,
 	struct sc500ai *sc500ai = to_sc500ai(sd);
 	const struct sc500ai_mode *mode = sc500ai->cur_mode;
 
-	mutex_lock(&sc500ai->mutex);
-	fi->interval = mode->max_fps;
-	mutex_unlock(&sc500ai->mutex);
+	if (sc500ai->streaming)
+		fi->interval = sc500ai->cur_fps;
+	else
+		fi->interval = mode->max_fps;
 
 	return 0;
 }
 
-static int sc500ai_g_mbus_config(struct v4l2_subdev *sd,
+static int sc500ai_g_mbus_config(struct v4l2_subdev *sd, unsigned int pad,
                                  struct v4l2_mbus_config *config)
 {
 	struct sc500ai *sc500ai = to_sc500ai(sd);
@@ -685,7 +689,7 @@ static int sc500ai_g_mbus_config(struct v4l2_subdev *sd,
 	if (mode->hdr_mode == HDR_X3)
 		val |= V4L2_MBUS_CSI2_CHANNEL_2;
 
-	config->type = V4L2_MBUS_CSI2;
+	config->type = V4L2_MBUS_CSI2_DPHY;
 	config->flags = val;
 
 	return 0;
@@ -904,11 +908,23 @@ static int sc500ai_set_hdrae(struct sc500ai *sc500ai,
 	return ret;
 }
 
+static int sc500ai_get_channel_info(struct sc500ai *sc500ai, struct rkmodule_channel_info *ch_info)
+{
+	if (ch_info->index < PAD0 || ch_info->index >= PAD_MAX)
+		return -EINVAL;
+	ch_info->vc = sc500ai->cur_mode->vc[ch_info->index];
+	ch_info->width = sc500ai->cur_mode->width;
+	ch_info->height = sc500ai->cur_mode->height;
+	ch_info->bus_fmt = sc500ai->cur_mode->bus_fmt;
+	return 0;
+}
+
 static long sc500ai_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 {
 	struct sc500ai *sc500ai = to_sc500ai(sd);
 	struct rkmodule_hdr_cfg *hdr;
 	const struct sc500ai_mode *mode;
+	struct rkmodule_channel_info *ch_info;
 
 	long ret = 0;
 	u32 i, h, w;
@@ -952,7 +968,8 @@ static long sc500ai_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 			__v4l2_ctrl_s_ctrl(sc500ai->link_freq, mode->mipi_freq_idx);
 			pixel_rate = (u32)link_freq_items[mode->mipi_freq_idx] / mode->bpp * 2 * SC500AI_LANES;
 			__v4l2_ctrl_s_ctrl_int64(sc500ai->pixel_rate, pixel_rate);
-
+			sc500ai->cur_fps = mode->max_fps;
+			sc500ai->cur_vts = mode->vts_def;
 			dev_info(&sc500ai->client->dev, "sensor mode: %d\n", sc500ai->cur_mode->hdr_mode);
 		}
 		break;
@@ -969,6 +986,10 @@ static long sc500ai_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 			ret = sc500ai_write_reg(sc500ai->client, SC500AI_REG_CTRL_MODE,
 			                        SC500AI_REG_VALUE_08BIT, SC500AI_MODE_SW_STANDBY);
 		break;
+	case RKMODULE_GET_CHANNEL_INFO:
+		ch_info = (struct rkmodule_channel_info *)arg;
+		ret = sc500ai_get_channel_info(sc500ai, ch_info);
+		break;
 	default:
 		ret = -ENOIOCTLCMD;
 		break;
@@ -983,9 +1004,9 @@ static long sc500ai_compat_ioctl32(struct v4l2_subdev *sd,
 {
 	void __user *up = compat_ptr(arg);
 	struct rkmodule_inf *inf;
-	struct rkmodule_awb_cfg *cfg;
 	struct rkmodule_hdr_cfg *hdr;
 	struct preisp_hdrae_exp_s *hdrae;
+	struct rkmodule_channel_info *ch_info;
 	long ret = 0;
 	u32 stream = 0;
 
@@ -998,21 +1019,12 @@ static long sc500ai_compat_ioctl32(struct v4l2_subdev *sd,
 		}
 
 		ret = sc500ai_ioctl(sd, cmd, inf);
-		if (!ret)
+		if (!ret) {
 			ret = copy_to_user(up, inf, sizeof(*inf));
-		kfree(inf);
-		break;
-	case RKMODULE_AWB_CFG:
-		cfg = kzalloc(sizeof(*cfg), GFP_KERNEL);
-		if (!cfg) {
-			ret = -ENOMEM;
-			return ret;
+			if (ret)
+				ret = -EFAULT;
 		}
-
-		ret = copy_from_user(cfg, up, sizeof(*cfg));
-		if (!ret)
-			ret = sc500ai_ioctl(sd, cmd, cfg);
-		kfree(cfg);
+		kfree(inf);
 		break;
 	case RKMODULE_GET_HDR_CFG:
 		hdr = kzalloc(sizeof(*hdr), GFP_KERNEL);
@@ -1022,8 +1034,11 @@ static long sc500ai_compat_ioctl32(struct v4l2_subdev *sd,
 		}
 
 		ret = sc500ai_ioctl(sd, cmd, hdr);
-		if (!ret)
+		if (!ret) {
 			ret = copy_to_user(up, hdr, sizeof(*hdr));
+			if (ret)
+				ret = -EFAULT;
+		}
 		kfree(hdr);
 		break;
 	case RKMODULE_SET_HDR_CFG:
@@ -1033,9 +1048,10 @@ static long sc500ai_compat_ioctl32(struct v4l2_subdev *sd,
 			return ret;
 		}
 
-		ret = copy_from_user(hdr, up, sizeof(*hdr));
-		if (!ret)
-			ret = sc500ai_ioctl(sd, cmd, hdr);
+		if (copy_from_user(hdr, up, sizeof(*hdr)))
+			return -EFAULT;
+
+		ret = sc500ai_ioctl(sd, cmd, hdr);
 		kfree(hdr);
 		break;
 	case PREISP_CMD_SET_HDRAE_EXP:
@@ -1045,15 +1061,32 @@ static long sc500ai_compat_ioctl32(struct v4l2_subdev *sd,
 			return ret;
 		}
 
-		ret = copy_from_user(hdrae, up, sizeof(*hdrae));
-		if (!ret)
-			ret = sc500ai_ioctl(sd, cmd, hdrae);
+		if (copy_from_user(hdrae, up, sizeof(*hdrae)))
+			return -EFAULT;
+
+		ret = sc500ai_ioctl(sd, cmd, hdrae);
 		kfree(hdrae);
 		break;
 	case RKMODULE_SET_QUICK_STREAM:
-		ret = copy_from_user(&stream, up, sizeof(u32));
-		if (!ret)
-			ret = sc500ai_ioctl(sd, cmd, &stream);
+		if (copy_from_user(&stream, up, sizeof(u32)))
+			return -EFAULT;
+
+		ret = sc500ai_ioctl(sd, cmd, &stream);
+		break;
+	case RKMODULE_GET_CHANNEL_INFO:
+		ch_info = kzalloc(sizeof(*ch_info), GFP_KERNEL);
+		if (!ch_info) {
+			ret = -ENOMEM;
+			return ret;
+		}
+
+		ret = sc500ai_ioctl(sd, cmd, ch_info);
+		if (!ret) {
+			ret = copy_to_user(up, ch_info, sizeof(*ch_info));
+			if (ret)
+				ret = -EFAULT;
+		}
+		kfree(ch_info);
 		break;
 	default:
 		ret = -ENOIOCTLCMD;
@@ -1341,7 +1374,6 @@ static const struct v4l2_subdev_core_ops sc500ai_core_ops = {
 static const struct v4l2_subdev_video_ops sc500ai_video_ops = {
 	.s_stream = sc500ai_s_stream,
 	.g_frame_interval = sc500ai_g_frame_interval,
-	.g_mbus_config = sc500ai_g_mbus_config,
 };
 
 static const struct v4l2_subdev_pad_ops sc500ai_pad_ops = {
@@ -1351,6 +1383,7 @@ static const struct v4l2_subdev_pad_ops sc500ai_pad_ops = {
 	.get_fmt = sc500ai_get_fmt,
 	.set_fmt = sc500ai_set_fmt,
 	.get_selection = sc500ai_get_selection,
+	.get_mbus_config = sc500ai_g_mbus_config,
 };
 
 static const struct v4l2_subdev_ops sc500ai_subdev_ops = {
@@ -1358,6 +1391,14 @@ static const struct v4l2_subdev_ops sc500ai_subdev_ops = {
 	.video	= &sc500ai_video_ops,
 	.pad	= &sc500ai_pad_ops,
 };
+
+static void sc500ai_modify_fps_info(struct sc500ai *sc500ai)
+{
+	const struct sc500ai_mode *mode = sc500ai->cur_mode;
+
+	sc500ai->cur_fps.denominator = mode->max_fps.denominator * mode->vts_def /
+				       sc500ai->cur_vts;
+}
 
 static int sc500ai_set_ctrl(struct v4l2_ctrl *ctrl)
 {
@@ -1368,6 +1409,11 @@ static int sc500ai_set_ctrl(struct v4l2_ctrl *ctrl)
 	u32 again = 0, again_fine = 0, dgain = 0, dgain_fine = 0;
 	int ret = 0;
 	u32 val = 0, vts = 0;
+	u64 delay_time = 0;
+	u32 cur_fps = 0;
+	u32 def_fps = 0;
+	u32 denominator = 0;
+	u32 numerator = 0;
 
 	/* Propagate change of current control to all related controls */
 	switch (ctrl->id) {
@@ -1375,9 +1421,9 @@ static int sc500ai_set_ctrl(struct v4l2_ctrl *ctrl)
 		/* Update max exposure while meeting expected vblanking */
 		max = sc500ai->cur_mode->height + ctrl->val - 5;
 		__v4l2_ctrl_modify_range(sc500ai->exposure,
-		                         sc500ai->exposure->minimum, max,
-		                         sc500ai->exposure->step,
-		                         sc500ai->exposure->default_value);
+					 sc500ai->exposure->minimum, max,
+					 sc500ai->exposure->step,
+					 sc500ai->exposure->default_value);
 		break;
 	}
 
@@ -1387,49 +1433,49 @@ static int sc500ai_set_ctrl(struct v4l2_ctrl *ctrl)
 	switch (ctrl->id) {
 	case V4L2_CID_EXPOSURE:
 		if (sc500ai->cur_mode->hdr_mode != NO_HDR)
-			return ret;
+			goto ctrl_end;
 		val = ctrl->val << 1;
 		ret = sc500ai_write_reg(sc500ai->client,
-		                        SC500AI_REG_EXPOSURE_H,
-		                        SC500AI_REG_VALUE_08BIT,
-		                        SC500AI_FETCH_EXP_H(val));
+					SC500AI_REG_EXPOSURE_H,
+					SC500AI_REG_VALUE_08BIT,
+					SC500AI_FETCH_EXP_H(val));
 		ret |= sc500ai_write_reg(sc500ai->client,
-		                         SC500AI_REG_EXPOSURE_M,
-		                         SC500AI_REG_VALUE_08BIT,
-		                         SC500AI_FETCH_EXP_M(val));
+					SC500AI_REG_EXPOSURE_M,
+					SC500AI_REG_VALUE_08BIT,
+					SC500AI_FETCH_EXP_M(val));
 		ret |= sc500ai_write_reg(sc500ai->client,
-		                         SC500AI_REG_EXPOSURE_L,
-		                         SC500AI_REG_VALUE_08BIT,
-		                         SC500AI_FETCH_EXP_L(val));
+					 SC500AI_REG_EXPOSURE_L,
+					 SC500AI_REG_VALUE_08BIT,
+					 SC500AI_FETCH_EXP_L(val));
 
 		dev_dbg(&client->dev, "set exposure 0x%x\n", val);
 		break;
 	case V4L2_CID_ANALOGUE_GAIN:
 		if (sc500ai->cur_mode->hdr_mode != NO_HDR)
-			return ret;
+			goto ctrl_end;
 
 		sc500ai_get_gain_reg(ctrl->val, &again, &again_fine, &dgain, &dgain_fine);
 		ret = sc500ai_write_reg(sc500ai->client,
-		                        SC500AI_REG_DIG_GAIN,
-		                        SC500AI_REG_VALUE_08BIT,
-		                        dgain);
+					SC500AI_REG_DIG_GAIN,
+					SC500AI_REG_VALUE_08BIT,
+					dgain);
 		ret |= sc500ai_write_reg(sc500ai->client,
-		                         SC500AI_REG_DIG_FINE_GAIN,
-		                         SC500AI_REG_VALUE_08BIT,
-		                         dgain_fine);
+					 SC500AI_REG_DIG_FINE_GAIN,
+					 SC500AI_REG_VALUE_08BIT,
+					 dgain_fine);
 		ret |= sc500ai_write_reg(sc500ai->client,
-		                         SC500AI_REG_ANA_GAIN,
-		                         SC500AI_REG_VALUE_08BIT,
-		                         again);
+					 SC500AI_REG_ANA_GAIN,
+					 SC500AI_REG_VALUE_08BIT,
+					 again);
 		ret |= sc500ai_write_reg(sc500ai->client,
-		                         SC500AI_REG_ANA_FINE_GAIN,
-		                         SC500AI_REG_VALUE_08BIT,
-		                         again_fine);
+					 SC500AI_REG_ANA_FINE_GAIN,
+					 SC500AI_REG_VALUE_08BIT,
+					 again_fine);
 		sc500ai_set_hightemp_dpc(sc500ai, ctrl->val);
 
 		dev_dbg(&sc500ai->client->dev,
-		        "total_gain:%d again 0x%x, again_fine 0x%x, dgain 0x%x, dgain_fine 0x%x\n",
-		        ctrl->val, again, again_fine, dgain, dgain_fine);
+			"total_gain:%d again 0x%x, again_fine 0x%x, dgain 0x%x, dgain_fine 0x%x\n",
+			ctrl->val, again, again_fine, dgain, dgain_fine);
 		break;
 	case V4L2_CID_VBLANK:
 		vts = ctrl->val + sc500ai->cur_mode->height;
@@ -1441,42 +1487,77 @@ static int sc500ai_set_ctrl(struct v4l2_ctrl *ctrl)
 					 SC500AI_REG_VTS_L,
 					 SC500AI_REG_VALUE_08BIT,
 					 vts & 0xff);
+		if (!ret)
+			sc500ai->cur_vts = vts;
+		if (sc500ai->cur_vts != sc500ai->cur_mode->vts_def)
+			sc500ai_modify_fps_info(sc500ai);
 		break;
 	case V4L2_CID_HFLIP:
 		ret = sc500ai_read_reg(sc500ai->client, SC500AI_FLIP_MIRROR_REG,
-		                       SC500AI_REG_VALUE_08BIT, &val);
+				       SC500AI_REG_VALUE_08BIT, &val);
 		if (ret)
 			break;
-
 		if (ctrl->val)
 			val |= SC500AI_MIRROR_MASK;
 		else
 			val &= ~SC500AI_MIRROR_MASK;
 		ret |= sc500ai_write_reg(sc500ai->client, SC500AI_FLIP_MIRROR_REG,
-		                         SC500AI_REG_VALUE_08BIT, val);
+					 SC500AI_REG_VALUE_08BIT, val);
 		break;
 	case V4L2_CID_VFLIP:
 		ret = sc500ai_read_reg(sc500ai->client,
-		                       SC500AI_FLIP_MIRROR_REG,
-		                       SC500AI_REG_VALUE_08BIT, &val);
+				       SC500AI_FLIP_MIRROR_REG,
+				       SC500AI_REG_VALUE_08BIT, &val);
 		if (ret)
 			break;
+		denominator = sc500ai->cur_mode->max_fps.denominator;
+		numerator = sc500ai->cur_mode->max_fps.numerator;
+		def_fps = denominator / numerator;
+		cur_fps = def_fps * sc500ai->cur_mode->vts_def / sc500ai->cur_vts;
+		if (cur_fps > 25) {
+			vts = def_fps * sc500ai->cur_mode->vts_def / 25;
+			ret = sc500ai_write_reg(sc500ai->client,
+						SC500AI_REG_VTS_H,
+						SC500AI_REG_VALUE_08BIT,
+						(vts >> 8) & 0x7f);
+			ret |= sc500ai_write_reg(sc500ai->client,
+						SC500AI_REG_VTS_L,
+						SC500AI_REG_VALUE_08BIT,
+						vts & 0xff);
+			delay_time = 1000000 / 25;//one frame interval
+			delay_time *= 2;
+			usleep_range(delay_time, delay_time + 1000);
+		}
 
 		if (ctrl->val)
 			val |= SC500AI_FLIP_MASK;
 		else
 			val &= ~SC500AI_FLIP_MASK;
+
 		ret |= sc500ai_write_reg(sc500ai->client,
-		                         SC500AI_FLIP_MIRROR_REG,
-		                         SC500AI_REG_VALUE_08BIT,
-		                         val);
+					 SC500AI_FLIP_MIRROR_REG,
+					 SC500AI_REG_VALUE_08BIT,
+					 val);
+		if (cur_fps > 25) {
+			usleep_range(delay_time, delay_time + 1000);
+			vts = sc500ai->cur_vts;
+			ret = sc500ai_write_reg(sc500ai->client,
+						SC500AI_REG_VTS_H,
+						SC500AI_REG_VALUE_08BIT,
+						(vts >> 8) & 0x7f);
+			ret |= sc500ai_write_reg(sc500ai->client,
+						SC500AI_REG_VTS_L,
+						SC500AI_REG_VALUE_08BIT,
+						vts & 0xff);
+		}
 		break;
 	default:
 		dev_warn(&client->dev, "%s Unhandled id:0x%x, val:0x%x\n",
-		         __func__, ctrl->id, ctrl->val);
+			 __func__, ctrl->id, ctrl->val);
 		break;
 	}
 
+ctrl_end:
 	pm_runtime_put(&client->dev);
 
 	return ret;
@@ -1521,6 +1602,8 @@ static int sc500ai_initialize_controls(struct sc500ai *sc500ai)
 		sc500ai->hblank->flags |= V4L2_CTRL_FLAG_READ_ONLY;
 
 	vblank_def = mode->vts_def - mode->height;
+	sc500ai->cur_vts = mode->vts_def;
+	sc500ai->cur_fps = mode->max_fps;
 	sc500ai->vblank = v4l2_ctrl_new_std(handler, &sc500ai_ctrl_ops,
 	                                    V4L2_CID_VBLANK, vblank_def,
 	                                    SC500AI_VTS_MAX - mode->height,

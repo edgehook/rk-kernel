@@ -25,7 +25,8 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <uapi/linux/rk-dma-heap.h>
-
+#include <linux/proc_fs.h>
+#include "../../../mm/cma.h"
 #include "rk-dma-heap.h"
 
 struct rk_cma_heap {
@@ -284,12 +285,11 @@ static void rk_cma_heap_remove_dmabuf_list(struct dma_buf *dmabuf)
 	list_for_each_entry(buf, &heap->dmabuf_list, node) {
 		if (buf->dmabuf == dmabuf) {
 			dma_heap_print("<%s> free dmabuf<ino-%ld>@[%pa-%pa] to heap-<%s>\n",
-				       buf->orig_alloc,
+				       dmabuf->name,
 				       dmabuf->file->f_inode->i_ino,
 				       &buf->start, &buf->end,
 				       rk_dma_heap_get_name(heap));
 			list_del(&buf->node);
-			kfree(buf->orig_alloc);
 			kfree(buf);
 			break;
 		}
@@ -303,7 +303,6 @@ static int rk_cma_heap_add_dmabuf_list(struct dma_buf *dmabuf, const char *name)
 	struct rk_cma_heap_buffer *buffer = dmabuf->priv;
 	struct rk_cma_heap *cma_heap = buffer->heap;
 	struct rk_dma_heap *heap = cma_heap->heap;
-	const char *name_tmp;
 
 	buf = kzalloc(sizeof(*buf), GFP_KERNEL);
 	if (!buf)
@@ -311,17 +310,6 @@ static int rk_cma_heap_add_dmabuf_list(struct dma_buf *dmabuf, const char *name)
 
 	INIT_LIST_HEAD(&buf->node);
 	buf->dmabuf = dmabuf;
-	if (!name)
-		name_tmp = current->comm;
-	else
-		name_tmp = name;
-
-	buf->orig_alloc = kstrndup(name_tmp, RK_DMA_HEAP_NAME_LEN, GFP_KERNEL);
-	if (!buf->orig_alloc) {
-		kfree(buf);
-		return -ENOMEM;
-	}
-
 	buf->start = buffer->phys;
 	buf->end = buf->start + buffer->len - 1;
 	mutex_lock(&heap->dmabuf_lock);
@@ -329,7 +317,7 @@ static int rk_cma_heap_add_dmabuf_list(struct dma_buf *dmabuf, const char *name)
 	mutex_unlock(&heap->dmabuf_lock);
 
 	dma_heap_print("<%s> alloc dmabuf<ino-%ld>@[%pa-%pa] from heap-<%s>\n",
-		       buf->orig_alloc, dmabuf->file->f_inode->i_ino,
+		       dmabuf->name, dmabuf->file->f_inode->i_ino,
 		       &buf->start, &buf->end, rk_dma_heap_get_name(heap));
 
 	return 0;
@@ -585,6 +573,8 @@ static const struct rk_dma_heap_ops rk_cma_heap_ops = {
 	.free_contig_pages = rk_cma_heap_free_pages,
 };
 
+static int cma_procfs_show(struct seq_file *s, void *private);
+
 static int __rk_add_cma_heap(struct cma *cma, void *data)
 {
 	struct rk_cma_heap *cma_heap;
@@ -608,10 +598,14 @@ static int __rk_add_cma_heap(struct cma *cma, void *data)
 		return ret;
 	}
 
+	if (cma_heap->heap->procfs)
+		proc_create_single_data("alloc_bitmap", 0, cma_heap->heap->procfs,
+					cma_procfs_show, cma);
+
 	return 0;
 }
 
-static int rk_add_default_cma_heap(void)
+static int __init rk_add_default_cma_heap(void)
 {
 	struct cma *cma = rk_dma_heap_get_cma();
 
@@ -620,6 +614,68 @@ static int rk_add_default_cma_heap(void)
 
 	return __rk_add_cma_heap(cma, NULL);
 }
+
+#if defined(CONFIG_VIDEO_ROCKCHIP_THUNDER_BOOT_ISP) && !defined(CONFIG_INITCALL_ASYNC)
+subsys_initcall(rk_add_default_cma_heap);
+#else
 module_init(rk_add_default_cma_heap);
+#endif
+
+static void cma_procfs_format_array(char *buf, size_t bufsize, u32 *array, int array_size)
+{
+	int i = 0;
+
+	while (--array_size >= 0) {
+		size_t len;
+		char term = (array_size && (++i % 8)) ? ' ' : '\n';
+
+		len = snprintf(buf, bufsize, "%08X%c", *array++, term);
+		buf += len;
+		bufsize -= len;
+	}
+}
+
+static void cma_procfs_show_bitmap(struct seq_file *s, struct cma *cma)
+{
+	int elements = DIV_ROUND_UP(cma_bitmap_maxno(cma), BITS_PER_BYTE * sizeof(u32));
+	int size = elements * 9;
+	u32 *array = (u32 *)cma->bitmap;
+	char *buf;
+
+	buf = kmalloc(size + 1, GFP_KERNEL);
+	if (!buf)
+		return;
+
+	buf[size] = 0;
+
+	cma_procfs_format_array(buf, size + 1, array, elements);
+	seq_printf(s, "%s", buf);
+	kfree(buf);
+}
+
+static u64 cma_procfs_used_get(struct cma *cma)
+{
+	unsigned long used;
+
+	mutex_lock(&cma->lock);
+	used = bitmap_weight(cma->bitmap, (int)cma_bitmap_maxno(cma));
+	mutex_unlock(&cma->lock);
+
+	return (u64)used << cma->order_per_bit;
+}
+
+static int cma_procfs_show(struct seq_file *s, void *private)
+{
+	struct cma *cma = s->private;
+	u64 used = cma_procfs_used_get(cma);
+
+	seq_printf(s, "Total: %lu KiB\n", cma->count << (PAGE_SHIFT - 10));
+	seq_printf(s, " Used: %llu KiB\n\n", used << (PAGE_SHIFT - 10));
+
+	cma_procfs_show_bitmap(s, cma);
+
+	return 0;
+}
+
 MODULE_DESCRIPTION("RockChip DMA-BUF CMA Heap");
 MODULE_LICENSE("GPL v2");

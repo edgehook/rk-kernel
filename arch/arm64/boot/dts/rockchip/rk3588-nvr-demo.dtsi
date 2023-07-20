@@ -49,7 +49,7 @@
 		regulator-always-on;
 		regulator-min-microvolt = <750000>;
 		regulator-max-microvolt = <750000>;
-		vin-supply = <&nldo5_s0>;
+		vin-supply = <&vdd_0v75_s0>;
 	};
 
 	pcie30_avdd1v8: pcie30-avdd1v8 {
@@ -178,6 +178,10 @@
 };
 
 &dp1_in_vp2 {
+	status = "okay";
+};
+
+&dp1_sound {
 	status = "okay";
 };
 
@@ -351,9 +355,9 @@
 		adc-volume = <0xbf>;    /* 0dB */
 		dac-volume = <0xbf>;    /* 0dB */
 		aec-mode = "adc left, adc right";
-		clocks = <&cru I2S0_8CH_MCLKOUT>;
+		clocks = <&mclkout_i2s0>;
 		clock-names = "mclk";
-		assigned-clocks = <&cru I2S0_8CH_MCLKOUT>;
+		assigned-clocks = <&mclkout_i2s0>;
 		assigned-clock-rates = <12288000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2s0_mclk>;
@@ -412,17 +416,6 @@
 	rgmii_phy1: phy@1 {
 		compatible = "ethernet-phy-ieee802.3-c22";
 		reg = <0x1>;
-	};
-};
-
-&nldo5_s0 {
-	regulator-always-on;
-	regulator-boot-on;
-	regulator-min-microvolt = <750000>;
-	regulator-max-microvolt = <750000>;
-	rregulator-name = "nldo5_s0";
-	regulator-state-mem {
-		regulator-off-in-suspend;
 	};
 };
 
@@ -686,6 +679,10 @@
 	max-frequency = <200000000>;
 	mmc-hs400-1_8v;
 	mmc-hs400-enhanced-strobe;
+	status = "okay";
+};
+
+&spdif_tx5 {
 	status = "okay";
 };
 

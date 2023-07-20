@@ -134,12 +134,15 @@ static void dw8250_check_lcr(struct uart_port *p, int value)
 /* Returns once the transmitter is empty or we run out of retries */
 static void dw8250_tx_wait_empty(struct uart_port *p)
 {
+	struct uart_8250_port *up = up_to_u8250p(p);
 	unsigned int tries = 20000;
 	unsigned int delay_threshold = tries - 1000;
 	unsigned int lsr;
 
 	while (tries--) {
 		lsr = readb (p->membase + (UART_LSR << p->regshift));
+		up->lsr_saved_flags |= lsr & LSR_SAVE_FLAGS;
+
 		if (lsr & UART_LSR_TEMT)
 			break;
 
@@ -349,35 +352,37 @@ static void dw8250_set_termios(struct uart_port *p, struct ktermios *termios,
 
 	clk_disable_unprepare(d->clk);
 #ifdef CONFIG_ARCH_ROCKCHIP
-	if (baud <= 115200)
-		rate = 24000000;
-	else if (baud == 230400)
-		rate = baud * 16 * 2;
-	else if (baud == 1152000)
-		rate = baud * 16 * 2;
-	else
-		rate = baud * 16;
+	if (d->clk) {
+		if (baud <= 115200)
+			rate = 24000000;
+		else if (baud == 230400)
+			rate = baud * 16 * 2;
+		else if (baud == 1152000)
+			rate = baud * 16 * 2;
+		else
+			rate = baud * 16;
 
-	ret = clk_set_rate(d->clk, rate);
-	rate_temp = clk_get_rate(d->clk);
-	diff = rate * 20 / 1000;
-	/*
-	 * If rate_temp is not equal to rate, is means fractional frequency
-	 * division is failed. Then use Integer frequency division, and
-	 * the baud rate error must be under -+2%
-	 */
-	if ((rate_temp < rate) && ((rate - rate_temp) > diff)) {
-		ret = clk_set_rate(d->clk, rate + diff);
+		ret = clk_set_rate(d->clk, rate);
 		rate_temp = clk_get_rate(d->clk);
-		if ((rate_temp < rate) && ((rate - rate_temp) > diff))
-			dev_info(p->dev, "set rate:%ld, but get rate:%d\n",
-				 rate, rate_temp);
-		else if ((rate < rate_temp) && ((rate_temp - rate) > diff))
-			dev_info(p->dev, "set rate:%ld, but get rate:%d\n",
-				 rate, rate_temp);
+		diff = rate * 20 / 1000;
+		/*
+		 * If rate_temp is not equal to rate, is means fractional frequency
+		 * division is failed. Then use Integer frequency division, and
+		 * the baud rate error must be under -+2%
+		 */
+		if ((rate_temp < rate) && ((rate - rate_temp) > diff)) {
+			ret = clk_set_rate(d->clk, rate + diff);
+			rate_temp = clk_get_rate(d->clk);
+			if ((rate_temp < rate) && ((rate - rate_temp) > diff))
+				dev_info(p->dev, "set rate:%ld, but get rate:%d\n",
+					 rate, rate_temp);
+			else if ((rate < rate_temp) && ((rate_temp - rate) > diff))
+				dev_info(p->dev, "set rate:%ld, but get rate:%d\n",
+					 rate, rate_temp);
+		}
+		if (!ret)
+			p->uartclk = rate;
 	}
-	if (!ret)
-		p->uartclk = rate;
 #else
 	rate = clk_round_rate(d->clk, newrate);
 	if (rate > 0) {
@@ -446,6 +451,10 @@ static void dw8250_quirks(struct uart_port *p, struct dw8250_data *data)
 		id = of_alias_get_id(np, "serial");
 		if (id >= 0)
 			p->line = id;
+
+		if (IS_ENABLED(CONFIG_ROCKCHIP_MINI_KERNEL))
+			return;
+
 #ifdef CONFIG_64BIT
 		if (of_device_is_compatible(np, "cavium,octeon-3860-uart")) {
 			p->serial_in = dw8250_serial_inq;
@@ -470,6 +479,9 @@ static void dw8250_quirks(struct uart_port *p, struct dw8250_data *data)
 		p->serial_in = dw8250_serial_in32;
 		data->uart_16550_compatible = true;
 	}
+
+	if (IS_ENABLED(CONFIG_ROCKCHIP_MINI_KERNEL))
+		return;
 
 	/* Platforms with iDMA 64-bit */
 	if (platform_get_resource_byname(to_platform_device(p->dev),
@@ -713,7 +725,6 @@ static int dw8250_suspend(struct device *dev)
 {
 	struct dw8250_data *data = dev_get_drvdata(dev);
 
-	serial8250_suspend_port(data->data.line);
 #ifdef CONFIG_ARCH_ROCKCHIP
 	if (device_may_wakeup(dev)) {
 		if (!enable_irq_wake(data->irq))
@@ -721,6 +732,7 @@ static int dw8250_suspend(struct device *dev)
 		return 0;
 	}
 #endif
+	serial8250_suspend_port(data->data.line);
 
 	return 0;
 }
@@ -729,7 +741,6 @@ static int dw8250_resume(struct device *dev)
 {
 	struct dw8250_data *data = dev_get_drvdata(dev);
 
-	serial8250_resume_port(data->data.line);
 #ifdef CONFIG_ARCH_ROCKCHIP
 	if (device_may_wakeup(dev)) {
 		if (data->irq_wake) {
@@ -739,6 +750,7 @@ static int dw8250_resume(struct device *dev)
 		return 0;
 	}
 #endif
+	serial8250_resume_port(data->data.line);
 
 	return 0;
 }
@@ -775,9 +787,11 @@ static const struct dev_pm_ops dw8250_pm_ops = {
 
 static const struct of_device_id dw8250_of_match[] = {
 	{ .compatible = "snps,dw-apb-uart" },
+#ifndef CONFIG_ROCKCHIP_MINI_KERNEL
 	{ .compatible = "cavium,octeon-3860-uart" },
 	{ .compatible = "marvell,armada-38x-uart" },
 	{ .compatible = "renesas,rzn1-uart" },
+#endif
 	{ /* Sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, dw8250_of_match);
@@ -804,7 +818,7 @@ static struct platform_driver dw8250_platform_driver = {
 		.name		= "dw-apb-uart",
 		.pm		= &dw8250_pm_ops,
 		.of_match_table	= dw8250_of_match,
-		.acpi_match_table = ACPI_PTR(dw8250_acpi_match),
+		.acpi_match_table = dw8250_acpi_match,
 	},
 	.probe			= dw8250_probe,
 	.remove			= dw8250_remove,

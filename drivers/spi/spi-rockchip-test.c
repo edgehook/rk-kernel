@@ -74,7 +74,11 @@ int spi_write_slt(int id, const void *txbuf, size_t n)
 
 	spi_message_init(&m);
 	spi_message_add_tail(&t, &m);
-	return spi_sync(spi, &m);
+	ret = spi_sync(spi, &m);
+	if (m.actual_length && m.actual_length != n)
+		pr_err("%s len=%d actual_length=%d\n", __func__, n, m.actual_length);
+
+	return ret;
 }
 
 int spi_read_slt(int id, void *rxbuf, size_t n)
@@ -99,7 +103,11 @@ int spi_read_slt(int id, void *rxbuf, size_t n)
 
 	spi_message_init(&m);
 	spi_message_add_tail(&t, &m);
-	return spi_sync(spi, &m);
+	ret = spi_sync(spi, &m);
+	if (m.actual_length && m.actual_length != n)
+		pr_err("%s len=%d actual_length=%d\n", __func__, n, m.actual_length);
+
+	return ret;
 }
 
 int spi_write_then_read_slt(int id, const void *txbuf, unsigned n_tx,
@@ -333,9 +341,6 @@ static int rockchip_spi_test_probe(struct spi_device *spi)
 	if (!spi)
 		return -ENOMEM;
 
-	if (!spi->dev.of_node)
-		return -ENOMEM;
-
 	spi_test_data = (struct spi_test_data *)kzalloc(sizeof(struct spi_test_data), GFP_KERNEL);
 	if (!spi_test_data) {
 		dev_err(&spi->dev, "ERR: no memory for spi_test_data\n");
@@ -352,7 +357,7 @@ static int rockchip_spi_test_probe(struct spi_device *spi)
 		return -1;
 	}
 
-	if (of_property_read_u32(spi->dev.of_node, "id", &id)) {
+	if (device_property_read_u32(&spi->dev, "id", &id)) {
 		dev_warn(&spi->dev, "fail to get id, default set 0\n");
 		id = 0;
 	}

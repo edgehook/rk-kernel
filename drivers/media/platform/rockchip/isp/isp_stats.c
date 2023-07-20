@@ -88,6 +88,9 @@ static int rkisp_stats_fh_open(struct file *filp)
 	struct rkisp_isp_stats_vdev *stats = video_drvdata(filp);
 	int ret;
 
+	if (!stats->dev->is_probe_end)
+		return -EINVAL;
+
 	ret = v4l2_fh_open(filp);
 	if (!ret) {
 		ret = v4l2_pipeline_pm_get(&stats->vnode.vdev.entity);
@@ -154,6 +157,22 @@ static void rkisp_stats_vb2_buf_queue(struct vb2_buffer *vb)
 	if (stats_buf->vaddr[0])
 		memset(stats_buf->vaddr[0], 0, size);
 	spin_lock_irqsave(&stats_dev->rd_lock, flags);
+	if (stats_dev->dev->isp_ver == ISP_V32 && stats_dev->dev->is_pre_on) {
+		struct rkisp32_isp_stat_buffer *buf = stats_dev->stats_buf[0].vaddr;
+
+		if (buf && !buf->frame_id && buf->meas_type && stats_buf->vaddr[0]) {
+			dev_info(stats_dev->dev->dev,
+				 "tb stat seq:%d meas_type:0x%x\n",
+				 buf->frame_id, buf->meas_type);
+			memcpy(stats_buf->vaddr[0], buf, sizeof(struct rkisp32_isp_stat_buffer));
+			buf->meas_type = 0;
+			vb2_set_plane_payload(vb, 0, sizeof(struct rkisp32_isp_stat_buffer));
+			vbuf->sequence = buf->frame_id;
+			spin_unlock_irqrestore(&stats_dev->rd_lock, flags);
+			vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
+			return;
+		}
+	}
 	list_add_tail(&stats_buf->queue, &stats_dev->stat);
 	spin_unlock_irqrestore(&stats_dev->rd_lock, flags);
 }
@@ -192,6 +211,9 @@ static void rkisp_stats_vb2_stop_streaming(struct vb2_queue *vq)
 		stats_vdev->nxt_buf = NULL;
 	}
 	spin_unlock_irqrestore(&stats_vdev->rd_lock, flags);
+
+	stats_vdev->ae_meas_done_next = false;
+	stats_vdev->af_meas_done_next = false;
 }
 
 static int
@@ -200,6 +222,7 @@ rkisp_stats_vb2_start_streaming(struct vb2_queue *queue,
 {
 	struct rkisp_isp_stats_vdev *stats_vdev = queue->drv_priv;
 
+	stats_vdev->rdbk_drop = false;
 	stats_vdev->cur_buf = NULL;
 	stats_vdev->ops->rdbk_enable(stats_vdev, false);
 	stats_vdev->streamon = true;

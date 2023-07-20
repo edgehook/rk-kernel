@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2016-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2016-2023 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -23,28 +23,19 @@
 
 #include "mali_kbase_ipa_counter_common_jm.h"
 #include "mali_kbase.h"
-
-#if IS_ENABLED(CONFIG_MALI_BIFROST_NO_MALI)
-#include <backend/gpu/mali_kbase_model_dummy.h>
-#endif /* CONFIG_MALI_BIFROST_NO_MALI */
+#include <backend/gpu/mali_kbase_model_linux.h>
 
 /* Performance counter blocks base offsets */
 #define JM_BASE             (0 * KBASE_IPA_NR_BYTES_PER_BLOCK)
-#define TILER_BASE          (1 * KBASE_IPA_NR_BYTES_PER_BLOCK)
 #define MEMSYS_BASE         (2 * KBASE_IPA_NR_BYTES_PER_BLOCK)
 
 /* JM counter block offsets */
 #define JM_GPU_ACTIVE (KBASE_IPA_NR_BYTES_PER_CNT *  6)
 
-/* Tiler counter block offsets */
-#define TILER_ACTIVE (KBASE_IPA_NR_BYTES_PER_CNT * 45)
-
 /* MEMSYS counter block offsets */
 #define MEMSYS_L2_ANY_LOOKUP (KBASE_IPA_NR_BYTES_PER_CNT * 25)
 
 /* SC counter block offsets */
-#define SC_FRAG_ACTIVE             (KBASE_IPA_NR_BYTES_PER_CNT *  4)
-#define SC_EXEC_CORE_ACTIVE        (KBASE_IPA_NR_BYTES_PER_CNT * 26)
 #define SC_EXEC_INSTR_FMA          (KBASE_IPA_NR_BYTES_PER_CNT * 27)
 #define SC_EXEC_INSTR_COUNT        (KBASE_IPA_NR_BYTES_PER_CNT * 28)
 #define SC_EXEC_INSTR_MSG          (KBASE_IPA_NR_BYTES_PER_CNT * 30)
@@ -52,16 +43,14 @@
 #define SC_TEX_COORD_ISSUE         (KBASE_IPA_NR_BYTES_PER_CNT * 40)
 #define SC_TEX_TFCH_NUM_OPERATIONS (KBASE_IPA_NR_BYTES_PER_CNT * 42)
 #define SC_VARY_INSTR              (KBASE_IPA_NR_BYTES_PER_CNT * 49)
-#define SC_VARY_SLOT_32            (KBASE_IPA_NR_BYTES_PER_CNT * 50)
-#define SC_VARY_SLOT_16            (KBASE_IPA_NR_BYTES_PER_CNT * 51)
-#define SC_BEATS_RD_LSC            (KBASE_IPA_NR_BYTES_PER_CNT * 56)
-#define SC_BEATS_WR_LSC            (KBASE_IPA_NR_BYTES_PER_CNT * 61)
 #define SC_BEATS_WR_TIB            (KBASE_IPA_NR_BYTES_PER_CNT * 62)
 
 /**
- * get_jm_counter() - get performance counter offset inside the Job Manager block
+ * kbase_g7x_power_model_get_jm_counter() - get performance counter offset
+ * inside the Job Manager block
  * @model_data:            pointer to GPU model data.
- * @counter_block_offset:  offset in bytes of the performance counter inside the Job Manager block.
+ * @counter_block_offset:  offset in bytes of the performance counter inside
+ * the Job Manager block.
  *
  * Return: Block offset in bytes of the required performance counter.
  */
@@ -72,9 +61,11 @@ static u32 kbase_g7x_power_model_get_jm_counter(struct kbase_ipa_model_vinstr_da
 }
 
 /**
- * get_memsys_counter() - get performance counter offset inside the Memory System block
+ * kbase_g7x_power_model_get_memsys_counter() - get performance counter offset
+ * inside the Memory System block
  * @model_data:            pointer to GPU model data.
- * @counter_block_offset:  offset in bytes of the performance counter inside the (first) Memory System block.
+ * @counter_block_offset:  offset in bytes of the performance counter inside
+ * the (first) Memory System block.
  *
  * Return: Block offset in bytes of the required performance counter.
  */
@@ -88,9 +79,11 @@ static u32 kbase_g7x_power_model_get_memsys_counter(struct kbase_ipa_model_vinst
 }
 
 /**
- * get_sc_counter() - get performance counter offset inside the Shader Cores block
+ * kbase_g7x_power_model_get_sc_counter() - get performance counter offset
+ * inside the Shader Cores block
  * @model_data:            pointer to GPU model data.
- * @counter_block_offset:  offset in bytes of the performance counter inside the (first) Shader Cores block.
+ * @counter_block_offset:  offset in bytes of the performance counter inside
+ * the (first) Shader Cores block.
  *
  * Return: Block offset in bytes of the required performance counter.
  */
@@ -110,10 +103,12 @@ static u32 kbase_g7x_power_model_get_sc_counter(struct kbase_ipa_model_vinstr_da
 }
 
 /**
- * memsys_single_counter() - calculate energy for a single Memory System performance counter.
+ * kbase_g7x_sum_all_memsys_blocks() - calculate energy for a single Memory
+ * System performance counter.
  * @model_data:            pointer to GPU model data.
  * @coeff:                 default value of coefficient for IPA group.
- * @counter_block_offset:  offset in bytes of the counter inside the block it belongs to.
+ * @counter_block_offset:  offset in bytes of the counter inside the block it
+ * belongs to.
  *
  * Return: Energy estimation for a single Memory System performance counter.
  */
@@ -130,12 +125,15 @@ static s64 kbase_g7x_sum_all_memsys_blocks(
 }
 
 /**
- * sum_all_shader_cores() - calculate energy for a Shader Cores performance counter for all cores.
+ * kbase_g7x_sum_all_shader_cores() - calculate energy for a Shader Cores
+ * performance counter for all cores.
  * @model_data:            pointer to GPU model data.
  * @coeff:                 default value of coefficient for IPA group.
- * @counter_block_offset:  offset in bytes of the counter inside the block it belongs to.
+ * @counter_block_offset:  offset in bytes of the counter inside the block it
+ * belongs to.
  *
- * Return: Energy estimation for a Shader Cores performance counter for all cores.
+ * Return: Energy estimation for a Shader Cores performance counter for all
+ * cores.
  */
 static s64 kbase_g7x_sum_all_shader_cores(
 	struct kbase_ipa_model_vinstr_data *model_data,
@@ -150,7 +148,7 @@ static s64 kbase_g7x_sum_all_shader_cores(
 }
 
 /**
- * jm_single_counter() - calculate energy for a single Job Manager performance counter.
+ * kbase_g7x_jm_single_counter() - calculate energy for a single Job Manager performance counter.
  * @model_data:            pointer to GPU model data.
  * @coeff:                 default value of coefficient for IPA group.
  * @counter_block_offset:  offset in bytes of the counter inside the block it belongs to.
@@ -170,7 +168,7 @@ static s64 kbase_g7x_jm_single_counter(
 }
 
 /**
- * get_active_cycles() - return the GPU_ACTIVE counter
+ * kbase_g7x_get_active_cycles() - return the GPU_ACTIVE counter
  * @model_data:            pointer to GPU model data.
  *
  * Return: the number of cycles the GPU was active during the counter sampling
@@ -457,16 +455,14 @@ static const struct kbase_ipa_group ipa_groups_def_tbax[] = {
 	},
 };
 
-
-#define IPA_POWER_MODEL_OPS(gpu, init_token) \
-	const struct kbase_ipa_model_ops kbase_ ## gpu ## _ipa_model_ops = { \
-		.name = "mali-" #gpu "-power-model", \
-		.init = kbase_ ## init_token ## _power_model_init, \
-		.term = kbase_ipa_vinstr_common_model_term, \
-		.get_dynamic_coeff = kbase_ipa_vinstr_dynamic_coeff, \
-		.reset_counter_data = kbase_ipa_vinstr_reset_data, \
-	}; \
-	KBASE_EXPORT_TEST_API(kbase_ ## gpu ## _ipa_model_ops)
+#define IPA_POWER_MODEL_OPS(gpu, init_token)                                                       \
+	static const struct kbase_ipa_model_ops kbase_##gpu##_ipa_model_ops = {                    \
+		.name = "mali-" #gpu "-power-model",                                               \
+		.init = kbase_##init_token##_power_model_init,                                     \
+		.term = kbase_ipa_vinstr_common_model_term,                                        \
+		.get_dynamic_coeff = kbase_ipa_vinstr_dynamic_coeff,                               \
+		.reset_counter_data = kbase_ipa_vinstr_reset_data,                                 \
+	}
 
 #define STANDARD_POWER_MODEL(gpu, reference_voltage) \
 	static int kbase_ ## gpu ## _power_model_init(\

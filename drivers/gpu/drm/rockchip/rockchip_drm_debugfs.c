@@ -61,7 +61,7 @@ int rockchip_drm_dump_plane_buffer(struct vop_dump_info *dump_info, int frame_co
 	char file_name[100];
 	int width;
 	size_t size, uv_size = 0;
-	void *kvaddr;
+	void *kvaddr, *kvaddr_origin;
 	struct file *file;
 	loff_t pos = 0;
 	struct drm_format_name_buf format_name;
@@ -75,7 +75,7 @@ int rockchip_drm_dump_plane_buffer(struct vop_dump_info *dump_info, int frame_co
 		u8 hsub = dump_info->format->hsub;
 		u8 vsub = dump_info->format->vsub;
 
-		width = dump_info->pitches;
+		width = dump_info->pitches * 8 / bpp;
 		flags = O_RDWR | O_CREAT | O_APPEND;
 		uv_size = (width * dump_info->height * bpp >> 3) * 2 / hsub / vsub;
 		snprintf(file_name, 100, "%s/video%d_%d_%s.%s", DUMP_BUF_PATH,
@@ -92,6 +92,7 @@ int rockchip_drm_dump_plane_buffer(struct vop_dump_info *dump_info, int frame_co
 	}
 	kvaddr = vmap(dump_info->pages, dump_info->num_pages, VM_MAP,
 		      pgprot_writecombine(PAGE_KERNEL));
+	kvaddr_origin = kvaddr;
 	if (!kvaddr)
 		DRM_ERROR("failed to vmap() buffer\n");
 	else
@@ -111,7 +112,7 @@ int rockchip_drm_dump_plane_buffer(struct vop_dump_info *dump_info, int frame_co
 	} else {
 		DRM_INFO("open %s failed\n", ptr);
 	}
-	vunmap(kvaddr);
+	vunmap(kvaddr_origin);
 
 	return 0;
 }
@@ -212,6 +213,71 @@ int rockchip_drm_add_dump_buffer(struct drm_crtc *crtc, struct dentry *root)
 		DRM_ERROR("create vop_plane_dump err\n");
 		debugfs_remove_recursive(vop_dump_root);
 	}
+
+	return 0;
+}
+
+static int rockchip_drm_debugfs_color_bar_show(struct seq_file *s, void *data)
+{
+	seq_puts(s, "  Enable horizontal color bar:\n");
+	seq_puts(s, "      echo 1 > /sys/kernel/debug/dri/0/video_port0/color_bar\n");
+	seq_puts(s, "  Enable vertical color bar:\n");
+	seq_puts(s, "      echo 2 > /sys/kernel/debug/dri/0/video_port0/color_bar\n");
+	seq_puts(s, "  Disable color bar:\n");
+	seq_puts(s, "      echo 0 > /sys/kernel/debug/dri/0/video_port0/color_bar\n");
+
+	return 0;
+}
+
+static int rockchip_drm_debugfs_color_bar_open(struct inode *inode, struct file *file)
+{
+	struct drm_crtc *crtc = inode->i_private;
+
+	return single_open(file, rockchip_drm_debugfs_color_bar_show, crtc);
+}
+
+static ssize_t rockchip_drm_debugfs_color_bar_write(struct file *file, const char __user *ubuf,
+						    size_t len, loff_t *offp)
+{
+	struct seq_file *s = file->private_data;
+	struct drm_crtc *crtc = s->private;
+	struct rockchip_drm_private *priv = crtc->dev->dev_private;
+	int pipe = drm_crtc_index(crtc);
+	u8 mode;
+
+	if (len != 2) {
+		DRM_INFO("Unsupported color bar mode\n");
+		return -EINVAL;
+	}
+
+	if (kstrtou8_from_user(ubuf, len, 0, &mode))
+		return -EFAULT;
+
+	if (priv->crtc_funcs[pipe]->crtc_set_color_bar) {
+		if (priv->crtc_funcs[pipe]->crtc_set_color_bar(crtc, mode))
+			return -EINVAL;
+	}
+
+	return len;
+}
+
+static const struct file_operations rockchip_drm_debugfs_color_bar_fops = {
+	.owner = THIS_MODULE,
+	.open = rockchip_drm_debugfs_color_bar_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+	.write = rockchip_drm_debugfs_color_bar_write,
+};
+
+int rockchip_drm_debugfs_add_color_bar(struct drm_crtc *crtc, struct dentry *root)
+{
+	struct dentry *ent;
+
+	ent = debugfs_create_file("color_bar", 0644, root, crtc,
+				  &rockchip_drm_debugfs_color_bar_fops);
+	if (!ent)
+		DRM_ERROR("Failed to add color_bar for debugfs\n");
 
 	return 0;
 }

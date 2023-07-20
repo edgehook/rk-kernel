@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2014-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -91,7 +91,7 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 	struct kbase_device *kbdev;
 	struct kbasep_js_device_data *js_devdata;
 	struct kbase_backend_data *backend;
-	int s;
+	unsigned int s;
 	bool reset_needed = false;
 
 	KBASE_DEBUG_ASSERT(timer != NULL);
@@ -131,10 +131,15 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 				} else {
 					soft_stop_ticks =
 						js_devdata->soft_stop_ticks;
+					if (kbase_is_quick_reset_enabled(kbdev)) {
+						hard_stop_ticks = 2;
+						gpu_reset_ticks = 3;
+					} else {
 					hard_stop_ticks =
 						js_devdata->hard_stop_ticks_ss;
 					gpu_reset_ticks =
 						js_devdata->gpu_reset_ticks_ss;
+					}
 				}
 
 				/* If timeouts have been changed then ensure
@@ -196,9 +201,10 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 					int ms =
 						js_devdata->scheduling_period_ns
 								/ 1000000u;
-					dev_warn(kbdev->dev, "JS: Job Hard-Stopped (took more than %lu ticks at %lu ms/tick)",
-							(unsigned long)ticks,
-							(unsigned long)ms);
+					if (!kbase_is_quick_reset_enabled(kbdev))
+						dev_warn(kbdev->dev, "JS: Job Hard-Stopped (took more than %lu ticks at %lu ms/tick)",
+								(unsigned long)ticks,
+								(unsigned long)ms);
 					kbase_job_slot_hardstop(atom->kctx, s,
 									atom);
 #endif
@@ -255,7 +261,11 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 		}
 	}
 	if (reset_needed) {
-		dev_err(kbdev->dev, "JS: Job has been on the GPU for too long (JS_RESET_TICKS_SS/DUMPING timeout hit). Issuing GPU soft-reset to resolve.");
+		if (kbase_is_quick_reset_enabled(kbdev))
+			dev_err(kbdev->dev, "quick reset");
+		else {
+			dev_err(kbdev->dev, "JS: Job has been on the GPU for too long (JS_RESET_TICKS_SS/DUMPING timeout hit). Issuing GPU soft-reset to resolve.");
+		}
 
 		if (kbase_prepare_to_reset_gpu_locked(kbdev, RESET_FLAGS_NONE))
 			kbase_reset_gpu_locked(kbdev);
@@ -365,4 +375,3 @@ void kbase_backend_timeouts_changed(struct kbase_device *kbdev)
 
 	backend->timeouts_updated = true;
 }
-

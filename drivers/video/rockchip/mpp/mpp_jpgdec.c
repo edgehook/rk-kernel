@@ -251,6 +251,7 @@ static int jpgdec_run(struct mpp_dev *mpp,
 	u32 i;
 	u32 reg_en;
 	struct jpgdec_task *task = to_jpgdec_task(mpp_task);
+	u32 timing_en = mpp->srv->timing_en;
 
 	mpp_debug_enter();
 
@@ -263,12 +264,20 @@ static int jpgdec_run(struct mpp_dev *mpp,
 
 		mpp_write_req(mpp, task->reg, s, e, reg_en);
 	}
+	/* flush tlb before starting hardware */
+	mpp_iommu_flush_tlb(mpp->iommu_info);
+
 	/* init current task */
 	mpp->cur_task = mpp_task;
+
+	mpp_task_run_begin(mpp_task, timing_en, MPP_WORK_TIMEOUT_DELAY);
+
 	/* Flush the register before the start the device */
 	wmb();
 	mpp_write(mpp, JPGDEC_REG_INT_EN_BASE,
 		  task->reg[reg_en] | JPGDEC_START_EN);
+
+	mpp_task_run_end(mpp_task, timing_en);
 
 	mpp_debug_leave();
 
@@ -374,6 +383,10 @@ static int jpgdec_procfs_init(struct mpp_dev *mpp)
 		dec->procfs = NULL;
 		return -EIO;
 	}
+
+	/* for common mpp_dev options */
+	mpp_procfs_create_common(dec->procfs, mpp);
+
 	mpp_procfs_create_u32("aclk", 0644,
 			      dec->procfs, &dec->aclk_info.debug_rate_hz);
 	mpp_procfs_create_u32("session_buffers", 0644,
@@ -545,7 +558,7 @@ static struct mpp_dev_ops jpgdec_v1_dev_ops = {
 };
 
 static const struct mpp_dev_var jpgdec_v1_data = {
-	.device_type = MPP_DEVICE_JPGDEC,
+	.device_type = MPP_DEVICE_RKJPEGD,
 	.hw_info = &jpgdec_v1_hw_info,
 	.trans_info = jpgdec_v1_trans,
 	.hw_ops = &jpgdec_v1_hw_ops,

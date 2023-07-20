@@ -286,7 +286,6 @@ int rk_ahash_start(struct rk_crypto_dev *rk_dev)
 	struct crypto_ahash *tfm = crypto_ahash_reqtfm(req);
 	struct rk_crypto_algt *algt = rk_ahash_get_algt(tfm);
 	struct scatterlist *src_sg;
-	unsigned long flags;
 	unsigned int nbytes;
 	int ret = 0;
 
@@ -348,6 +347,18 @@ int rk_ahash_start(struct rk_crypto_dev *rk_dev)
 		/* Concatenate old data to the header */
 		sg_init_table(ctx->hash_sg, ARRAY_SIZE(ctx->hash_sg));
 		sg_set_buf(ctx->hash_sg, ctx->hash_tmp, ctx->hash_tmp_len);
+
+		if (rk_crypto_check_dmafd(req->src, sg_nents_for_len(req->src, req->nbytes))) {
+			CRYPTO_TRACE("is hash dmafd");
+			if (!dma_map_sg(rk_dev->dev, &ctx->hash_sg[0], 1, DMA_TO_DEVICE)) {
+				dev_err(rk_dev->dev, "[%s:%d] dma_map_sg(hash_sg)  error\n",
+					__func__, __LINE__);
+				ret = -ENOMEM;
+				goto exit;
+			}
+			ctx->hash_tmp_mapped = true;
+		}
+
 		sg_chain(ctx->hash_sg, ARRAY_SIZE(ctx->hash_sg), req->src);
 
 		src_sg = &ctx->hash_sg[0];
@@ -366,14 +377,12 @@ int rk_ahash_start(struct rk_crypto_dev *rk_dev)
 		     ctx->hash_tmp_len, ctx->lastc_len, nbytes);
 
 	if (nbytes) {
-		spin_lock_irqsave(&rk_dev->lock, flags);
 		if (ctx->calc_cnt == 0)
 			alg_ctx->ops.hw_init(rk_dev, algt->algo, algt->type);
 
 		/* flush all 64byte key buffer for hmac */
 		alg_ctx->ops.hw_write_key(ctx->rk_dev, ctx->authkey, sizeof(ctx->authkey));
 		ret = rk_ahash_set_data_start(rk_dev, rctx->flag);
-		spin_unlock_irqrestore(&rk_dev->lock, flags);
 	}
 exit:
 	return ret;
@@ -417,6 +426,9 @@ int rk_ahash_crypto_rx(struct rk_crypto_dev *rk_dev)
 		 * transmission.
 		 */
 		struct crypto_ahash *tfm;
+
+		if (ctx->hash_tmp_mapped)
+			dma_unmap_sg(rk_dev->dev, &ctx->hash_sg[0], 1, DMA_TO_DEVICE);
 
 		/* only final will get result */
 		if (!(rctx->flag & RK_FLAG_FINAL))

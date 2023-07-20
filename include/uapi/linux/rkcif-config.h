@@ -11,6 +11,8 @@
 
 #define RKCIF_API_VERSION		KERNEL_VERSION(0, 1, 0xa)
 
+#define V4L2_EVENT_RESET_DEV		0X1001
+
 #define RKCIF_CMD_GET_CSI_MEMORY_MODE \
 	_IOR('V', BASE_VIDIOC_PRIVATE + 0, int)
 
@@ -22,6 +24,15 @@
 
 #define RKCIF_CMD_SET_SCALE_BLC \
 	_IOW('V', BASE_VIDIOC_PRIVATE + 3, struct bayer_blc)
+
+#define RKCIF_CMD_SET_FPS \
+	_IOW('V', BASE_VIDIOC_PRIVATE + 4, struct rkcif_fps)
+
+#define RKCIF_CMD_SET_RESET \
+	_IOW('V', BASE_VIDIOC_PRIVATE + 6, int)
+
+#define RKCIF_CMD_SET_CSI_IDX \
+	_IOW('V', BASE_VIDIOC_PRIVATE + 7, unsigned int)
 
 /* cif memory mode
  * 0: raw12/raw10/raw8 8bit memory compact
@@ -49,9 +60,15 @@ enum cif_csi_lvds_memory {
  */
 
 struct bayer_blc {
-	u8 pattern00;
-	u8 pattern01;
-	u8 pattern02;
-	u8 pattern03;
+	__u8 pattern00;
+	__u8 pattern01;
+	__u8 pattern02;
+	__u8 pattern03;
 };
+
+struct rkcif_fps {
+	int ch_num;
+	int fps;
+};
+
 #endif

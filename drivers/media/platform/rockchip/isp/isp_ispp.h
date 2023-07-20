@@ -7,8 +7,8 @@
 #include <linux/platform_device.h>
 #include <media/v4l2-subdev.h>
 #include <media/videobuf2-v4l2.h>
-#include <linux/rkisp1-config.h>
-#include <linux/rkispp-config.h>
+#include <linux/rk-isp1-config.h>
+#include <linux/rk-ispp-config.h>
 
 #define RKISP_BUF_MAX 2
 #define RKISPP_BUF_MAX 2
@@ -78,6 +78,7 @@ struct max_input {
 	u32 w;
 	u32 h;
 	u32 fps;
+	bool is_fix;
 };
 
 struct rkisp_ispp_mode {

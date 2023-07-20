@@ -25,6 +25,7 @@
 #include <linux/mm.h>
 #include <linux/mount.h>
 #include <linux/pseudo_fs.h>
+#include <linux/sched/task.h>
 
 #include <uapi/linux/dma-buf.h>
 #include <uapi/linux/magic.h>
@@ -62,6 +63,43 @@ int get_each_dmabuf(int (*callback)(const struct dma_buf *dmabuf,
 }
 EXPORT_SYMBOL_GPL(get_each_dmabuf);
 
+#if IS_ENABLED(CONFIG_RK_DMABUF_DEBUG)
+static size_t db_total_size;
+static size_t db_peak_size;
+
+void dma_buf_reset_peak_size(void)
+{
+	mutex_lock(&db_list.lock);
+	db_peak_size = 0;
+	mutex_unlock(&db_list.lock);
+}
+EXPORT_SYMBOL_GPL(dma_buf_reset_peak_size);
+
+size_t dma_buf_get_peak_size(void)
+{
+	size_t sz;
+
+	mutex_lock(&db_list.lock);
+	sz = db_peak_size;
+	mutex_unlock(&db_list.lock);
+
+	return sz;
+}
+EXPORT_SYMBOL_GPL(dma_buf_get_peak_size);
+
+size_t dma_buf_get_total_size(void)
+{
+	size_t sz;
+
+	mutex_lock(&db_list.lock);
+	sz = db_total_size;
+	mutex_unlock(&db_list.lock);
+
+	return sz;
+}
+EXPORT_SYMBOL_GPL(dma_buf_get_total_size);
+#endif
+
 static char *dmabuffs_dname(struct dentry *dentry, char *buffer, int buflen)
 {
 	struct dma_buf *dmabuf;
@@ -81,7 +119,7 @@ static char *dmabuffs_dname(struct dentry *dentry, char *buffer, int buflen)
 static void dma_buf_release(struct dentry *dentry)
 {
 	struct dma_buf *dmabuf;
-#ifdef CONFIG_NO_GKI
+#ifdef CONFIG_DMABUF_CACHE
 	int dtor_ret = 0;
 #endif
 
@@ -102,7 +140,7 @@ static void dma_buf_release(struct dentry *dentry)
 	BUG_ON(dmabuf->cb_shared.active || dmabuf->cb_excl.active);
 
 	dma_buf_stats_teardown(dmabuf);
-#ifdef CONFIG_NO_GKI
+#ifdef CONFIG_DMABUF_CACHE
 	if (dmabuf->dtor)
 		dtor_ret = dmabuf->dtor(dmabuf, dmabuf->dtor_data);
 
@@ -113,6 +151,7 @@ static void dma_buf_release(struct dentry *dentry)
 	if (dmabuf->resv == (struct dma_resv *)&dmabuf[1])
 		dma_resv_fini(dmabuf->resv);
 
+	WARN_ON(!list_empty(&dmabuf->attachments));
 	module_put(dmabuf->owner);
 	kfree(dmabuf->name);
 	kfree(dmabuf);
@@ -128,6 +167,9 @@ static int dma_buf_file_release(struct inode *inode, struct file *file)
 	dmabuf = file->private_data;
 
 	mutex_lock(&db_list.lock);
+#if IS_ENABLED(CONFIG_RK_DMABUF_DEBUG)
+	db_total_size -= dmabuf->size;
+#endif
 	list_del(&dmabuf->list_node);
 	mutex_unlock(&db_list.lock);
 
@@ -359,29 +401,18 @@ out:
 
 static long _dma_buf_set_name(struct dma_buf *dmabuf, const char *name)
 {
-	long ret = 0;
-
-	dma_resv_lock(dmabuf->resv, NULL);
-	if (!list_empty(&dmabuf->attachments)) {
-		ret = -EBUSY;
-		goto out_unlock;
-	}
 	spin_lock(&dmabuf->name_lock);
 	kfree(dmabuf->name);
 	dmabuf->name = name;
 	spin_unlock(&dmabuf->name_lock);
 
-out_unlock:
-	dma_resv_unlock(dmabuf->resv);
-	return ret;
+	return 0;
 }
 
 /**
  * dma_buf_set_name - Set a name to a specific dma_buf to track the usage.
- * The name of the dma-buf buffer can only be set when the dma-buf is not
- * attached to any devices. It could theoritically support changing the
- * name of the dma-buf if the same piece of memory is used for multiple
- * purpose between different devices.
+ * It could support changing the name of the dma-buf if the same piece of
+ * memory is used for multiple purpose between different devices.
  *
  * @dmabuf: [in]     dmabuf buffer that will be renamed.
  * @buf:    [in]     A piece of userspace memory that contains the name of
@@ -544,6 +575,7 @@ EXPORT_SYMBOL_GPL(is_dma_buf_file);
 
 static struct file *dma_buf_getfile(struct dma_buf *dmabuf, int flags)
 {
+	static atomic64_t dmabuf_inode = ATOMIC64_INIT(0);
 	struct file *file;
 	struct inode *inode = alloc_anon_inode(dma_buf_mnt->mnt_sb);
 
@@ -553,6 +585,13 @@ static struct file *dma_buf_getfile(struct dma_buf *dmabuf, int flags)
 	inode->i_size = dmabuf->size;
 	inode_set_bytes(inode, dmabuf->size);
 
+	/*
+	 * The ->i_ino acquired from get_next_ino() is not unique thus
+	 * not suitable for using it as dentry name by dmabuf stats.
+	 * Override ->i_ino with the unique and dmabuffs specific
+	 * value.
+	 */
+	inode->i_ino = atomic64_add_return(1, &dmabuf_inode);
 	file = alloc_file_pseudo(inode, dma_buf_mnt, "dmabuf",
 				 flags, &dma_buf_fops);
 	if (IS_ERR(file))
@@ -566,6 +605,17 @@ static struct file *dma_buf_getfile(struct dma_buf *dmabuf, int flags)
 err_alloc_file:
 	iput(inode);
 	return file;
+}
+
+static void dma_buf_set_default_name(struct dma_buf *dmabuf)
+{
+	char task_comm[TASK_COMM_LEN];
+	char *name;
+
+	get_task_comm(task_comm, current->group_leader);
+	name = kasprintf(GFP_KERNEL, "%d-%s", current->tgid, task_comm);
+	dma_buf_set_name(dmabuf, name);
+	kfree(name);
 }
 
 /**
@@ -660,6 +710,9 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 	dmabuf->exp_name = exp_info->exp_name;
 	dmabuf->owner = exp_info->owner;
 	spin_lock_init(&dmabuf->name_lock);
+#ifdef CONFIG_DMABUF_CACHE
+	mutex_init(&dmabuf->cache_lock);
+#endif
 	init_waitqueue_head(&dmabuf->poll);
 	dmabuf->cb_excl.poll = dmabuf->cb_shared.poll = &dmabuf->poll;
 	dmabuf->cb_excl.active = dmabuf->cb_shared.active = 0;
@@ -679,16 +732,23 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 	file->f_mode |= FMODE_LSEEK;
 	dmabuf->file = file;
 
-	ret = dma_buf_stats_setup(dmabuf);
-	if (ret)
-		goto err_sysfs;
-
 	mutex_init(&dmabuf->lock);
 	INIT_LIST_HEAD(&dmabuf->attachments);
 
 	mutex_lock(&db_list.lock);
 	list_add(&dmabuf->list_node, &db_list.head);
+#if IS_ENABLED(CONFIG_RK_DMABUF_DEBUG)
+	db_total_size += dmabuf->size;
+	db_peak_size = max(db_total_size, db_peak_size);
+#endif
 	mutex_unlock(&db_list.lock);
+
+	ret = dma_buf_stats_setup(dmabuf);
+	if (ret)
+		goto err_sysfs;
+
+	if (IS_ENABLED(CONFIG_RK_DMABUF_DEBUG))
+		dma_buf_set_default_name(dmabuf);
 
 	return dmabuf;
 

@@ -29,6 +29,7 @@
 #include "pelt.h"
 
 int pelt_load_avg_period = PELT32_LOAD_AVG_PERIOD;
+int sysctl_sched_pelt_period = PELT32_LOAD_AVG_PERIOD;
 int pelt_load_avg_max = PELT32_LOAD_AVG_MAX;
 const u32 *pelt_runnable_avg_yN_inv = pelt32_runnable_avg_yN_inv;
 
@@ -62,6 +63,8 @@ static int __set_pelt_halflife(void *data)
 			num, pelt_load_avg_period);
 	}
 
+	sysctl_sched_pelt_period = pelt_load_avg_period;
+
 	return rc;
 }
 
@@ -70,6 +73,19 @@ int set_pelt_halflife(int num)
 	return stop_machine(__set_pelt_halflife, &num, NULL);
 }
 EXPORT_SYMBOL_GPL(set_pelt_halflife);
+
+int sched_pelt_period_update_handler(struct ctl_table *table, int write,
+				     void *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret = proc_dointvec(table, write, buffer, lenp, ppos);
+
+	if (ret || !write)
+		return ret;
+
+	set_pelt_halflife(sysctl_sched_pelt_period);
+
+	return 0;
+}
 
 static int __init set_pelt(char *str)
 {
@@ -531,3 +547,50 @@ int update_irq_load_avg(struct rq *rq, u64 running)
 	return ret;
 }
 #endif
+
+#include <trace/hooks/sched.h>
+DEFINE_PER_CPU(u64, clock_task_mult);
+
+unsigned int sysctl_sched_pelt_multiplier = 1;
+__read_mostly unsigned int sched_pelt_lshift;
+
+int sched_pelt_multiplier(struct ctl_table *table, int write, void *buffer,
+			  size_t *lenp, loff_t *ppos)
+{
+	static DEFINE_MUTEX(mutex);
+	unsigned int old;
+	int ret;
+
+	mutex_lock(&mutex);
+
+	old = sysctl_sched_pelt_multiplier;
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+	if (ret)
+		goto undo;
+	if (!write)
+		goto done;
+
+	trace_android_vh_sched_pelt_multiplier(old, sysctl_sched_pelt_multiplier, &ret);
+	if (ret)
+		goto undo;
+
+	switch (sysctl_sched_pelt_multiplier)  {
+	case 1:
+		fallthrough;
+	case 2:
+		fallthrough;
+	case 4:
+		WRITE_ONCE(sched_pelt_lshift,
+			   sysctl_sched_pelt_multiplier >> 1);
+		goto done;
+	default:
+		ret = -EINVAL;
+	}
+
+undo:
+	sysctl_sched_pelt_multiplier = old;
+done:
+	mutex_unlock(&mutex);
+
+	return ret;
+}

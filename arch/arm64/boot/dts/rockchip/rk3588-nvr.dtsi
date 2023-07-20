@@ -28,34 +28,44 @@
 		};
 	};
 
+	dp0_sound: dp0-sound {
+		status = "disabled";
+		compatible = "rockchip,hdmi";
+		rockchip,card-name= "rockchip-dp0";
+		rockchip,mclk-fs = <512>;
+		rockchip,cpu = <&spdif_tx2>;
+		rockchip,codec = <&dp0 1>;
+		rockchip,jack-det;
+	};
+
+	dp1_sound: dp1-sound {
+		status = "disabled";
+		compatible = "rockchip,hdmi";
+		rockchip,card-name= "rockchip-dp1";
+		rockchip,mclk-fs = <512>;
+		rockchip,cpu = <&spdif_tx5>;
+		rockchip,codec = <&dp1 1>;
+		rockchip,jack-det;
+	};
+
 	hdmi0_sound: hdmi0-sound {
 		status = "disabled";
-		compatible = "simple-audio-card";
-		simple-audio-card,format = "i2s";
-		simple-audio-card,mclk-fs = <128>;
-		simple-audio-card,name = "rockchip,hdmi0";
-
-		simple-audio-card,cpu {
-			sound-dai = <&i2s5_8ch>;
-		};
-		simple-audio-card,codec {
-			sound-dai = <&hdmi0>;
-		};
+		compatible = "rockchip,hdmi";
+		rockchip,mclk-fs = <128>;
+		rockchip,card-name = "rockchip-hdmi0";
+		rockchip,cpu = <&i2s5_8ch>;
+		rockchip,codec = <&hdmi0>;
+		rockchip,jack-det;
 	};
 
 	hdmi1_sound: hdmi1-sound {
 		status = "disabled";
-		compatible = "simple-audio-card";
-		simple-audio-card,format = "i2s";
-		simple-audio-card,mclk-fs = <128>;
-		simple-audio-card,name = "rockchip,hdmi1";
-
-		simple-audio-card,cpu {
-			sound-dai = <&i2s6_8ch>;
-		};
-		simple-audio-card,codec {
-			sound-dai = <&hdmi1>;
-		};
+		compatible = "rockchip,hdmi";
+		rockchip,mclk-fs = <128>;
+		rockchip,card-name = "rockchip-hdmi1";
+		rockchip,cpu = <&i2s6_8ch>;
+		rockchip,codec = <&hdmi1>;
+		rockchip,jack-det;
 	};
 
 	test-power {
@@ -83,6 +93,9 @@
 	/delete-node/ opp-600000000;
 	/delete-node/ opp-816000000;
 	/delete-node/ opp-1008000000;
+	/delete-node/ opp-2256000000;
+	/delete-node/ opp-2304000000;
+	/delete-node/ opp-2352000000;
 	/delete-node/ opp-2400000000;
 };
 
@@ -91,6 +104,9 @@
 	/delete-node/ opp-600000000;
 	/delete-node/ opp-816000000;
 	/delete-node/ opp-1008000000;
+	/delete-node/ opp-2256000000;
+	/delete-node/ opp-2304000000;
+	/delete-node/ opp-2352000000;
 	/delete-node/ opp-2400000000;
 };
 
@@ -109,6 +125,11 @@
 	mem-supply = <&vdd_cpu_big1_mem_s0>;
 };
 
+&display_subsystem {
+	clocks = <&hdptxphy_hdmi_clk0>, <&hdptxphy_hdmi_clk1>;
+	clock-names = "hdmi0_phy_pll", "hdmi1_phy_pll";
+};
+
 &gpu_opp_table {
 	/delete-node/ opp-198000000;
 	/delete-node/ opp-297000000;
@@ -121,6 +142,14 @@
 &gpu {
 	mali-supply = <&vdd_gpu_s0>;
 	mem-supply = <&vdd_gpu_mem_s0>;
+	status = "okay";
+};
+
+&hdptxphy_hdmi_clk0 {
+	status = "okay";
+};
+
+&hdptxphy_hdmi_clk1 {
 	status = "okay";
 };
 
@@ -235,6 +264,8 @@
 };
 
 &rkvenc0 {
+	venc-supply = <&vdd_vdenc_s0>;
+	mem-supply = <&vdd_vdenc_mem_s0>;
 	status = "okay";
 };
 
@@ -243,6 +274,8 @@
 };
 
 &rkvenc1 {
+	venc-supply = <&vdd_vdenc_s0>;
+	mem-supply = <&vdd_vdenc_mem_s0>;
 	status = "okay";
 };
 
@@ -264,6 +297,10 @@
 };
 
 &vdpu_mmu {
+	status = "okay";
+};
+
+&vepu {
 	status = "okay";
 };
 

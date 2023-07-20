@@ -4,6 +4,9 @@
 #ifndef RK_VCM_HEAD_H
 #define RK_VCM_HEAD_H
 
+#include <linux/types.h>
+#include <linux/time_types.h>
+
 #define RK_VCM_HEAD_VERSION	KERNEL_VERSION(0, 0x02, 0x0)
 /*
  * Focus position values:
@@ -20,8 +23,17 @@
 #define OF_CAMERA_VCMDRV_DLC_ENABLE	"rockchip,vcm-dlc-enable"
 #define OF_CAMERA_VCMDRV_MCLK		"rockchip,vcm-mclk"
 #define OF_CAMERA_VCMDRV_T_SRC		"rockchip,vcm-t-src"
-#define OF_CAMERA_VCMDRV_T_DIV          "rockchip,vcm-t-div"
-#define VCMDRV_SETZOOM_MAXCNT	300U
+#define OF_CAMERA_VCMDRV_T_DIV		"rockchip,vcm-t-div"
+#define OF_CAMERA_VCMDRV_ADVANCED_MODE	"rockchip,vcm-adcanced-mode"
+#define OF_CAMERA_VCMDRV_SAC_MODE	"rockchip,vcm-sac-mode"
+#define OF_CAMERA_VCMDRV_SAC_TIME	"rockchip,vcm-sac-time"
+#define OF_CAMERA_VCMDRV_PRESC		"rockchip,vcm-prescl"
+#define OF_CAMERA_VCMDRV_NRC_EN		"rockchip,vcm-nrc-en"
+#define OF_CAMERA_VCMDRV_NRC_MODE	"rockchip,vcm-nrc-mode"
+#define OF_CAMERA_VCMDRV_NRC_PRESET	"rockchip,vcm-nrc-preset"
+#define OF_CAMERA_VCMDRV_NRC_INFL	"rockchip,vcm-nrc-infl"
+#define OF_CAMERA_VCMDRV_NRC_TIME	"rockchip,vcm-nrc-time"
+#define VCMDRV_SETZOOM_MAXCNT		300U
 
 #define RK_VIDIOC_VCM_TIMEINFO \
 	_IOR('V', BASE_VIDIOC_PRIVATE + 0, struct rk_cam_vcm_tim)
@@ -63,6 +75,9 @@
 #define RK_VIDIOC_MODIFY_POSITION \
 	_IOW('V', BASE_VIDIOC_PRIVATE + 16, struct rk_cam_modify_pos)
 
+#define RK_VIDIOC_SET_VCM_MAX_LOGICALPOS \
+	_IOW('V', BASE_VIDIOC_PRIVATE + 17, unsigned int)
+
 #define RK_VIDIOC_COMPAT_VCM_TIMEINFO \
 	_IOR('V', BASE_VIDIOC_PRIVATE + 0, struct rk_cam_compat_vcm_tim)
 #define RK_VIDIOC_COMPAT_IRIS_TIMEINFO \
@@ -73,25 +88,25 @@
 	_IOR('V', BASE_VIDIOC_PRIVATE + 11, struct rk_cam_compat_vcm_tim)
 
 struct rk_cam_modify_pos {
-	s32 focus_pos;
-	s32 zoom_pos;
-	s32 zoom1_pos;
+	__s32 focus_pos;
+	__s32 zoom_pos;
+	__s32 zoom1_pos;
 };
 
 struct rk_cam_set_focus {
-	bool is_need_reback;
-	s32 focus_pos;
+	_Bool is_need_reback;
+	__s32 focus_pos;
 };
 
 struct rk_cam_zoom_pos {
-	s32 zoom_pos;
-	s32 focus_pos;
+	__s32 zoom_pos;
+	__s32 focus_pos;
 };
 
 struct rk_cam_set_zoom {
-	bool is_need_zoom_reback;
-	bool is_need_focus_reback;
-	u32 setzoom_cnt;
+	_Bool is_need_zoom_reback;
+	_Bool is_need_focus_reback;
+	__u32 setzoom_cnt;
 	struct rk_cam_zoom_pos zoom_pos[VCMDRV_SETZOOM_MAXCNT];
 };
 
@@ -100,9 +115,16 @@ struct rk_cam_vcm_tim {
 	struct __kernel_old_timeval vcm_end_t;
 };
 
+#ifndef __kernel_old_timeval32
+struct __kernel_old_timeval32 {
+	__s32 tv_sec;
+	__s32 tv_usec;
+};
+#endif
+
 struct rk_cam_compat_vcm_tim {
-	struct old_timeval32 vcm_start_t;
-	struct old_timeval32 vcm_end_t;
+	struct __kernel_old_timeval32 vcm_start_t;
+	struct __kernel_old_timeval32 vcm_end_t;
 };
 
 struct rk_cam_vcm_cfg {

@@ -4190,14 +4190,21 @@ rkisp_params_get_ldchbuf_inf_v2x(struct rkisp_isp_params_vdev *params_vdev,
 	}
 }
 
-static void
+static int
 rkisp_params_set_ldchbuf_size_v2x(struct rkisp_isp_params_vdev *params_vdev,
 				  void *size)
 {
 	struct rkisp_ldchbuf_size *ldchsize = size;
 
 	rkisp_deinit_ldch_buf(params_vdev);
-	rkisp_init_ldch_buf(params_vdev, ldchsize);
+	return rkisp_init_ldch_buf(params_vdev, ldchsize);
+}
+
+static void
+rkisp_params_free_meshbuf_v2x(struct rkisp_isp_params_vdev *params_vdev,
+			      u64 module_id)
+{
+	rkisp_deinit_ldch_buf(params_vdev);
 }
 
 static void
@@ -4383,6 +4390,7 @@ static struct rkisp_isp_params_ops rkisp_isp_params_ops_tbl = {
 	.param_cfgsram = rkisp_params_cfgsram_v2x,
 	.get_meshbuf_inf = rkisp_params_get_ldchbuf_inf_v2x,
 	.set_meshbuf_size = rkisp_params_set_ldchbuf_size_v2x,
+	.free_meshbuf = rkisp_params_free_meshbuf_v2x,
 	.fop_release = rkisp_params_fop_release_v2x,
 };
 

@@ -16,6 +16,7 @@
 #include <linux/mfd/core.h>
 #include <linux/mii.h>
 #include <linux/netdevice.h>
+#include <linux/nvmem-consumer.h>
 #include <linux/of_irq.h>
 #include <linux/phy.h>
 #include <linux/platform_device.h>
@@ -24,6 +25,8 @@
 #define RK630_PHY_ID				0x00441400
 
 /* PAGE 0 */
+#define REG_MMD_ACCESS_CONTROL			0x0d
+#define REG_MMD_ACCESS_DATA_ADDRESS		0x0e
 #define REG_INTERRUPT_STATUS			0X10
 #define REG_INTERRUPT_MASK			0X11
 #define REG_GLOBAL_CONFIGURATION		0X13
@@ -50,6 +53,7 @@
 #define REG_PAGE6_CP_CURRENT			0x17
 #define REG_PAGE6_ADC_OP_BIAS			0x18
 #define REG_PAGE6_RX_DECTOR			0x19
+#define REG_PAGE6_TX_MOS_DRV			0x1B
 #define REG_PAGE6_AFE_PDCW			0x1c
 
 /* PAGE 8 */
@@ -61,15 +65,51 @@
  * Addr: 1 --- RK630@S40
  *       2 --- RV1106@T22
  */
-#define PHY_ADDR_S40 1
-#define PHY_ADDR_T22 2
+#define PHY_ADDR_S40				1
+#define PHY_ADDR_T22				2
+
+#define T22_TX_LEVEL_100M			0x2d
+#define T22_TX_LEVEL_10M			0x32
 
 struct rk630_phy_priv {
 	struct phy_device *phydev;
 	bool ieee;
 	int wol_irq;
 	struct wake_lock wol_wake_lock;
+	int tx_level_100M;
+	int tx_level_10M;
 };
+
+static void rk630_phy_t22_get_tx_level_from_efuse(struct phy_device *phydev)
+{
+	struct rk630_phy_priv *priv = phydev->priv;
+	unsigned int tx_level_100M = T22_TX_LEVEL_100M;
+	unsigned int tx_level_10M = T22_TX_LEVEL_10M;
+	unsigned char *efuse_buf;
+	struct nvmem_cell *cell;
+	size_t len;
+
+	cell = nvmem_cell_get(&phydev->mdio.dev, "txlevel");
+	if (IS_ERR(cell)) {
+		phydev_err(phydev, "failed to get txlevel cell: %ld, use default\n",
+			   PTR_ERR(cell));
+	} else {
+		efuse_buf = nvmem_cell_read(cell, &len);
+		nvmem_cell_put(cell);
+		if (!IS_ERR(efuse_buf)) {
+			if (len == 2 && efuse_buf[0] > 0 && efuse_buf[1] > 0) {
+				tx_level_100M = efuse_buf[1];
+				tx_level_10M = efuse_buf[0];
+			}
+			kfree(efuse_buf);
+		} else {
+			phydev_err(phydev, "failed to get efuse buf, use default\n");
+		}
+	}
+
+	priv->tx_level_100M = tx_level_100M;
+	priv->tx_level_10M = tx_level_10M;
+}
 
 static void rk630_phy_wol_enable(struct phy_device *phydev)
 {
@@ -120,14 +160,33 @@ static void rk630_phy_ieee_set(struct phy_device *phydev, bool enable)
 	phy_write(phydev, REG_PAGE_SEL, 0x0000);
 }
 
-static void rk630_phy_set_uaps(struct phy_device *phydev)
+static void rk630_phy_set_aps(struct phy_device *phydev, bool enable)
+{
+	u32 value;
+
+	/* Switch to page 1 */
+	phy_write(phydev, REG_PAGE_SEL, 0x0100);
+	value = phy_read(phydev, REG_PAGE1_APS_CTRL);
+	if (enable)
+		value |= BIT(15);
+	else
+		value &= ~BIT(15);
+	phy_write(phydev, REG_PAGE1_APS_CTRL, value);
+	/* Switch to page 0 */
+	phy_write(phydev, REG_PAGE_SEL, 0x0000);
+}
+
+static void rk630_phy_set_uaps(struct phy_device *phydev, bool enable)
 {
 	u32 value;
 
 	/* Switch to page 1 */
 	phy_write(phydev, REG_PAGE_SEL, 0x0100);
 	value = phy_read(phydev, REG_PAGE1_UAPS_CONFIGURE);
-	value |= BIT(15);
+	if (enable)
+		value |= BIT(15);
+	else
+		value &= ~BIT(15);
 	phy_write(phydev, REG_PAGE1_UAPS_CONFIGURE, value);
 	/* Switch to page 0 */
 	phy_write(phydev, REG_PAGE_SEL, 0x0000);
@@ -164,8 +223,12 @@ static void rk630_phy_s40_config_init(struct phy_device *phydev)
 
 static void rk630_phy_t22_config_init(struct phy_device *phydev)
 {
+	struct rk630_phy_priv *priv = phydev->priv;
+
 	/* Switch to page 1 */
 	phy_write(phydev, REG_PAGE_SEL, 0x0100);
+	/* Enable offset clock */
+	phy_write(phydev, 0x10, 0xfbfe);
 	/* Disable APS */
 	phy_write(phydev, REG_PAGE1_APS_CTRL, 0x4824);
 	/* Switch to page 2 */
@@ -175,13 +238,18 @@ static void rk630_phy_t22_config_init(struct phy_device *phydev)
 	/* Switch to page 6 */
 	phy_write(phydev, REG_PAGE_SEL, 0x0600);
 	/* PHYAFE ADC optimization */
-	phy_write(phydev, REG_PAGE6_ADC_ANONTROL, 0x5540);
+	phy_write(phydev, REG_PAGE6_ADC_ANONTROL, 0x555e);
 	/* PHYAFE Gain optimization */
 	phy_write(phydev, REG_PAGE6_GAIN_ANONTROL, 0x0400);
 	/* PHYAFE EQ optimization */
 	phy_write(phydev, REG_PAGE6_AFE_TX_CTRL, 0x1088);
+
+	if (priv->tx_level_100M <= 0 || priv->tx_level_10M <= 0)
+		rk630_phy_t22_get_tx_level_from_efuse(phydev);
+
 	/* PHYAFE TX optimization */
-	phy_write(phydev, REG_PAGE6_AFE_DRIVER2, 0x3030);
+	phy_write(phydev, REG_PAGE6_AFE_DRIVER2,
+		  (priv->tx_level_100M << 8) | priv->tx_level_10M);
 	/* PHYAFE CP current optimization */
 	phy_write(phydev, REG_PAGE6_CP_CURRENT, 0x0575);
 	/* ADC OP BIAS optimization */
@@ -190,14 +258,24 @@ static void rk630_phy_t22_config_init(struct phy_device *phydev)
 	phy_write(phydev, REG_PAGE6_RX_DECTOR, 0x0408);
 	/* PHYAFE PDCW optimization */
 	phy_write(phydev, REG_PAGE6_AFE_PDCW, 0x8880);
+	/* Add PHY Tx mos drive, reduce power noise/jitter */
+	phy_write(phydev, REG_PAGE6_TX_MOS_DRV, 0x888e);
 
 	/* Switch to page 8 */
 	phy_write(phydev, REG_PAGE_SEL, 0x0800);
 	/* Disable auto-cal */
 	phy_write(phydev, REG_PAGE8_AUTO_CAL, 0x0844);
+	/* Reatart offset calibration */
+	phy_write(phydev, 0x13, 0xc096);
 
 	/* Switch to page 0 */
 	phy_write(phydev, REG_PAGE_SEL, 0x0000);
+
+	/* Disable eee mode advertised */
+	phy_write(phydev, REG_MMD_ACCESS_CONTROL, 0x0007);
+	phy_write(phydev, REG_MMD_ACCESS_DATA_ADDRESS, 0x003c);
+	phy_write(phydev, REG_MMD_ACCESS_CONTROL, 0x4007);
+	phy_write(phydev, REG_MMD_ACCESS_DATA_ADDRESS, 0x0000);
 }
 
 static int rk630_phy_config_init(struct phy_device *phydev)
@@ -205,9 +283,16 @@ static int rk630_phy_config_init(struct phy_device *phydev)
 	switch (phydev->mdio.addr) {
 	case PHY_ADDR_S40:
 		rk630_phy_s40_config_init(phydev);
+		/*
+		 * Ultra Auto-Power Saving Mode (UAPS) is designed to
+		 * save power when cable is not plugged into PHY.
+		 */
+		rk630_phy_set_uaps(phydev, true);
 		break;
 	case PHY_ADDR_T22:
 		rk630_phy_t22_config_init(phydev);
+		rk630_phy_set_aps(phydev, true);
+		rk630_phy_set_uaps(phydev, true);
 		break;
 	default:
 		phydev_err(phydev, "Unsupported address for current phy: %d\n",
@@ -216,13 +301,25 @@ static int rk630_phy_config_init(struct phy_device *phydev)
 	}
 
 	rk630_phy_ieee_set(phydev, true);
-	/*
-	 * Ultra Auto-Power Saving Mode (UAPS) is designed to
-	 * save power when cable is not plugged into PHY.
-	 */
-	rk630_phy_set_uaps(phydev);
 
 	return 0;
+}
+
+static void rk630_link_change_notify(struct phy_device *phydev)
+{
+	unsigned int val;
+
+	if (phydev->state == PHY_RUNNING || phydev->state == PHY_NOLINK) {
+		/* Switch to page 6 */
+		phy_write(phydev, REG_PAGE_SEL, 0x0600);
+		val = phy_read(phydev, REG_PAGE6_AFE_TX_CTRL);
+		val &= ~GENMASK(14, 13);
+		if (phydev->speed == SPEED_10 && phydev->link)
+			val |= BIT(13);
+		phy_write(phydev, REG_PAGE6_AFE_TX_CTRL, val);
+		/* Switch to page 0 */
+		phy_write(phydev, REG_PAGE_SEL, 0x0000);
+	}
 }
 
 static irqreturn_t rk630_wol_irq_thread(int irq, void *dev_id)
@@ -310,6 +407,7 @@ static struct phy_driver rk630_phy_driver[] = {
 	.name			= "RK630 PHY",
 	.features		= PHY_BASIC_FEATURES,
 	.flags			= 0,
+	.link_change_notify	= rk630_link_change_notify,
 	.probe			= rk630_phy_probe,
 	.remove			= rk630_phy_remove,
 	.soft_reset		= genphy_soft_reset,
@@ -326,7 +424,7 @@ static struct mdio_device_id __maybe_unused rk630_phy_tbl[] = {
 	{ }
 };
 
-MODULE_DEVICE_TABLE(mdio, rockchip_phy_tbl);
+MODULE_DEVICE_TABLE(mdio, rk630_phy_tbl);
 
 module_phy_driver(rk630_phy_driver);
 

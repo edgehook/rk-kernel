@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0+
  */
+//#define DEBUG
 #include <linux/clk.h>
 #include <linux/cpufreq.h>
 #include <linux/devfreq.h>
@@ -64,6 +65,13 @@ struct lkg_conversion_table {
 	int temp;
 	int conv;
 };
+
+struct otp_opp_info {
+	u16 min_freq;
+	u16 max_freq;
+	u8 volt;
+	u8 length;
+} __packed;
 
 #define PVTM_CH_MAX	8
 #define PVTM_SUB_CH_MAX	8
@@ -428,7 +436,7 @@ static int rockchip_get_pvtm_specific_value(struct device *dev,
 		 cur_temp, *target_value, avg_value, diff_value);
 
 resetore_volt:
-	regulator_set_voltage(reg, old_volt, old_volt);
+	regulator_set_voltage(reg, old_volt, INT_MAX);
 restore_clk:
 	clk_set_rate(clk, old_freq);
 pvtm_value_out:
@@ -707,6 +715,326 @@ next:
 }
 EXPORT_SYMBOL(rockchip_of_get_lkg_sel);
 
+static unsigned long rockchip_pvtpll_get_rate(struct rockchip_opp_info *info)
+{
+	unsigned int rate0, rate1, delta;
+	int i;
+
+#define MIN_STABLE_DELTA 3
+	regmap_read(info->grf, info->pvtpll_avg_offset, &rate0);
+	/* max delay 2ms */
+	for (i = 0; i < 20; i++) {
+		udelay(100);
+		regmap_read(info->grf, info->pvtpll_avg_offset, &rate1);
+		delta = abs(rate1 - rate0);
+		rate0 = rate1;
+		if (delta <= MIN_STABLE_DELTA)
+			break;
+	}
+
+	if (delta > MIN_STABLE_DELTA) {
+		dev_err(info->dev, "%s: bad delta: %u\n", __func__, delta);
+		return 0;
+	}
+
+	return rate0 * 1000000;
+}
+
+static int rockchip_pvtpll_parse_dt(struct rockchip_opp_info *info)
+{
+	struct device_node *np;
+	int ret;
+
+	np = of_parse_phandle(info->dev->of_node, "operating-points-v2", 0);
+	if (!np) {
+		dev_warn(info->dev, "OPP-v2 not supported\n");
+		return -ENOENT;
+	}
+
+	ret = of_property_read_u32(np, "rockchip,pvtpll-avg-offset", &info->pvtpll_avg_offset);
+	if (ret)
+		goto out;
+
+	ret = of_property_read_u32(np, "rockchip,pvtpll-min-rate", &info->pvtpll_min_rate);
+	if (ret)
+		goto out;
+
+	ret = of_property_read_u32(np, "rockchip,pvtpll-volt-step", &info->pvtpll_volt_step);
+out:
+	of_node_put(np);
+
+	return ret;
+}
+
+static int rockchip_init_pvtpll_info(struct rockchip_opp_info *info)
+{
+	struct opp_table *opp_table;
+	struct dev_pm_opp *opp;
+	int i = 0, max_count, ret;
+
+	ret = rockchip_pvtpll_parse_dt(info);
+	if (ret)
+		return ret;
+
+	max_count = dev_pm_opp_get_opp_count(info->dev);
+	if (max_count <= 0)
+		return max_count ? max_count : -ENODATA;
+
+	info->opp_table = kcalloc(max_count, sizeof(*info->opp_table), GFP_KERNEL);
+	if (!info->opp_table)
+		return -ENOMEM;
+
+	opp_table = dev_pm_opp_get_opp_table(info->dev);
+	if (!opp_table) {
+		kfree(info->opp_table);
+		info->opp_table = NULL;
+		return -ENOMEM;
+	}
+
+	mutex_lock(&opp_table->lock);
+	list_for_each_entry(opp, &opp_table->opp_list, node) {
+		if (!opp->available)
+			continue;
+
+		info->opp_table[i].u_volt = opp->supplies[0].u_volt;
+		info->opp_table[i].u_volt_min = opp->supplies[0].u_volt_min;
+		info->opp_table[i].u_volt_max = opp->supplies[0].u_volt_max;
+		if (opp_table->regulator_count > 1) {
+			info->opp_table[i].u_volt_mem = opp->supplies[1].u_volt;
+			info->opp_table[i].u_volt_mem_min = opp->supplies[1].u_volt_min;
+			info->opp_table[i].u_volt_mem_max = opp->supplies[1].u_volt_max;
+		}
+		info->opp_table[i++].rate = opp->rate;
+	}
+	mutex_unlock(&opp_table->lock);
+
+	dev_pm_opp_put_opp_table(opp_table);
+
+	return 0;
+}
+
+static int rockchip_pvtpll_set_volt(struct device *dev, struct regulator *reg,
+				    int target_uV, int max_uV, char *reg_name)
+{
+	int ret = 0;
+
+	ret = regulator_set_voltage(reg, target_uV, max_uV);
+	if (ret)
+		dev_err(dev, "%s: failed to set %s voltage (%d %d uV): %d\n",
+			__func__, reg_name, target_uV, max_uV, ret);
+
+	return ret;
+}
+
+static int rockchip_pvtpll_set_clk(struct device *dev, struct clk *clk,
+				   unsigned long rate)
+{
+	int ret = 0;
+
+	ret = clk_set_rate(clk, rate);
+	if (ret)
+		dev_err(dev, "%s: failed to set rate %lu Hz, ret:%d\n",
+			__func__, rate, ret);
+
+	return ret;
+}
+
+void rockchip_pvtpll_calibrate_opp(struct rockchip_opp_info *info)
+{
+	struct opp_table *opp_table;
+	struct dev_pm_opp *opp;
+	struct regulator *reg = NULL, *reg_mem = NULL;
+	unsigned long old_volt = 0, old_volt_mem = 0;
+	unsigned long volt = 0, volt_mem = 0;
+	unsigned long volt_min, volt_max, volt_mem_min, volt_mem_max;
+	unsigned long rate, pvtpll_rate, old_rate, cur_rate, delta0, delta1;
+	int i = 0, max_count, step, cur_step, ret;
+
+	if (!info || !info->grf)
+		return;
+
+	dev_dbg(info->dev, "calibrating opp ...\n");
+	ret = rockchip_init_pvtpll_info(info);
+	if (ret)
+		return;
+
+	max_count = dev_pm_opp_get_opp_count(info->dev);
+	if (max_count <= 0)
+		return;
+
+	opp_table = dev_pm_opp_get_opp_table(info->dev);
+	if (!opp_table)
+		return;
+
+	if ((!opp_table->regulators) || IS_ERR(opp_table->clk))
+		goto out_put;
+
+	reg = opp_table->regulators[0];
+	old_volt = regulator_get_voltage(reg);
+	if (opp_table->regulator_count > 1) {
+		reg_mem = opp_table->regulators[1];
+		old_volt_mem = regulator_get_voltage(reg_mem);
+		if (IS_ERR_VALUE(old_volt_mem))
+			goto out_put;
+	}
+	old_rate = clk_get_rate(opp_table->clk);
+	if (IS_ERR_VALUE(old_volt) || IS_ERR_VALUE(old_rate))
+		goto out_put;
+	cur_rate = old_rate;
+
+	step = regulator_get_linear_step(reg);
+	if (!step || info->pvtpll_volt_step > step)
+		step = info->pvtpll_volt_step;
+
+	if (old_rate > info->pvtpll_min_rate * 1000) {
+		if (rockchip_pvtpll_set_clk(info->dev, opp_table->clk,
+					    info->pvtpll_min_rate * 1000))
+			goto out_put;
+	}
+
+	for (i = 0; i < max_count; i++) {
+		rate = info->opp_table[i].rate;
+		if (rate < 1000 * info->pvtpll_min_rate)
+			continue;
+
+		volt = max(volt, info->opp_table[i].u_volt);
+		volt_min = info->opp_table[i].u_volt_min;
+		volt_max = info->opp_table[i].u_volt_max;
+
+		if (opp_table->regulator_count > 1) {
+			volt_mem = max(volt_mem, info->opp_table[i].u_volt_mem);
+			volt_mem_min = info->opp_table[i].u_volt_mem_min;
+			volt_mem_max = info->opp_table[i].u_volt_mem_max;
+			if (rockchip_pvtpll_set_volt(info->dev, reg_mem,
+						     volt_mem, volt_mem_max, "mem"))
+				goto out;
+		}
+		if (rockchip_pvtpll_set_volt(info->dev, reg, volt, volt_max, "vdd"))
+			goto out;
+
+		if (rockchip_pvtpll_set_clk(info->dev, opp_table->clk, rate))
+			goto out;
+		cur_rate = rate;
+		pvtpll_rate = rockchip_pvtpll_get_rate(info);
+		if (!pvtpll_rate)
+			goto out;
+		cur_step = (pvtpll_rate < rate) ? step : -step;
+		delta1 = abs(pvtpll_rate - rate);
+		do {
+			delta0 = delta1;
+			volt += cur_step;
+			if ((volt < volt_min) || (volt > volt_max))
+				break;
+			if (opp_table->regulator_count > 1) {
+				if (volt > volt_mem_max)
+					break;
+				else if (volt < volt_mem_min)
+					volt_mem = volt_mem_min;
+				else
+					volt_mem = volt;
+				if (rockchip_pvtpll_set_volt(info->dev, reg_mem,
+							     volt_mem, volt_mem_max,
+							     "mem"))
+					break;
+			}
+			if (rockchip_pvtpll_set_volt(info->dev, reg, volt,
+						     volt_max, "vdd"))
+				break;
+			pvtpll_rate = rockchip_pvtpll_get_rate(info);
+			if (!pvtpll_rate)
+				goto out;
+			delta1 = abs(pvtpll_rate - rate);
+		} while (delta1 < delta0);
+
+		volt -= cur_step;
+		info->opp_table[i].u_volt = volt;
+		if (opp_table->regulator_count > 1) {
+			if (volt < volt_mem_min)
+				volt_mem = volt_mem_min;
+			else
+				volt_mem = volt;
+			info->opp_table[i].u_volt_mem = volt_mem;
+		}
+	}
+
+	i = 0;
+	mutex_lock(&opp_table->lock);
+	list_for_each_entry(opp, &opp_table->opp_list, node) {
+		if (!opp->available)
+			continue;
+
+		opp->supplies[0].u_volt = info->opp_table[i].u_volt;
+		if (opp_table->regulator_count > 1)
+			opp->supplies[1].u_volt = info->opp_table[i].u_volt_mem;
+		i++;
+	}
+	mutex_unlock(&opp_table->lock);
+	dev_info(info->dev, "opp calibration done\n");
+out:
+	if (cur_rate > old_rate)
+		rockchip_pvtpll_set_clk(info->dev, opp_table->clk, old_rate);
+	if (opp_table->regulator_count > 1)
+		rockchip_pvtpll_set_volt(info->dev, reg_mem, old_volt_mem,
+					 INT_MAX, "mem");
+	rockchip_pvtpll_set_volt(info->dev, reg, old_volt, INT_MAX, "vdd");
+	if (cur_rate < old_rate)
+		rockchip_pvtpll_set_clk(info->dev, opp_table->clk, old_rate);
+out_put:
+	dev_pm_opp_put_opp_table(opp_table);
+}
+EXPORT_SYMBOL(rockchip_pvtpll_calibrate_opp);
+
+void rockchip_pvtpll_add_length(struct rockchip_opp_info *info)
+{
+	struct device_node *np;
+	struct opp_table *opp_table;
+	struct dev_pm_opp *opp;
+	unsigned long old_rate;
+	unsigned int min_rate = 0, max_rate = 0, margin = 0;
+	u32 opp_flag = 0;
+	int ret;
+
+	if (!info)
+		return;
+
+	np = of_parse_phandle(info->dev->of_node, "operating-points-v2", 0);
+	if (!np) {
+		dev_warn(info->dev, "OPP-v2 not supported\n");
+		return;
+	}
+
+	if (of_property_read_u32(np, "rockchip,pvtpll-len-min-rate", &min_rate))
+		return;
+	if (of_property_read_u32(np, "rockchip,pvtpll-len-max-rate", &max_rate))
+		return;
+	if (of_property_read_u32(np, "rockchip,pvtpll-len-margin", &margin))
+		return;
+
+	opp_table = dev_pm_opp_get_opp_table(info->dev);
+	if (!opp_table)
+		return;
+	old_rate = clk_get_rate(opp_table->clk);
+	opp_flag = OPP_ADD_LENGTH | ((margin & OPP_LENGTH_MASK) << OPP_LENGTH_SHIFT);
+
+	mutex_lock(&opp_table->lock);
+	list_for_each_entry(opp, &opp_table->opp_list, node) {
+		if (opp->rate < min_rate * 1000 || opp->rate > max_rate * 1000)
+			continue;
+		ret = clk_set_rate(opp_table->clk, opp->rate | opp_flag);
+		if (ret) {
+			dev_err(info->dev,
+				"failed to change %lu len margin %d\n",
+				opp->rate, margin);
+			break;
+		}
+	}
+	mutex_unlock(&opp_table->lock);
+
+	clk_set_rate(opp_table->clk, old_rate);
+
+	dev_pm_opp_put_opp_table(opp_table);
+}
+EXPORT_SYMBOL(rockchip_pvtpll_add_length);
 
 static int rockchip_get_pvtm_pvtpll(struct device *dev, struct device_node *np,
 				    char *reg_name)
@@ -719,6 +1047,11 @@ static int rockchip_get_pvtm_pvtpll(struct device *dev, struct device_node *np,
 	int cur_temp, diff_temp, prop_temp, diff_value;
 	int pvtm_value = 0;
 	int ret = 0;
+
+	if (!rockchip_nvmem_cell_read_u16(np, "pvtm", (u16 *)&pvtm_value) && pvtm_value) {
+		dev_info(dev, "pvtm = %d, get from otp\n", pvtm_value);
+		return pvtm_value;
+	}
 
 	pvtm = kzalloc(sizeof(*pvtm), GFP_KERNEL);
 	if (!pvtm)
@@ -748,7 +1081,7 @@ static int rockchip_get_pvtm_pvtpll(struct device *dev, struct device_node *np,
 		dev_err(dev, "Failed to set pvtm freq\n");
 		goto put_reg;
 	}
-	ret = regulator_set_voltage(reg, pvtm->volt, pvtm->volt);
+	ret = regulator_set_voltage(reg, pvtm->volt, INT_MAX);
 	if (ret) {
 		dev_err(dev, "Failed to set pvtm_volt\n");
 		goto restore_clk;
@@ -772,7 +1105,7 @@ static int rockchip_get_pvtm_pvtpll(struct device *dev, struct device_node *np,
 	dev_info(dev, "pvtm=%d\n", pvtm_value);
 
 resetore_volt:
-	regulator_set_voltage(reg, old_volt, old_volt);
+	regulator_set_voltage(reg, old_volt, INT_MAX);
 restore_clk:
 	clk_set_rate(clk, old_freq);
 put_reg:
@@ -1122,6 +1455,49 @@ static void rockchip_adjust_opp_by_mbist_vmin(struct device *dev,
 	mutex_unlock(&opp_table->lock);
 }
 
+static void rockchip_adjust_opp_by_otp(struct device *dev,
+				       struct device_node *np)
+{
+	struct dev_pm_opp *opp;
+	struct opp_table *opp_table;
+	struct otp_opp_info opp_info = {};
+	int ret;
+
+	ret = rockchip_nvmem_cell_read_common(np, "opp-info", &opp_info,
+					      sizeof(opp_info));
+	if (ret || !opp_info.volt)
+		return;
+
+	dev_info(dev, "adjust opp-table by otp: min=%uM, max=%uM, volt=%umV\n",
+		 opp_info.min_freq, opp_info.max_freq, opp_info.volt);
+
+	opp_table = dev_pm_opp_get_opp_table(dev);
+	if (!opp_table)
+		return;
+
+	mutex_lock(&opp_table->lock);
+	list_for_each_entry(opp, &opp_table->opp_list, node) {
+		if (!opp->available)
+			continue;
+		if (opp->rate < opp_info.min_freq * 1000000)
+			continue;
+		if (opp->rate > opp_info.max_freq * 1000000)
+			continue;
+
+		opp->supplies[0].u_volt += opp_info.volt * 1000;
+		if (opp->supplies[0].u_volt > opp->supplies[0].u_volt_max)
+			opp->supplies[0].u_volt = opp->supplies[0].u_volt_max;
+		if (opp_table->regulator_count > 1) {
+			opp->supplies[1].u_volt += opp_info.volt * 1000;
+			if (opp->supplies[1].u_volt > opp->supplies[1].u_volt_max)
+				opp->supplies[1].u_volt = opp->supplies[1].u_volt_max;
+		}
+	}
+	mutex_unlock(&opp_table->lock);
+
+	dev_pm_opp_put_opp_table(opp_table);
+}
+
 static int rockchip_adjust_opp_table(struct device *dev,
 				     unsigned long scale_rate)
 {
@@ -1168,6 +1544,7 @@ int rockchip_adjust_power_scale(struct device *dev, int scale)
 	of_property_read_u32(np, "rockchip,avs-enable", &avs);
 	of_property_read_u32(np, "rockchip,avs", &avs);
 	of_property_read_u32(np, "rockchip,avs-scale", &avs_scale);
+	rockchip_adjust_opp_by_otp(dev, np);
 	rockchip_adjust_opp_by_mbist_vmin(dev, np);
 	rockchip_adjust_opp_by_irdrop(dev, np, &safe_rate, &max_rate);
 
@@ -1275,6 +1652,62 @@ int rockchip_set_read_margin(struct device *dev,
 }
 EXPORT_SYMBOL(rockchip_set_read_margin);
 
+int rockchip_init_read_margin(struct device *dev,
+			      struct rockchip_opp_info *opp_info,
+			      char *reg_name)
+{
+	struct clk *clk;
+	struct regulator *reg;
+	unsigned long cur_rate;
+	int cur_volt, ret = 0;
+	u32 target_rm = UINT_MAX;
+
+	reg = regulator_get_optional(dev, reg_name);
+	if (IS_ERR(reg)) {
+		ret = PTR_ERR(reg);
+		if (ret != -EPROBE_DEFER)
+			dev_err(dev, "%s: no regulator (%s) found: %d\n",
+				__func__, reg_name, ret);
+		return ret;
+	}
+	cur_volt = regulator_get_voltage(reg);
+	if (cur_volt < 0) {
+		ret = cur_volt;
+		if (ret != -EPROBE_DEFER)
+			dev_err(dev, "%s: failed to get (%s) volt: %d\n",
+				__func__, reg_name, ret);
+		goto out;
+	}
+
+	clk = clk_get(dev, NULL);
+	if (IS_ERR(clk)) {
+		ret = PTR_ERR(clk);
+		dev_err(dev, "%s: failed to get clk: %d\n", __func__, ret);
+		goto out;
+	}
+	cur_rate = clk_get_rate(clk);
+
+	rockchip_get_read_margin(dev, opp_info, cur_volt, &target_rm);
+	dev_dbg(dev, "cur_rate=%lu, threshold=%lu, cur_volt=%d, target_rm=%d\n",
+		cur_rate, opp_info->intermediate_threshold_freq,
+		cur_volt, target_rm);
+	if (opp_info->intermediate_threshold_freq &&
+	    cur_rate > opp_info->intermediate_threshold_freq) {
+		clk_set_rate(clk, opp_info->intermediate_threshold_freq);
+		rockchip_set_read_margin(dev, opp_info, target_rm, true);
+		clk_set_rate(clk, cur_rate);
+	} else {
+		rockchip_set_read_margin(dev, opp_info, target_rm, true);
+	}
+
+	clk_put(clk);
+out:
+	regulator_put(reg);
+
+	return ret;
+}
+EXPORT_SYMBOL(rockchip_init_read_margin);
+
 int rockchip_set_intermediate_rate(struct device *dev,
 				   struct rockchip_opp_info *opp_info,
 				   struct clk *clk, unsigned long old_freq,
@@ -1338,6 +1771,7 @@ int rockchip_init_opp_table(struct device *dev, struct rockchip_opp_info *info,
 	}
 	if (!info)
 		goto next;
+	info->dev = dev;
 
 	num_clks = of_clk_get_parent_count(np);
 	if (num_clks > 0) {
@@ -1375,6 +1809,7 @@ int rockchip_init_opp_table(struct device *dev, struct rockchip_opp_info *info,
 		if (!of_property_read_u32(np, "intermediate-threshold-freq",
 					  &freq))
 			info->intermediate_threshold_freq = freq * 1000;
+		rockchip_init_read_margin(dev, info, reg_name);
 	}
 	if (info->data && info->data->get_soc_info)
 		info->data->get_soc_info(dev, np, &bin, &process);
@@ -1382,6 +1817,8 @@ int rockchip_init_opp_table(struct device *dev, struct rockchip_opp_info *info,
 next:
 	rockchip_get_scale_volt_sel(dev, lkg_name, reg_name, bin, process,
 				    &scale, &volt_sel);
+	if (info && info->data && info->data->set_soc_info)
+		info->data->set_soc_info(dev, np, bin, process, volt_sel);
 	rockchip_set_opp_prop_name(dev, process, volt_sel);
 	ret = dev_pm_opp_of_add_table(dev);
 	if (ret) {
@@ -1389,6 +1826,8 @@ next:
 		goto dis_opp_clk;
 	}
 	rockchip_adjust_power_scale(dev, scale);
+	rockchip_pvtpll_calibrate_opp(info);
+	rockchip_pvtpll_add_length(info);
 
 dis_opp_clk:
 	if (info && info->clks)

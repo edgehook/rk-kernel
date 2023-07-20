@@ -182,7 +182,8 @@
 #define MI_CTRL_SP_OUTPUT_YUV444		(3 << 28)
 #define MI_CTRL_SP_OUTPUT_RGB565		(4 << 28)
 #define MI_CTRL_SP_OUTPUT_RGB666		(5 << 28)
-#define MI_CTRL_SP_OUTPUT_RGB888		(6 << 28)
+#define MI_CTRL_SP_OUTPUT_ARGB888		(6 << 28)
+#define MI_CTRL_SP_OUTPUT_RGB888		(7 << 28)
 
 #define MI_CTRL_MP_FMT_MASK			GENMASK(23, 22)
 #define MI_CTRL_SP_FMT_MASK			GENMASK(30, 24)
@@ -1915,6 +1916,10 @@ static inline void force_cfg_update(struct rkisp_device *dev)
 	u32 val = CIF_MI_CTRL_INIT_OFFSET_EN | CIF_MI_CTRL_INIT_BASE_EN;
 	bool is_unite = dev->hw_dev->is_unite;
 
+	if (dev->isp_ver == ISP_V21) {
+		val |= rkisp_read_reg_cache(dev, CIF_MI_CTRL);
+		rkisp_write(dev, CIF_MI_CTRL, val, true);
+	}
 	dev->hw_dev->is_mi_update = true;
 	rkisp_unite_set_bits(dev, CIF_MI_CTRL, 0, val, false, is_unite);
 	val = CIF_MI_INIT_SOFT_UPD;

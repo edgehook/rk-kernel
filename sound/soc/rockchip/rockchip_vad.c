@@ -729,7 +729,7 @@ static struct snd_soc_dai *rockchip_vad_find_dai(struct device_node *np)
 
 	dai_component.of_node = np;
 
-	return snd_soc_find_dai(&dai_component);
+	return snd_soc_find_dai_with_mutex(&dai_component);
 }
 
 static void hw_refine_channels(struct snd_pcm_hw_params *params,
@@ -872,11 +872,20 @@ static int rockchip_vad_enable_cpudai(struct rockchip_vad *vad)
 		return 0;
 
 	pm_runtime_get_sync(cpu_dai->dev);
+	if (cpu_dai->driver->ops) {
+		if (cpu_dai->driver->ops->startup)
+			ret = cpu_dai->driver->ops->startup(substream,
+							    cpu_dai);
 
-	if (cpu_dai->driver->ops && cpu_dai->driver->ops->trigger)
-		ret = cpu_dai->driver->ops->trigger(substream,
-						    SNDRV_PCM_TRIGGER_START,
-						    cpu_dai);
+		if (cpu_dai->driver->ops->prepare)
+			ret |= cpu_dai->driver->ops->prepare(substream,
+							    cpu_dai);
+
+		if (cpu_dai->driver->ops->trigger)
+			ret |= cpu_dai->driver->ops->trigger(substream,
+							    SNDRV_PCM_TRIGGER_START,
+							    cpu_dai);
+	}
 
 	return ret;
 }

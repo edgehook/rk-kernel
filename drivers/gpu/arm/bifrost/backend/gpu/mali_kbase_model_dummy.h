@@ -21,11 +21,24 @@
 
 /*
  * Dummy Model interface
+ *
+ * Support for NO_MALI dummy Model interface.
+ *
+ * +-----------------------------------+
+ * | Kbase read/write/IRQ              |
+ * +-----------------------------------+
+ * | Model Linux Framework             |
+ * +-----------------------------------+
+ * | Model Dummy interface definitions |
+ * +-----------------+-----------------+
+ * | Fake R/W        | Fake IRQ        |
+ * +-----------------+-----------------+
  */
 
 #ifndef _KBASE_MODEL_DUMMY_H_
 #define _KBASE_MODEL_DUMMY_H_
 
+#include <uapi/gpu/arm/bifrost/backend/gpu/mali_kbase_model_linux.h>
 #include <uapi/gpu/arm/bifrost/backend/gpu/mali_kbase_model_dummy.h>
 
 #define model_error_log(module, ...) pr_err(__VA_ARGS__)
@@ -116,6 +129,8 @@ struct kbase_error_atom {
 
 /*struct to track the system error state*/
 struct error_status_t {
+	spinlock_t access_lock;
+
 	u32 errors_mask;
 	u32 mmu_table_level;
 	int faulty_mmu_as;
@@ -138,38 +153,71 @@ struct error_status_t {
 	u64 as_transtab[NUM_MMU_AS];
 };
 
-void *midgard_model_create(const void *config);
-void midgard_model_destroy(void *h);
-u8 midgard_model_write_reg(void *h, u32 addr, u32 value);
-u8 midgard_model_read_reg(void *h, u32 addr,
-							u32 * const value);
+/**
+ * struct gpu_model_prfcnt_en - Performance counter enable masks
+ * @fe: Enable mask for front-end block
+ * @tiler: Enable mask for tiler block
+ * @l2: Enable mask for L2/Memory system blocks
+ * @shader: Enable mask for shader core blocks
+ */
+struct gpu_model_prfcnt_en {
+	u32 fe;
+	u32 tiler;
+	u32 l2;
+	u32 shader;
+};
+
 void midgard_set_error(int job_slot);
 int job_atom_inject_error(struct kbase_error_params *params);
 int gpu_model_control(void *h,
 				struct kbase_model_control_params *params);
 
-void gpu_model_set_dummy_prfcnt_sample(u32 *usr_data, u32 usr_data_size);
-void gpu_model_set_dummy_prfcnt_kernel_sample(u64 *usr_data, u32 usr_data_size);
+/**
+ * gpu_model_set_dummy_prfcnt_user_sample() - Set performance counter values
+ * @data: Userspace pointer to array of counter values
+ * @size: Size of counter value array
+ *
+ * Counter values set by this function will be used for one sample dump only
+ * after which counters will be cleared back to zero.
+ *
+ * Return: 0 on success, else error code.
+ */
+int gpu_model_set_dummy_prfcnt_user_sample(u32 __user *data, u32 size);
+
+/**
+ * gpu_model_set_dummy_prfcnt_kernel_sample() - Set performance counter values
+ * @data: Pointer to array of counter values
+ * @size: Size of counter value array
+ *
+ * Counter values set by this function will be used for one sample dump only
+ * after which counters will be cleared back to zero.
+ */
+void gpu_model_set_dummy_prfcnt_kernel_sample(u64 *data, u32 size);
+
 void gpu_model_get_dummy_prfcnt_cores(struct kbase_device *kbdev,
 		u64 *l2_present, u64 *shader_present);
 void gpu_model_set_dummy_prfcnt_cores(struct kbase_device *kbdev,
 		u64 l2_present, u64 shader_present);
-void gpu_model_set_dummy_prfcnt_base_cpu(u32 *base, struct kbase_device *kbdev,
-					 struct tagged_addr *pages,
-					 size_t page_count);
+
 /* Clear the counter values array maintained by the dummy model */
 void gpu_model_clear_prfcnt_values(void);
 
-enum gpu_dummy_irq {
-	GPU_DUMMY_JOB_IRQ,
-	GPU_DUMMY_GPU_IRQ,
-	GPU_DUMMY_MMU_IRQ
-};
+#if MALI_USE_CSF
+/**
+ * gpu_model_prfcnt_dump_request() - Request performance counter sample dump.
+ * @sample_buf:  Pointer to KBASE_DUMMY_MODEL_MAX_VALUES_PER_SAMPLE sized array
+ *               in which to store dumped performance counter values.
+ * @enable_maps: Physical enable maps for performance counter blocks.
+ */
+void gpu_model_prfcnt_dump_request(uint32_t *sample_buf, struct gpu_model_prfcnt_en enable_maps);
 
-void gpu_device_raise_irq(void *model,
-						enum gpu_dummy_irq irq);
-void gpu_device_set_data(void *model, void *data);
-void *gpu_device_get_data(void *model);
+/**
+ * gpu_model_glb_request_job_irq() - Trigger job interrupt with global request
+ *                                   flag set.
+ * @model: Model pointer returned by midgard_model_create().
+ */
+void gpu_model_glb_request_job_irq(void *model);
+#endif /* MALI_USE_CSF */
 
 extern struct error_status_t hw_error_status;
 
