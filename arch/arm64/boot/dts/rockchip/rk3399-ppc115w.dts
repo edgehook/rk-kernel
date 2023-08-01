@@ -1081,7 +1081,7 @@
 };
 
 &uart4 {
-	dmas = <&dmac_peri 8>, <&dmac_peri 9>;
+	//dmas = <&dmac_peri 8>, <&dmac_peri 9>;
 	dma-names = "tx", "rx";
 	status = "okay";
 };
@@ -1226,7 +1226,7 @@
 /* USB */
 &tcphy0 {
 	extcon = <&vpd0>;
-	status = "okay";
+	status = "disabled";
 };
 
 &tcphy1 {
@@ -1235,15 +1235,9 @@
 
 &u2phy0 {
 	status = "okay";
-	rockchip,u2phy-tuning;
 
 	u2phy0_otg: otg-port {
 		vbus-supply = <&vcc_otg_vbus>;
-		status = "okay";
-	};
-
-	u2phy0_host: host-port {
-		phy-supply = <&vcc5v0_host>;
 		status = "okay";
 	};
 };

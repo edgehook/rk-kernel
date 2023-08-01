@@ -81,8 +81,6 @@ struct rk_i2s_dev {
 	struct notifier_block reboot_notifier;
 	bool clk_enabled;
 #endif
-	unsigned int clk_trcm;
-
 	unsigned int mclk_root_rate;
 	unsigned int mclk_root_initial_rate;
 	int clk_ppm;
