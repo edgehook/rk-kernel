@@ -67,6 +67,14 @@
 		compatible = "pwm-fan";
 		#cooling-cells = <2>;
 		pwms = <&pwm9 0 50000 0>;
+		cooling-levels = <0 50 100 150 200 255>;
+		rockchip,temp-trips = <
+			50000	1
+			55000	2
+			60000	3
+			65000	4
+			70000	5
+		>;
 	};
 
 	pcie20_avdd0v85: pcie20-avdd0v85 {
@@ -328,9 +336,9 @@
 		#sound-dai-cells = <0>;
 		compatible = "everest,es8388", "everest,es8323";
 		reg = <0x11>;
-		clocks = <&cru I2S0_8CH_MCLKOUT>;
+		clocks = <&mclkout_i2s0>;
 		clock-names = "mclk";
-		assigned-clocks = <&cru I2S0_8CH_MCLKOUT>;
+		assigned-clocks = <&mclkout_i2s0>;
 		assigned-clock-rates = <12288000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2s0_mclk>;
@@ -343,6 +351,11 @@
 		power-supply = <&vcc_1v8_s0>;	/* only 1v8 or 3v3, default is 3v3 */
 		reg = <0x32>;
 	};
+};
+
+&i2s2_2ch {
+	pinctrl-0 = <&i2s2m0_sclk &i2s2m0_lrck &i2s2m0_sdi &i2s2m0_sdo>;
+	status = "disabled";
 };
 
 &i2s5_8ch {
@@ -411,7 +424,7 @@
 		touch_gpio: touch-gpio {
 			rockchip,pins =
 				<0 RK_PD2 RK_FUNC_GPIO &pcfg_pull_up>,
-				<0 RK_PD3 RK_FUNC_GPIO &pcfg_pull_none>;
+				<0 RK_PD3 RK_FUNC_GPIO &pcfg_pull_up>;
 		};
 	};
 

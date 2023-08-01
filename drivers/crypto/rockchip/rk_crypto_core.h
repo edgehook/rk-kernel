@@ -12,7 +12,9 @@
 #include <crypto/sha.h>
 #include <crypto/sm3.h>
 #include <crypto/sm4.h>
+#include <crypto/gcm.h>
 #include <crypto/skcipher.h>
+#include <crypto/internal/aead.h>
 #include <crypto/internal/akcipher.h>
 #include <crypto/internal/hash.h>
 #include <crypto/internal/rsa.h>
@@ -46,6 +48,20 @@
 #define RK_FLAG_FINAL			BIT(0)
 #define RK_FLAG_UPDATE			BIT(1)
 
+struct rk_crypto_stat {
+	unsigned long long	busy_cnt;
+	unsigned long long	equeue_cnt;
+	unsigned long long	dequeue_cnt;
+	unsigned long long	complete_cnt;
+	unsigned long long	done_cnt;
+	unsigned long long	fake_cnt;
+	unsigned long long	irq_cnt;
+	unsigned long long	timeout_cnt;
+	unsigned long long	error_cnt;
+	unsigned long long	ever_queue_max;
+	int			last_error;
+};
+
 struct rk_crypto_dev {
 	struct device			*dev;
 	struct reset_control		*rst;
@@ -60,6 +76,9 @@ struct rk_crypto_dev {
 	struct rk_crypto_soc_data	*soc_data;
 	int clks_num;
 	struct clk_bulk_data		*clk_bulks;
+	const char			*name;
+	struct proc_dir_entry		*procfs;
+	struct rk_crypto_stat		stat;
 
 	/* device lock */
 	spinlock_t			lock;
@@ -68,6 +87,10 @@ struct rk_crypto_dev {
 	struct crypto_async_request	*async_req;
 	void				*addr_vir;
 	u32				vir_max;
+	void				*addr_aad;
+	int				aad_max;
+	struct scatterlist		src[2];
+	struct scatterlist		dst[2];
 
 	struct timer_list		timer;
 	bool				busy;
@@ -88,6 +111,8 @@ struct rk_crypto_soc_data {
 	unsigned int			hw_info_size;
 	bool				use_soft_aes192;
 	int				default_pka_offset;
+	bool				use_lli_chain;
+
 	int (*hw_init)(struct device *dev, void *hw_info);
 	void (*hw_deinit)(struct device *dev, void *hw_info);
 	const char * const *(*hw_get_rsts)(uint32_t *num);
@@ -114,17 +139,22 @@ struct rk_alg_ctx {
 	struct scatterlist		*sg_src;
 	struct scatterlist		*sg_dst;
 	struct scatterlist		sg_tmp;
+	struct scatterlist		sg_aad;
 	struct scatterlist		*req_src;
 	struct scatterlist		*req_dst;
 	size_t				src_nents;
 	size_t				dst_nents;
+	size_t				map_nents;
 
+	int				is_aead;
 	unsigned int			total;
+	unsigned int			assoclen;
 	unsigned int			count;
 	unsigned int			left_bytes;
 
 	dma_addr_t			addr_in;
 	dma_addr_t			addr_out;
+	dma_addr_t			addr_aad_in;
 
 	bool				aligned;
 	bool				is_dma;
@@ -141,6 +171,7 @@ struct rk_ahash_ctx {
 	struct scatterlist		hash_sg[2];
 	u8				*hash_tmp;
 	u32				hash_tmp_len;
+	bool				hash_tmp_mapped;
 	u32				calc_cnt;
 
 	u8				lastc[RK_DMA_ALIGNMENT];
@@ -167,6 +198,7 @@ struct rk_cipher_ctx {
 	unsigned int			keylen;
 	u32				mode;
 	u8				iv[AES_BLOCK_SIZE];
+	u32				iv_len;
 	u8				lastc[AES_BLOCK_SIZE];
 	bool				is_enc;
 	void				*priv;
@@ -175,6 +207,7 @@ struct rk_cipher_ctx {
 	bool				fallback_key_inited;
 	struct crypto_skcipher		*fallback_tfm;
 	struct skcipher_request		fallback_req;	// keep at the end
+	struct crypto_aead		*fallback_aead;
 };
 
 struct rk_rsa_ctx {
@@ -191,6 +224,8 @@ enum alg_type {
 	ALG_TYPE_HMAC,
 	ALG_TYPE_CIPHER,
 	ALG_TYPE_ASYM,
+	ALG_TYPE_AEAD,
+	ALG_TYPE_MAX,
 };
 
 struct rk_crypto_algt {
@@ -199,12 +234,14 @@ struct rk_crypto_algt {
 		struct skcipher_alg	crypto;
 		struct ahash_alg	hash;
 		struct akcipher_alg	asym;
+		struct aead_alg		aead;
 	} alg;
 	enum alg_type			type;
 	u32				algo;
 	u32				mode;
 	char				*name;
 	bool				use_soft_aes192;
+	bool				valid_flag;
 };
 
 enum rk_hash_algo {
@@ -248,6 +285,35 @@ enum rk_cipher_mode {
 #define SM4_MAX_KEY_SIZE	SM4_KEY_SIZE
 
 #define MD5_BLOCK_SIZE		SHA1_BLOCK_SIZE
+
+#define  RK_AEAD_ALGO_INIT(cipher_algo, cipher_mode, algo_name, driver_name) {\
+	.name = #algo_name,\
+	.type = ALG_TYPE_AEAD,\
+	.algo = CIPHER_ALGO_##cipher_algo,\
+	.mode = CIPHER_MODE_##cipher_mode,\
+	.alg.aead = {\
+		.base.cra_name		= #algo_name,\
+		.base.cra_driver_name	= #driver_name,\
+		.base.cra_priority	= RK_CRYPTO_PRIORITY,\
+		.base.cra_flags		= CRYPTO_ALG_TYPE_AEAD |\
+					  CRYPTO_ALG_KERN_DRIVER_ONLY |\
+					  CRYPTO_ALG_ASYNC |\
+					  CRYPTO_ALG_NEED_FALLBACK,\
+		.base.cra_blocksize	= 1,\
+		.base.cra_ctxsize	= sizeof(struct rk_cipher_ctx),\
+		.base.cra_alignmask	= 0x07,\
+		.base.cra_module	= THIS_MODULE,\
+		.init		= rk_aead_init_tfm,\
+		.exit		= rk_aead_exit_tfm,\
+		.ivsize		= GCM_AES_IV_SIZE,\
+		.chunksize      = cipher_algo##_BLOCK_SIZE,\
+		.maxauthsize    = AES_BLOCK_SIZE,\
+		.setkey		= rk_aead_setkey,\
+		.setauthsize	= rk_aead_gcm_setauthsize,\
+		.encrypt	= rk_aead_encrypt,\
+		.decrypt	= rk_aead_decrypt,\
+	} \
+}
 
 #define  RK_CIPHER_ALGO_INIT(cipher_algo, cipher_mode, algo_name, driver_name) {\
 	.name = #algo_name,\

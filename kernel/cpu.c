@@ -34,6 +34,7 @@
 #include <linux/scs.h>
 #include <linux/percpu-rwsem.h>
 #include <linux/cpuset.h>
+#include <linux/random.h>
 #include <uapi/linux/sched/types.h>
 
 #include <trace/events/power.h>
@@ -560,8 +561,8 @@ static int bringup_cpu(unsigned int cpu)
 	int ret;
 
 	/*
-	* Reset stale stack state from the last time this CPU was online.
-	*/
+	 * Reset stale stack state from the last time this CPU was online.
+	 */
 	scs_task_reset(idle);
 	kasan_unpoison_task_stack(idle);
 
@@ -1127,8 +1128,6 @@ static int cpu_down(unsigned int cpu, enum cpuhp_state target)
 {
 	int err;
 
-	trace_android_vh_cpu_down(cpu);
-
 	cpu_maps_update_begin();
 	err = cpu_down_maps_locked(cpu, target);
 	cpu_maps_update_done();
@@ -1160,7 +1159,7 @@ int remove_cpu(unsigned int cpu)
 }
 EXPORT_SYMBOL_GPL(remove_cpu);
 
-extern bool dl_cpu_busy(unsigned int cpu);
+extern int  dl_cpu_busy(int cpu, struct task_struct *p);
 
 int __pause_drain_rq(struct cpumask *cpus)
 {
@@ -1235,7 +1234,7 @@ int pause_cpus(struct cpumask *cpus)
 	cpumask_and(cpus, cpus, cpu_active_mask);
 
 	for_each_cpu(cpu, cpus) {
-		if (!cpu_online(cpu) || dl_cpu_busy(cpu) ||
+		if (!cpu_online(cpu) || dl_cpu_busy(cpu, NULL) ||
 			get_cpu_device(cpu)->offline_disabled == true) {
 			err = -EBUSY;
 			goto err_cpu_maps_update;
@@ -1863,6 +1862,22 @@ core_initcall(cpu_hotplug_pm_sync_init);
 
 int __boot_cpu_id;
 
+/* Horrific hacks because we can't add more to cpuhp_hp_states. */
+static int random_and_perf_prepare_fusion(unsigned int cpu)
+{
+#ifdef CONFIG_PERF_EVENTS
+	perf_event_init_cpu(cpu);
+#endif
+	random_prepare_cpu(cpu);
+	return 0;
+}
+static int random_and_workqueue_online_fusion(unsigned int cpu)
+{
+	workqueue_online_cpu(cpu);
+	random_online_cpu(cpu);
+	return 0;
+}
+
 #endif /* CONFIG_SMP */
 
 /* Boot processor state steps */
@@ -1881,7 +1896,7 @@ static struct cpuhp_step cpuhp_hp_states[] = {
 	},
 	[CPUHP_PERF_PREPARE] = {
 		.name			= "perf:prepare",
-		.startup.single		= perf_event_init_cpu,
+		.startup.single		= random_and_perf_prepare_fusion,
 		.teardown.single	= perf_event_exit_cpu,
 	},
 	[CPUHP_WORKQUEUE_PREP] = {
@@ -1997,7 +2012,7 @@ static struct cpuhp_step cpuhp_hp_states[] = {
 	},
 	[CPUHP_AP_WORKQUEUE_ONLINE] = {
 		.name			= "workqueue:online",
-		.startup.single		= workqueue_online_cpu,
+		.startup.single		= random_and_workqueue_online_fusion,
 		.teardown.single	= workqueue_offline_cpu,
 	},
 	[CPUHP_AP_RCUTREE_ONLINE] = {
@@ -2915,3 +2930,23 @@ bool cpu_mitigations_auto_nosmt(void)
 	return cpu_mitigations == CPU_MITIGATIONS_AUTO_NOSMT;
 }
 EXPORT_SYMBOL_GPL(cpu_mitigations_auto_nosmt);
+
+static ATOMIC_NOTIFIER_HEAD(idle_notifier);
+
+void idle_notifier_register(struct notifier_block *n)
+{
+	atomic_notifier_chain_register(&idle_notifier, n);
+}
+EXPORT_SYMBOL_GPL(idle_notifier_register);
+
+void idle_notifier_unregister(struct notifier_block *n)
+{
+	atomic_notifier_chain_unregister(&idle_notifier, n);
+}
+EXPORT_SYMBOL_GPL(idle_notifier_unregister);
+
+void idle_notifier_call_chain(unsigned long val)
+{
+	atomic_notifier_call_chain(&idle_notifier, val, NULL);
+}
+EXPORT_SYMBOL_GPL(idle_notifier_call_chain);

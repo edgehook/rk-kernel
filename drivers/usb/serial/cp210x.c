@@ -53,6 +53,7 @@ static int cp210x_port_remove(struct usb_serial_port *);
 static void cp210x_dtr_rts(struct usb_serial_port *p, int on);
 
 static const struct usb_device_id id_table[] = {
+	{ USB_DEVICE(0x0404, 0x034C) },	/* NCR Retail IO Box */
 	{ USB_DEVICE(0x045B, 0x0053) }, /* Renesas RX610 RX-Stick */
 	{ USB_DEVICE(0x0471, 0x066A) }, /* AKTAKOM ACE-1001 cable */
 	{ USB_DEVICE(0x0489, 0xE000) }, /* Pirelli Broadband S.p.A, DP-L10 SIP/GSM Mobile */
@@ -69,6 +70,7 @@ static const struct usb_device_id id_table[] = {
 	{ USB_DEVICE(0x0FCF, 0x1004) }, /* Dynastream ANT2USB */
 	{ USB_DEVICE(0x0FCF, 0x1006) }, /* Dynastream ANT development board */
 	{ USB_DEVICE(0x0FDE, 0xCA05) }, /* OWL Wireless Electricity Monitor CM-160 */
+	{ USB_DEVICE(0x106F, 0x0003) },	/* CPI / Money Controls Bulk Coin Recycler */
 	{ USB_DEVICE(0x10A6, 0xAA26) }, /* Knock-off DCU-11 cable */
 	{ USB_DEVICE(0x10AB, 0x10C5) }, /* Siemens MC60 Cable */
 	{ USB_DEVICE(0x10B5, 0xAC70) }, /* Nokia CA-42 USB */
@@ -122,6 +124,7 @@ static const struct usb_device_id id_table[] = {
 	{ USB_DEVICE(0x10C4, 0x83AA) }, /* Mark-10 Digital Force Gauge */
 	{ USB_DEVICE(0x10C4, 0x83D8) }, /* DekTec DTA Plus VHF/UHF Booster/Attenuator */
 	{ USB_DEVICE(0x10C4, 0x8411) }, /* Kyocera GPS Module */
+	{ USB_DEVICE(0x10C4, 0x8414) }, /* Decagon USB Cable Adapter */
 	{ USB_DEVICE(0x10C4, 0x8418) }, /* IRZ Automation Teleport SG-10 GSM/GPRS Modem */
 	{ USB_DEVICE(0x10C4, 0x846E) }, /* BEI USB Sensor Interface (VCP) */
 	{ USB_DEVICE(0x10C4, 0x8470) }, /* Juniper Networks BX Series System Console */
@@ -176,6 +179,10 @@ static const struct usb_device_id id_table[] = {
 	{ USB_DEVICE(0x16DC, 0x0015) }, /* W-IE-NE-R Plein & Baus GmbH CML Control, Monitoring and Data Logger */
 	{ USB_DEVICE(0x17A8, 0x0001) }, /* Kamstrup Optical Eye/3-wire */
 	{ USB_DEVICE(0x17A8, 0x0005) }, /* Kamstrup M-Bus Master MultiPort 250D */
+	{ USB_DEVICE(0x17A8, 0x0011) }, /* Kamstrup 444 MHz RF sniffer */
+	{ USB_DEVICE(0x17A8, 0x0013) }, /* Kamstrup 870 MHz RF sniffer */
+	{ USB_DEVICE(0x17A8, 0x0101) }, /* Kamstrup 868 MHz wM-Bus C-Mode Meter Reader (Int Ant) */
+	{ USB_DEVICE(0x17A8, 0x0102) }, /* Kamstrup 868 MHz wM-Bus C-Mode Meter Reader (Ext Ant) */
 	{ USB_DEVICE(0x17F4, 0xAAAA) }, /* Wavesense Jazz blood glucose meter */
 	{ USB_DEVICE(0x1843, 0x0200) }, /* Vaisala USB Instrument Cable */
 	{ USB_DEVICE(0x18EF, 0xE00F) }, /* ELV USB-I2C-Interface */
@@ -217,6 +224,7 @@ static const struct usb_device_id id_table[] = {
 	{ USB_DEVICE(0x1FB9, 0x0602) }, /* Lake Shore Model 648 Magnet Power Supply */
 	{ USB_DEVICE(0x1FB9, 0x0700) }, /* Lake Shore Model 737 VSM Controller */
 	{ USB_DEVICE(0x1FB9, 0x0701) }, /* Lake Shore Model 776 Hall Matrix */
+	{ USB_DEVICE(0x2184, 0x0030) }, /* GW Instek GDM-834x Digital Multimeter */
 	{ USB_DEVICE(0x2626, 0xEA60) }, /* Aruba Networks 7xxx USB Serial Console */
 	{ USB_DEVICE(0x3195, 0xF190) }, /* Link Instruments MSO-19 */
 	{ USB_DEVICE(0x3195, 0xF280) }, /* Link Instruments MSO-28 */
@@ -1469,6 +1477,45 @@ static void cp210x_change_speed(struct tty_struct *tty,
 	tty_encode_baud_rate(tty, baud, baud);
 }
 
+// static void cp210x_enable_event_mode(struct usb_serial_port *port)
+// {
+// 	struct cp210x_serial_private *priv = usb_get_serial_data(port->serial);
+// 	struct cp210x_port_private *port_priv = usb_get_serial_port_data(port);
+// 	int ret;
+
+// 	if (port_priv->event_mode)
+// 		return;
+
+// 	if (priv->no_event_mode)
+// 		return;
+
+// 	port_priv->event_state = ES_DATA;
+// 	port_priv->event_mode = true;
+
+// 	ret = cp210x_write_u16_reg(port, CP210X_EMBED_EVENTS, CP210X_ESCCHAR);
+// 	if (ret) {
+// 		dev_err(&port->dev, "failed to enable events: %d\n", ret);
+// 		port_priv->event_mode = false;
+// 	}
+// }
+
+// static void cp210x_disable_event_mode(struct usb_serial_port *port)
+// {
+// 	struct cp210x_port_private *port_priv = usb_get_serial_port_data(port);
+// 	int ret;
+
+// 	if (!port_priv->event_mode)
+// 		return;
+
+// 	ret = cp210x_write_u16_reg(port, CP210X_EMBED_EVENTS, 0);
+// 	if (ret) {
+// 		dev_err(&port->dev, "failed to disable events: %d\n", ret);
+// 		return;
+// 	}
+
+// 	port_priv->event_mode = false;
+// }
+
 static void cp210x_set_termios(struct tty_struct *tty,
 		struct usb_serial_port *port, struct ktermios *old_termios)
 {
@@ -1682,10 +1729,439 @@ static void cp210x_break_ctl(struct tty_struct *tty, int break_state)
 	cp210x_write_u16_reg(port, CP210X_SET_BREAK, state);
 }
 
+// #ifdef CONFIG_GPIOLIB
+// static int cp210x_gpio_request(struct gpio_chip *gc, unsigned int offset)
+// {
+// 	struct usb_serial *serial = gpiochip_get_data(gc);
+// 	struct cp210x_serial_private *priv = usb_get_serial_data(serial);
+
+// 	if (priv->gpio_altfunc & BIT(offset))
+// 		return -ENODEV;
+
+// 	return 0;
+// }
+
+// static int cp210x_gpio_get(struct gpio_chip *gc, unsigned int gpio)
+// {
+// 	struct usb_serial *serial = gpiochip_get_data(gc);
+// 	struct cp210x_serial_private *priv = usb_get_serial_data(serial);
+// 	u8 req_type = REQTYPE_DEVICE_TO_HOST;
+// 	int result;
+// 	u8 buf;
+
+// 	if (priv->partnum == CP210X_PARTNUM_CP2105)
+// 		req_type = REQTYPE_INTERFACE_TO_HOST;
+
+// 	result = usb_autopm_get_interface(serial->interface);
+// 	if (result)
+// 		return result;
+
+// 	result = cp210x_read_vendor_block(serial, req_type,
+// 					  CP210X_READ_LATCH, &buf, sizeof(buf));
+// 	usb_autopm_put_interface(serial->interface);
+// 	if (result < 0)
+// 		return result;
+
+// 	return !!(buf & BIT(gpio));
+// }
+
+// static void cp210x_gpio_set(struct gpio_chip *gc, unsigned int gpio, int value)
+// {
+// 	struct usb_serial *serial = gpiochip_get_data(gc);
+// 	struct cp210x_serial_private *priv = usb_get_serial_data(serial);
+// 	struct cp210x_gpio_write buf;
+// 	int result;
+
+// 	if (value == 1)
+// 		buf.state = BIT(gpio);
+// 	else
+// 		buf.state = 0;
+
+// 	buf.mask = BIT(gpio);
+
+// 	result = usb_autopm_get_interface(serial->interface);
+// 	if (result)
+// 		goto out;
+
+// 	if (priv->partnum == CP210X_PARTNUM_CP2105) {
+// 		result = cp210x_write_vendor_block(serial,
+// 						   REQTYPE_HOST_TO_INTERFACE,
+// 						   CP210X_WRITE_LATCH, &buf,
+// 						   sizeof(buf));
+// 	} else {
+// 		u16 wIndex = buf.state << 8 | buf.mask;
+
+// 		result = usb_control_msg(serial->dev,
+// 					 usb_sndctrlpipe(serial->dev, 0),
+// 					 CP210X_VENDOR_SPECIFIC,
+// 					 REQTYPE_HOST_TO_DEVICE,
+// 					 CP210X_WRITE_LATCH,
+// 					 wIndex,
+// 					 NULL, 0, USB_CTRL_SET_TIMEOUT);
+// 	}
+
+// 	usb_autopm_put_interface(serial->interface);
+// out:
+// 	if (result < 0) {
+// 		dev_err(&serial->interface->dev, "failed to set GPIO value: %d\n",
+// 				result);
+// 	}
+// }
+
+// static int cp210x_gpio_direction_get(struct gpio_chip *gc, unsigned int gpio)
+// {
+// 	struct usb_serial *serial = gpiochip_get_data(gc);
+// 	struct cp210x_serial_private *priv = usb_get_serial_data(serial);
+
+// 	return priv->gpio_input & BIT(gpio);
+// }
+
+// static int cp210x_gpio_direction_input(struct gpio_chip *gc, unsigned int gpio)
+// {
+// 	struct usb_serial *serial = gpiochip_get_data(gc);
+// 	struct cp210x_serial_private *priv = usb_get_serial_data(serial);
+
+// 	if (priv->partnum == CP210X_PARTNUM_CP2105) {
+// 		/* hardware does not support an input mode */
+// 		return -ENOTSUPP;
+// 	}
+
+// 	/* push-pull pins cannot be changed to be inputs */
+// 	if (priv->gpio_pushpull & BIT(gpio))
+// 		return -EINVAL;
+
+// 	/* make sure to release pin if it is being driven low */
+// 	cp210x_gpio_set(gc, gpio, 1);
+
+// 	priv->gpio_input |= BIT(gpio);
+
+// 	return 0;
+// }
+
+// static int cp210x_gpio_direction_output(struct gpio_chip *gc, unsigned int gpio,
+// 					int value)
+// {
+// 	struct usb_serial *serial = gpiochip_get_data(gc);
+// 	struct cp210x_serial_private *priv = usb_get_serial_data(serial);
+
+// 	priv->gpio_input &= ~BIT(gpio);
+// 	cp210x_gpio_set(gc, gpio, value);
+
+// 	return 0;
+// }
+
+// static int cp210x_gpio_set_config(struct gpio_chip *gc, unsigned int gpio,
+// 				  unsigned long config)
+// {
+// 	struct usb_serial *serial = gpiochip_get_data(gc);
+// 	struct cp210x_serial_private *priv = usb_get_serial_data(serial);
+// 	enum pin_config_param param = pinconf_to_config_param(config);
+
+// 	/* Succeed only if in correct mode (this can't be set at runtime) */
+// 	if ((param == PIN_CONFIG_DRIVE_PUSH_PULL) &&
+// 	    (priv->gpio_pushpull & BIT(gpio)))
+// 		return 0;
+
+// 	if ((param == PIN_CONFIG_DRIVE_OPEN_DRAIN) &&
+// 	    !(priv->gpio_pushpull & BIT(gpio)))
+// 		return 0;
+
+// 	return -ENOTSUPP;
+// }
+
+// /*
+//  * This function is for configuring GPIO using shared pins, where other signals
+//  * are made unavailable by configuring the use of GPIO. This is believed to be
+//  * only applicable to the cp2105 at this point, the other devices supported by
+//  * this driver that provide GPIO do so in a way that does not impact other
+//  * signals and are thus expected to have very different initialisation.
+//  */
+// static int cp2105_gpioconf_init(struct usb_serial *serial)
+// {
+// 	struct cp210x_serial_private *priv = usb_get_serial_data(serial);
+// 	struct cp210x_pin_mode mode;
+// 	struct cp210x_dual_port_config config;
+// 	u8 intf_num = cp210x_interface_num(serial);
+// 	u8 iface_config;
+// 	int result;
+
+// 	result = cp210x_read_vendor_block(serial, REQTYPE_DEVICE_TO_HOST,
+// 					  CP210X_GET_DEVICEMODE, &mode,
+// 					  sizeof(mode));
+// 	if (result < 0)
+// 		return result;
+
+// 	result = cp210x_read_vendor_block(serial, REQTYPE_DEVICE_TO_HOST,
+// 					  CP210X_GET_PORTCONFIG, &config,
+// 					  sizeof(config));
+// 	if (result < 0)
+// 		return result;
+
+// 	/*  2 banks of GPIO - One for the pins taken from each serial port */
+// 	if (intf_num == 0) {
+// 		priv->gc.ngpio = 2;
+
+// 		if (mode.eci == CP210X_PIN_MODE_MODEM) {
+// 			/* mark all GPIOs of this interface as reserved */
+// 			priv->gpio_altfunc = 0xff;
+// 			return 0;
+// 		}
+
+// 		iface_config = config.eci_cfg;
+// 		priv->gpio_pushpull = (u8)((le16_to_cpu(config.gpio_mode) &
+// 						CP210X_ECI_GPIO_MODE_MASK) >>
+// 						CP210X_ECI_GPIO_MODE_OFFSET);
+// 	} else if (intf_num == 1) {
+// 		priv->gc.ngpio = 3;
+
+// 		if (mode.sci == CP210X_PIN_MODE_MODEM) {
+// 			/* mark all GPIOs of this interface as reserved */
+// 			priv->gpio_altfunc = 0xff;
+// 			return 0;
+// 		}
+
+// 		iface_config = config.sci_cfg;
+// 		priv->gpio_pushpull = (u8)((le16_to_cpu(config.gpio_mode) &
+// 						CP210X_SCI_GPIO_MODE_MASK) >>
+// 						CP210X_SCI_GPIO_MODE_OFFSET);
+// 	} else {
+// 		return -ENODEV;
+// 	}
+
+// 	/* mark all pins which are not in GPIO mode */
+// 	if (iface_config & CP2105_GPIO0_TXLED_MODE)	/* GPIO 0 */
+// 		priv->gpio_altfunc |= BIT(0);
+// 	if (iface_config & (CP2105_GPIO1_RXLED_MODE |	/* GPIO 1 */
+// 			CP2105_GPIO1_RS485_MODE))
+// 		priv->gpio_altfunc |= BIT(1);
+
+// 	/* driver implementation for CP2105 only supports outputs */
+// 	priv->gpio_input = 0;
+
+// 	return 0;
+// }
+
+// static int cp2104_gpioconf_init(struct usb_serial *serial)
+// {
+// 	struct cp210x_serial_private *priv = usb_get_serial_data(serial);
+// 	struct cp210x_single_port_config config;
+// 	u8 iface_config;
+// 	u8 gpio_latch;
+// 	int result;
+// 	u8 i;
+
+// 	result = cp210x_read_vendor_block(serial, REQTYPE_DEVICE_TO_HOST,
+// 					  CP210X_GET_PORTCONFIG, &config,
+// 					  sizeof(config));
+// 	if (result < 0)
+// 		return result;
+
+// 	priv->gc.ngpio = 4;
+
+// 	iface_config = config.device_cfg;
+// 	priv->gpio_pushpull = (u8)((le16_to_cpu(config.gpio_mode) &
+// 					CP210X_GPIO_MODE_MASK) >>
+// 					CP210X_GPIO_MODE_OFFSET);
+// 	gpio_latch = (u8)((le16_to_cpu(config.reset_state) &
+// 					CP210X_GPIO_MODE_MASK) >>
+// 					CP210X_GPIO_MODE_OFFSET);
+
+// 	/* mark all pins which are not in GPIO mode */
+// 	if (iface_config & CP2104_GPIO0_TXLED_MODE)	/* GPIO 0 */
+// 		priv->gpio_altfunc |= BIT(0);
+// 	if (iface_config & CP2104_GPIO1_RXLED_MODE)	/* GPIO 1 */
+// 		priv->gpio_altfunc |= BIT(1);
+// 	if (iface_config & CP2104_GPIO2_RS485_MODE)	/* GPIO 2 */
+// 		priv->gpio_altfunc |= BIT(2);
+
+// 	/*
+// 	 * Like CP2102N, CP2104 has also no strict input and output pin
+// 	 * modes.
+// 	 * Do the same input mode emulation as CP2102N.
+// 	 */
+// 	for (i = 0; i < priv->gc.ngpio; ++i) {
+// 		/*
+// 		 * Set direction to "input" iff pin is open-drain and reset
+// 		 * value is 1.
+// 		 */
+// 		if (!(priv->gpio_pushpull & BIT(i)) && (gpio_latch & BIT(i)))
+// 			priv->gpio_input |= BIT(i);
+// 	}
+
+// 	return 0;
+// }
+
+// static int cp2102n_gpioconf_init(struct usb_serial *serial)
+// {
+// 	struct cp210x_serial_private *priv = usb_get_serial_data(serial);
+// 	const u16 config_size = 0x02a6;
+// 	u8 gpio_rst_latch;
+// 	u8 config_version;
+// 	u8 gpio_pushpull;
+// 	u8 *config_buf;
+// 	u8 gpio_latch;
+// 	u8 gpio_ctrl;
+// 	int result;
+// 	u8 i;
+
+// 	/*
+// 	 * Retrieve device configuration from the device.
+// 	 * The array received contains all customization settings done at the
+// 	 * factory/manufacturer. Format of the array is documented at the
+// 	 * time of writing at:
+// 	 * https://www.silabs.com/community/interface/knowledge-base.entry.html/2017/03/31/cp2102n_setconfig-xsfa
+// 	 */
+// 	config_buf = kmalloc(config_size, GFP_KERNEL);
+// 	if (!config_buf)
+// 		return -ENOMEM;
+
+// 	result = cp210x_read_vendor_block(serial,
+// 					  REQTYPE_DEVICE_TO_HOST,
+// 					  CP210X_READ_2NCONFIG,
+// 					  config_buf,
+// 					  config_size);
+// 	if (result < 0) {
+// 		kfree(config_buf);
+// 		return result;
+// 	}
+
+// 	config_version = config_buf[CP210X_2NCONFIG_CONFIG_VERSION_IDX];
+// 	gpio_pushpull = config_buf[CP210X_2NCONFIG_GPIO_MODE_IDX];
+// 	gpio_ctrl = config_buf[CP210X_2NCONFIG_GPIO_CONTROL_IDX];
+// 	gpio_rst_latch = config_buf[CP210X_2NCONFIG_GPIO_RSTLATCH_IDX];
+
+// 	kfree(config_buf);
+
+// 	/* Make sure this is a config format we understand. */
+// 	if (config_version != 0x01)
+// 		return -ENOTSUPP;
+
+// 	priv->gc.ngpio = 4;
+
+// 	/*
+// 	 * Get default pin states after reset. Needed so we can determine
+// 	 * the direction of an open-drain pin.
+// 	 */
+// 	gpio_latch = (gpio_rst_latch >> 3) & 0x0f;
+
+// 	/* 0 indicates open-drain mode, 1 is push-pull */
+// 	priv->gpio_pushpull = (gpio_pushpull >> 3) & 0x0f;
+
+// 	/* 0 indicates GPIO mode, 1 is alternate function */
+// 	if (priv->partnum == CP210X_PARTNUM_CP2102N_QFN20) {
+// 		/* QFN20 is special... */
+// 		if (gpio_ctrl & CP2102N_QFN20_GPIO0_CLK_MODE)   /* GPIO 0 */
+// 			priv->gpio_altfunc |= BIT(0);
+// 		if (gpio_ctrl & CP2102N_QFN20_GPIO1_RS485_MODE) /* GPIO 1 */
+// 			priv->gpio_altfunc |= BIT(1);
+// 		if (gpio_ctrl & CP2102N_QFN20_GPIO2_TXLED_MODE) /* GPIO 2 */
+// 			priv->gpio_altfunc |= BIT(2);
+// 		if (gpio_ctrl & CP2102N_QFN20_GPIO3_RXLED_MODE) /* GPIO 3 */
+// 			priv->gpio_altfunc |= BIT(3);
+// 	} else {
+// 		priv->gpio_altfunc = (gpio_ctrl >> 2) & 0x0f;
+// 	}
+
+// 	if (priv->partnum == CP210X_PARTNUM_CP2102N_QFN28) {
+// 		/*
+// 		 * For the QFN28 package, GPIO4-6 are controlled by
+// 		 * the low three bits of the mode/latch fields.
+// 		 * Contrary to the document linked above, the bits for
+// 		 * the SUSPEND pins are elsewhere.  No alternate
+// 		 * function is available for these pins.
+// 		 */
+// 		priv->gc.ngpio = 7;
+// 		gpio_latch |= (gpio_rst_latch & 7) << 4;
+// 		priv->gpio_pushpull |= (gpio_pushpull & 7) << 4;
+// 	}
+
+// 	/*
+// 	 * The CP2102N does not strictly has input and output pin modes,
+// 	 * it only knows open-drain and push-pull modes which is set at
+// 	 * factory. An open-drain pin can function both as an
+// 	 * input or an output. We emulate input mode for open-drain pins
+// 	 * by making sure they are not driven low, and we do not allow
+// 	 * push-pull pins to be set as an input.
+// 	 */
+// 	for (i = 0; i < priv->gc.ngpio; ++i) {
+// 		/*
+// 		 * Set direction to "input" iff pin is open-drain and reset
+// 		 * value is 1.
+// 		 */
+// 		if (!(priv->gpio_pushpull & BIT(i)) && (gpio_latch & BIT(i)))
+// 			priv->gpio_input |= BIT(i);
+// 	}
+
+// 	return 0;
+// }
+
+// static int cp210x_gpio_init(struct usb_serial *serial)
+// {
+// 	struct cp210x_serial_private *priv = usb_get_serial_data(serial);
+// 	int result;
+
+// 	switch (priv->partnum) {
+// 	case CP210X_PARTNUM_CP2104:
+// 		result = cp2104_gpioconf_init(serial);
+// 		break;
+// 	case CP210X_PARTNUM_CP2105:
+// 		result = cp2105_gpioconf_init(serial);
+// 		break;
+// 	case CP210X_PARTNUM_CP2102N_QFN28:
+// 	case CP210X_PARTNUM_CP2102N_QFN24:
+// 	case CP210X_PARTNUM_CP2102N_QFN20:
+// 		result = cp2102n_gpioconf_init(serial);
+// 		break;
+// 	default:
+// 		return 0;
+// 	}
+
+// 	if (result < 0)
+// 		return result;
+
+// 	priv->gc.label = "cp210x";
+// 	priv->gc.request = cp210x_gpio_request;
+// 	priv->gc.get_direction = cp210x_gpio_direction_get;
+// 	priv->gc.direction_input = cp210x_gpio_direction_input;
+// 	priv->gc.direction_output = cp210x_gpio_direction_output;
+// 	priv->gc.get = cp210x_gpio_get;
+// 	priv->gc.set = cp210x_gpio_set;
+// 	priv->gc.set_config = cp210x_gpio_set_config;
+// 	priv->gc.owner = THIS_MODULE;
+// 	priv->gc.parent = &serial->interface->dev;
+// 	priv->gc.base = -1;
+// 	priv->gc.can_sleep = true;
+
+// 	result = gpiochip_add_data(&priv->gc, serial);
+// 	if (!result)
+// 		priv->gpio_registered = true;
+
+// 	return result;
+// }
+
+// static void cp210x_gpio_remove(struct usb_serial *serial)
+// {
+// 	struct cp210x_serial_private *priv = usb_get_serial_data(serial);
+
+// 	if (priv->gpio_registered) {
+// 		gpiochip_remove(&priv->gc);
+// 		priv->gpio_registered = false;
+// 	}
+// }
+
+// #else
+
+// static int cp210x_gpio_init(struct usb_serial *serial)
+// {
+// 	return 0;
+// }
+
 static void cp210x_gpio_remove(struct usb_serial *serial)
 {
 	/* Nothing to do */
 }
+
+// #endif
 
 static int cp210x_port_probe(struct usb_serial_port *port)
 {
@@ -1719,6 +2195,125 @@ static int cp210x_port_remove(struct usb_serial_port *port)
 
 	return 0;
 }
+
+// static void cp210x_init_max_speed(struct usb_serial *serial)
+// {
+// 	struct cp210x_serial_private *priv = usb_get_serial_data(serial);
+// 	bool use_actual_rate = false;
+// 	speed_t min = 300;
+// 	speed_t max;
+
+// 	switch (priv->partnum) {
+// 	case CP210X_PARTNUM_CP2101:
+// 		max = 921600;
+// 		break;
+// 	case CP210X_PARTNUM_CP2102:
+// 	case CP210X_PARTNUM_CP2103:
+// 		max = 1000000;
+// 		break;
+// 	case CP210X_PARTNUM_CP2104:
+// 		use_actual_rate = true;
+// 		max = 2000000;
+// 		break;
+// 	case CP210X_PARTNUM_CP2108:
+// 		max = 2000000;
+// 		break;
+// 	case CP210X_PARTNUM_CP2105:
+// 		if (cp210x_interface_num(serial) == 0) {
+// 			use_actual_rate = true;
+// 			max = 2000000;	/* ECI */
+// 		} else {
+// 			min = 2400;
+// 			max = 921600;	/* SCI */
+// 		}
+// 		break;
+// 	case CP210X_PARTNUM_CP2102N_QFN28:
+// 	case CP210X_PARTNUM_CP2102N_QFN24:
+// 	case CP210X_PARTNUM_CP2102N_QFN20:
+// 		use_actual_rate = true;
+// 		max = 3000000;
+// 		break;
+// 	default:
+// 		max = 2000000;
+// 		break;
+// 	}
+
+// 	priv->min_speed = min;
+// 	priv->max_speed = max;
+// 	priv->use_actual_rate = use_actual_rate;
+// }
+
+// static void cp2102_determine_quirks(struct usb_serial *serial)
+// {
+// 	struct cp210x_serial_private *priv = usb_get_serial_data(serial);
+// 	u8 *buf;
+// 	int ret;
+
+// 	buf = kmalloc(2, GFP_KERNEL);
+// 	if (!buf)
+// 		return;
+// 	/*
+// 	 * Some (possibly counterfeit) CP2102 do not support event-insertion
+// 	 * mode and respond differently to malformed vendor requests.
+// 	 * Specifically, they return one instead of two bytes when sent a
+// 	 * two-byte part-number request.
+// 	 */
+// 	ret = usb_control_msg(serial->dev, usb_rcvctrlpipe(serial->dev, 0),
+// 			CP210X_VENDOR_SPECIFIC, REQTYPE_DEVICE_TO_HOST,
+// 			CP210X_GET_PARTNUM, 0, buf, 2, USB_CTRL_GET_TIMEOUT);
+// 	if (ret == 1) {
+// 		dev_dbg(&serial->interface->dev,
+// 				"device does not support event-insertion mode\n");
+// 		priv->no_event_mode = true;
+// 	}
+
+// 	kfree(buf);
+// }
+
+// static void cp210x_determine_quirks(struct usb_serial *serial)
+// {
+// 	struct cp210x_serial_private *priv = usb_get_serial_data(serial);
+
+// 	switch (priv->partnum) {
+// 	case CP210X_PARTNUM_CP2102:
+// 		cp2102_determine_quirks(serial);
+// 		break;
+// 	default:
+// 		break;
+// 	}
+// }
+
+// static int cp210x_attach(struct usb_serial *serial)
+// {
+// 	int result;
+// 	struct cp210x_serial_private *priv;
+
+// 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
+// 	if (!priv)
+// 		return -ENOMEM;
+
+// 	result = cp210x_read_vendor_block(serial, REQTYPE_DEVICE_TO_HOST,
+// 					  CP210X_GET_PARTNUM, &priv->partnum,
+// 					  sizeof(priv->partnum));
+// 	if (result < 0) {
+// 		dev_warn(&serial->interface->dev,
+// 			 "querying part number failed\n");
+// 		priv->partnum = CP210X_PARTNUM_UNKNOWN;
+// 	}
+
+// 	usb_set_serial_data(serial, priv);
+
+// 	cp210x_determine_quirks(serial);
+// 	cp210x_init_max_speed(serial);
+
+// 	result = cp210x_gpio_init(serial);
+// 	if (result < 0) {
+// 		dev_err(&serial->interface->dev, "GPIO initialisation failed: %d\n",
+// 				result);
+// 	}
+
+// 	return 0;
+// }
 
 static void cp210x_disconnect(struct usb_serial *serial)
 {

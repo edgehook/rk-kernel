@@ -339,9 +339,13 @@ static int csi_config(struct rkisp_csi_device *csi)
 			Y_STAT_AFIFOX3_OVERFLOW;
 		rkisp_write(dev, CSI2RX_MASK_OVERFLOW, val, true);
 		val = RAW0_WR_FRAME | RAW1_WR_FRAME | RAW2_WR_FRAME |
-			MIPI_DROP_FRM | RAW_WR_SIZE_ERR | MIPI_LINECNT |
+			RAW_WR_SIZE_ERR | MIPI_LINECNT |
 			RAW_RD_SIZE_ERR | RAW0_Y_STATE |
 			RAW1_Y_STATE | RAW2_Y_STATE;
+		if (dev->isp_ver == ISP_V20)
+			val |= MIPI_DROP_FRM;
+		else
+			val |= ISP21_MIPI_DROP_FRM;
 		rkisp_write(dev, CSI2RX_MASK_STAT, val, true);
 
 		/* hdr merge */
@@ -567,12 +571,15 @@ int rkisp_csi_config_patch(struct rkisp_device *dev)
 		memset(&hdr_cfg, 0, sizeof(hdr_cfg));
 		ret = rkisp_csi_get_hdr_cfg(dev, &hdr_cfg);
 		if (dev->isp_inp & INP_CIF) {
-			struct rkisp_vicap_mode mode = {
-				.name = dev->name,
-				.is_rdbk = true,
-			};
+			struct rkisp_vicap_mode mode;
+			int buf_cnt;
+
+			memset(&mode, 0, sizeof(mode));
+			mode.name = dev->name;
 
 			get_remote_mipi_sensor(dev, &mipi_sensor, MEDIA_ENT_F_PROC_VIDEO_COMPOSER);
+			if (!mipi_sensor)
+				return -EINVAL;
 			dev->hdr.op_mode = HDR_NORMAL;
 			dev->hdr.esp_mode = HDR_NORMAL_VC;
 			if (!ret) {
@@ -585,13 +592,14 @@ int rkisp_csi_config_patch(struct rkisp_device *dev)
 			if (dev->hdr.op_mode == HDR_NORMAL || dev->hdr.op_mode == HDR_COMPR)
 				dev->hdr.op_mode = HDR_RDBK_FRAME1;
 
-			if (dev->isp_inp == INP_CIF && dev->hw_dev->is_single)
-				mode.is_rdbk = false;
-			v4l2_subdev_call(mipi_sensor, core, ioctl,
-					 RKISP_VICAP_CMD_MODE, &mode);
+			if (dev->isp_inp == INP_CIF && dev->isp_ver > ISP_V21)
+				mode.rdbk_mode = dev->is_rdbk_auto ? RKISP_VICAP_RDBK_AUTO : RKISP_VICAP_ONLINE;
+			else
+				mode.rdbk_mode = RKISP_VICAP_RDBK_AIQ;
+			v4l2_subdev_call(mipi_sensor, core, ioctl, RKISP_VICAP_CMD_MODE, &mode);
+			dev->vicap_in = mode.input;
 			/* vicap direct to isp */
-			if ((dev->isp_ver == ISP_V30 || dev->isp_ver == ISP_V32) &&
-			    !mode.is_rdbk) {
+			if (dev->isp_ver >= ISP_V30 && !mode.rdbk_mode) {
 				switch (dev->hdr.op_mode) {
 				case HDR_RDBK_FRAME3:
 					dev->hdr.op_mode = HDR_LINEX3_DDR;
@@ -602,12 +610,15 @@ int rkisp_csi_config_patch(struct rkisp_device *dev)
 				default:
 					dev->hdr.op_mode = HDR_NORMAL;
 				}
-				if (dev->hdr.op_mode != HDR_NORMAL && mipi_sensor) {
-					int cnt = RKISP_VICAP_BUF_CNT;
-
+				if (dev->hdr.op_mode != HDR_NORMAL) {
+					buf_cnt = 1;
 					v4l2_subdev_call(mipi_sensor, core, ioctl,
-							 RKISP_VICAP_CMD_INIT_BUF, &cnt);
+							 RKISP_VICAP_CMD_INIT_BUF, &buf_cnt);
 				}
+			} else if (mode.rdbk_mode == RKISP_VICAP_RDBK_AUTO) {
+				buf_cnt = RKISP_VICAP_BUF_CNT;
+				v4l2_subdev_call(mipi_sensor, core, ioctl,
+						 RKISP_VICAP_CMD_INIT_BUF, &buf_cnt);
 			}
 		} else {
 			dev->hdr.op_mode = hdr_cfg.hdr_mode;
@@ -642,18 +653,23 @@ int rkisp_csi_config_patch(struct rkisp_device *dev)
 		}
 		rkisp_unite_write(dev, ISP_HDRMGE_BASE, val, false, dev->hw_dev->is_unite);
 
-		rkisp_unite_set_bits(dev, CSI2RX_MASK_STAT, 0, RAW_RD_SIZE_ERR,
-				     true, dev->hw_dev->is_unite);
+		val = RAW_RD_SIZE_ERR;
+		if (!IS_HDR_RDBK(dev->hdr.op_mode))
+			val |= ISP21_MIPI_DROP_FRM;
+		rkisp_unite_set_bits(dev, CSI2RX_MASK_STAT, 0, val, true, dev->hw_dev->is_unite);
 	}
 
 	if (IS_HDR_RDBK(dev->hdr.op_mode))
 		rkisp_unite_set_bits(dev, CTRL_SWS_CFG, 0, SW_MPIP_DROP_FRM_DIS,
 				     true, dev->hw_dev->is_unite);
 
-	if (dev->isp_ver == ISP_V30 || dev->isp_ver == ISP_V32)
+	if (dev->isp_ver >= ISP_V30)
 		rkisp_unite_set_bits(dev, CTRL_SWS_CFG, 0, ISP3X_SW_ACK_FRM_PRO_DIS,
 				     true, dev->hw_dev->is_unite);
-
+	/* line counter from isp out, default from mp out */
+	if (dev->isp_ver == ISP_V32_L)
+		rkisp_unite_set_bits(dev, CTRL_SWS_CFG, 0, ISP32L_ISP2ENC_CNT_MUX,
+				     true, dev->hw_dev->is_unite);
 	dev->rdbk_cnt = -1;
 	dev->rdbk_cnt_x1 = -1;
 	dev->rdbk_cnt_x2 = -1;
@@ -719,7 +735,7 @@ int rkisp_register_csi_subdev(struct rkisp_device *dev,
 		csi_dev->pads[CSI_SRC_CH2].flags = MEDIA_PAD_FL_SOURCE;
 		csi_dev->pads[CSI_SRC_CH3].flags = MEDIA_PAD_FL_SOURCE;
 		csi_dev->pads[CSI_SRC_CH4].flags = MEDIA_PAD_FL_SOURCE;
-	} else if (dev->isp_ver == ISP_V30 || dev->isp_ver == ISP_V32) {
+	} else if (dev->isp_ver >= ISP_V30) {
 		return 0;
 	}
 

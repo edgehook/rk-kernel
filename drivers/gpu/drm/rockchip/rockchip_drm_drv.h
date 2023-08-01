@@ -34,6 +34,9 @@ struct drm_device;
 struct drm_connector;
 struct iommu_domain;
 
+#define VOP_COLOR_KEY_NONE	(0 << 31)
+#define VOP_COLOR_KEY_MASK	(1 << 31)
+
 #define VOP_OUTPUT_IF_RGB	BIT(0)
 #define VOP_OUTPUT_IF_BT1120	BIT(1)
 #define VOP_OUTPUT_IF_BT656	BIT(2)
@@ -60,6 +63,15 @@ struct iommu_domain;
 #define RK_IF_PROP_COLOR_FORMAT		"color_format"
 #define RK_IF_PROP_COLOR_DEPTH_CAPS	"color_depth_caps"
 #define RK_IF_PROP_COLOR_FORMAT_CAPS	"color_format_caps"
+#define RK_IF_PROP_ENCRYPTED		"hdcp_encrypted"
+
+enum rockchip_drm_debug_category {
+	VOP_DEBUG_PLANE		= BIT(0),
+	VOP_DEBUG_OVERLAY	= BIT(1),
+	VOP_DEBUG_WB		= BIT(2),
+	VOP_DEBUG_CFG_DONE	= BIT(3),
+	VOP_DEBUG_VSYNC		= BIT(7),
+};
 
 enum rk_if_color_depth {
 	RK_IF_DEPTH_8,
@@ -83,12 +95,26 @@ enum rk_if_color_format {
 	RK_IF_FORMAT_MAX,
 };
 
+enum rockchip_hdcp_encrypted {
+	RK_IF_HDCP_ENCRYPTED_NONE = 0,
+	RK_IF_HDCP_ENCRYPTED_LEVEL1,
+	RK_IF_HDCP_ENCRYPTED_LEVEL2,
+};
+
+enum rockchip_color_bar_mode {
+	ROCKCHIP_COLOR_BAR_OFF = 0,
+	ROCKCHIP_COLOR_BAR_HORIZONTAL = 1,
+	ROCKCHIP_COLOR_BAR_VERTICAL = 2,
+};
+
 struct rockchip_drm_sub_dev {
 	struct list_head list;
 	struct drm_connector *connector;
 	struct device_node *of_node;
-	void (*loader_protect)(struct drm_encoder *encoder, bool on);
+	int (*loader_protect)(struct drm_encoder *encoder, bool on);
 	void (*oob_hotplug_event)(struct drm_connector *connector);
+	void (*update_vfp_for_vrr)(struct drm_connector *connector, struct drm_display_mode *mode,
+				   int vfp);
 };
 
 struct rockchip_sdr2hdr_state {
@@ -178,6 +204,11 @@ struct rockchip_crtc_state {
 	 * (3) edp psr mode
 	 */
 	bool hold_mode;
+	/**
+	 * when enable soft_te, use gpio irq to triggle new fs,
+	 * otherwise use hardware te
+	 */
+	bool soft_te;
 
 	struct drm_tv_connector_state *tv_state;
 	int left_margin;
@@ -221,6 +252,14 @@ struct rockchip_crtc_state {
 	struct drm_dsc_picture_parameter_set pps;
 	struct rockchip_dsc_sink_cap dsc_sink_cap;
 	struct rockchip_hdr_state hdr;
+	struct drm_property_blob *hdr_ext_data;
+	struct drm_property_blob *acm_lut_data;
+	struct drm_property_blob *post_csc_data;
+	struct drm_property_blob *cubic_lut_data;
+
+	int request_refresh_rate;
+	int max_refresh_rate;
+	int min_refresh_rate;
 };
 
 #define to_rockchip_crtc_state(s) \
@@ -239,6 +278,15 @@ struct rockchip_logo {
 	phys_addr_t start;
 	phys_addr_t size;
 	int count;
+};
+
+struct rockchip_mcu_timing {
+	int mcu_pix_total;
+	int mcu_cs_pst;
+	int mcu_cs_pend;
+	int mcu_rw_pst;
+	int mcu_rw_pend;
+	int mcu_hold_mode;
 };
 
 struct loader_cubic_lut {
@@ -363,6 +411,7 @@ struct rockchip_crtc_funcs {
 	int (*debugfs_init)(struct drm_minor *minor, struct drm_crtc *crtc);
 	int (*debugfs_dump)(struct drm_crtc *crtc, struct seq_file *s);
 	void (*regs_dump)(struct drm_crtc *crtc, struct seq_file *s);
+	void (*active_regs_dump)(struct drm_crtc *crtc, struct seq_file *s);
 	enum drm_mode_status (*mode_valid)(struct drm_crtc *crtc,
 					   const struct drm_display_mode *mode,
 					   int output_type);
@@ -371,6 +420,7 @@ struct rockchip_crtc_funcs {
 	void (*te_handler)(struct drm_crtc *crtc);
 	int (*wait_vact_end)(struct drm_crtc *crtc, unsigned int mstimeout);
 	void (*crtc_standby)(struct drm_crtc *crtc, bool standby);
+	int (*crtc_set_color_bar)(struct drm_crtc *crtc, enum rockchip_color_bar_mode mode);
 };
 
 struct rockchip_dclk_pll {
@@ -403,6 +453,8 @@ struct rockchip_drm_private {
 	struct drm_property *aclk_prop;
 	struct drm_property *bg_prop;
 	struct drm_property *line_flag_prop;
+	struct drm_property *cubic_lut_prop;
+	struct drm_property *cubic_lut_size_prop;
 
 	/* private plane prop */
 	struct drm_property *eotf_prop;
@@ -437,6 +489,8 @@ struct rockchip_drm_private {
 	struct loader_cubic_lut cubic_lut[ROCKCHIP_MAX_CRTC];
 };
 
+void rockchip_connector_update_vfp_for_vrr(struct drm_crtc *crtc, struct drm_display_mode *mode,
+					   int vfp);
 int rockchip_drm_dma_attach_device(struct drm_device *drm_dev,
 				   struct device *dev);
 void rockchip_drm_dma_detach_device(struct drm_device *drm_dev,
@@ -454,12 +508,19 @@ int rockchip_drm_add_modes_noedid(struct drm_connector *connector);
 void rockchip_drm_te_handle(struct drm_crtc *crtc);
 void drm_mode_convert_to_split_mode(struct drm_display_mode *mode);
 void drm_mode_convert_to_origin_mode(struct drm_display_mode *mode);
-#if IS_ENABLED(CONFIG_DRM_ROCKCHIP)
+u32 rockchip_drm_get_dclk_by_width(int width);
+#if IS_REACHABLE(CONFIG_DRM_ROCKCHIP)
 int rockchip_drm_get_sub_dev_type(void);
+u32 rockchip_drm_get_scan_line_time_ns(void);
 #else
 static inline int rockchip_drm_get_sub_dev_type(void)
 {
 	return DRM_MODE_CONNECTOR_Unknown;
+}
+
+static inline u32 rockchip_drm_get_scan_line_time_ns(void)
+{
+	return 0;
 }
 #endif
 
@@ -470,13 +531,18 @@ uint32_t rockchip_drm_get_bpp(const struct drm_format_info *info);
 int rockchip_drm_get_yuv422_format(struct drm_connector *connector,
 				   struct edid *edid);
 int rockchip_drm_parse_cea_ext(struct rockchip_drm_dsc_cap *dsc_cap,
-			       u8 *max_frl_rate_per_lane, u8 *max_lanes,
+			       u8 *max_frl_rate_per_lane, u8 *max_lanes, u8 *add_func,
 			       const struct edid *edid);
 int rockchip_drm_parse_next_hdr(struct next_hdr_sink_data *sink_data,
 				const struct edid *edid);
 #ifdef CONFIG_ARCH_ADVANTECH
 char* rockchip_drm_get_screen_name(char* buf);
 #endif
+int rockchip_drm_parse_colorimetry_data_block(u8 *colorimetry, const struct edid *edid);
+
+__printf(3, 4)
+void rockchip_drm_dbg(const struct device *dev, enum rockchip_drm_debug_category category,
+		      const char *format, ...);
 
 extern struct platform_driver cdn_dp_driver;
 extern struct platform_driver dw_hdmi_rockchip_pltfm_driver;
@@ -489,6 +555,7 @@ extern struct platform_driver vop_platform_driver;
 extern struct platform_driver vop2_platform_driver;
 extern struct platform_driver rk3066_hdmi_driver;
 extern struct platform_driver rockchip_rgb_driver;
+extern struct platform_driver rockchip_tve_driver;
 extern struct platform_driver dw_dp_driver;
 extern struct platform_driver vconn_platform_driver;
 extern struct platform_driver vvop_platform_driver;

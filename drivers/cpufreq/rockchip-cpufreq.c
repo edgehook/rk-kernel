@@ -27,6 +27,7 @@
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
 #include <linux/pm_opp.h>
+#include <linux/pm_qos.h>
 #include <linux/slab.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
@@ -41,10 +42,15 @@ struct cluster_info {
 	struct list_head list_head;
 	struct monitor_dev_info *mdev_info;
 	struct rockchip_opp_info opp_info;
+	struct freq_qos_request dsu_qos_req;
 	cpumask_t cpus;
 	unsigned int idle_threshold_freq;
 	int scale;
 	bool is_idle_disabled;
+	bool is_opp_shared_dsu;
+	unsigned int regulator_count;
+	unsigned long rate;
+	unsigned long volt, mem_volt;
 };
 static LIST_HEAD(cluster_info_list);
 
@@ -181,6 +187,111 @@ out:
 	return ret;
 }
 
+static int rk3588_get_soc_info(struct device *dev, struct device_node *np,
+			       int *bin, int *process)
+{
+	int ret = 0;
+	u8 value = 0;
+
+	if (!bin)
+		return 0;
+
+	if (of_property_match_string(np, "nvmem-cell-names",
+				     "specification_serial_number") >= 0) {
+		ret = rockchip_nvmem_cell_read_u8(np,
+						  "specification_serial_number",
+						  &value);
+		if (ret) {
+			dev_err(dev,
+				"Failed to get specification_serial_number\n");
+			return ret;
+		}
+		/* RK3588M */
+		if (value == 0xd)
+			*bin = 1;
+		/* RK3588J */
+		else if (value == 0xa)
+			*bin = 2;
+	}
+	if (*bin < 0)
+		*bin = 0;
+	dev_info(dev, "bin=%d\n", *bin);
+
+	return ret;
+}
+
+static int rk3588_change_length(struct device *dev, struct device_node *np,
+				int bin, int process, int volt_sel)
+{
+	struct clk *clk;
+	unsigned long old_rate;
+	unsigned int low_len_sel;
+	u32 opp_flag = 0;
+	int ret = 0;
+
+	clk = clk_get(dev, NULL);
+	if (IS_ERR(clk)) {
+		dev_warn(dev, "failed to get cpu clk\n");
+		return PTR_ERR(clk);
+	}
+
+	/* RK3588 low speed grade should change to low length */
+	if (of_property_read_u32(np, "rockchip,pvtm-low-len-sel",
+				 &low_len_sel))
+		goto out;
+	if (volt_sel > low_len_sel)
+		goto out;
+	opp_flag = OPP_LENGTH_LOW;
+
+	old_rate = clk_get_rate(clk);
+	ret = clk_set_rate(clk, old_rate | opp_flag);
+	if (ret) {
+		dev_err(dev, "failed to change length\n");
+		goto out;
+	}
+	clk_set_rate(clk, old_rate);
+out:
+	clk_put(clk);
+
+	return ret;
+}
+
+static int rk3588_set_supported_hw(struct device *dev, struct device_node *np,
+				   int bin, int process, int volt_sel)
+{
+	struct opp_table *opp_table;
+	u32 supported_hw[2];
+
+	if (!of_property_read_bool(np, "rockchip,supported-hw"))
+		return 0;
+
+	/* SoC Version */
+	supported_hw[0] = BIT(bin);
+	/* Speed Grade */
+	supported_hw[1] = BIT(volt_sel);
+	opp_table = dev_pm_opp_set_supported_hw(dev, supported_hw, 2);
+	if (IS_ERR(opp_table)) {
+		dev_err(dev, "failed to set supported opp\n");
+		return PTR_ERR(opp_table);
+	}
+
+	return 0;
+}
+
+static int rk3588_set_soc_info(struct device *dev, struct device_node *np,
+			       int bin, int process, int volt_sel)
+{
+	if (volt_sel < 0)
+		return 0;
+	if (bin < 0)
+		bin = 0;
+
+	rk3588_change_length(dev, np, bin, process, volt_sel);
+	rk3588_set_supported_hw(dev, np, bin, process, volt_sel);
+
+	return 0;
+}
+
 static int rk3588_cpu_set_read_margin(struct device *dev,
 				      struct rockchip_opp_info *opp_info,
 				      u32 rm)
@@ -251,6 +362,8 @@ static const struct rockchip_opp_data rk3399_cpu_opp_data = {
 };
 
 static const struct rockchip_opp_data rk3588_cpu_opp_data = {
+	.get_soc_info = rk3588_get_soc_info,
+	.set_soc_info = rk3588_set_soc_info,
 	.set_read_margin = rk3588_cpu_set_read_margin,
 };
 
@@ -374,9 +487,8 @@ static int cpu_opp_helper(struct dev_pm_set_opp_data *data)
 		rockchip_set_read_margin(dev, opp_info, target_rm, true);
 		ret = clk_set_rate(clk, new_freq);
 		if (ret) {
-			dev_err(dev,
-				"%s: failed to set clk rate: %d\n", __func__,
-				ret);
+			dev_err(dev, "%s: failed to set clk rate: %lu %d\n",
+				__func__, new_freq, ret);
 			goto restore_rm;
 		}
 	/* Scaling down? Scale voltage after frequency */
@@ -392,9 +504,8 @@ static int cpu_opp_helper(struct dev_pm_set_opp_data *data)
 		rockchip_set_read_margin(dev, opp_info, target_rm, true);
 		ret = clk_set_rate(clk, new_freq);
 		if (ret) {
-			dev_err(dev,
-				"%s: failed to set clk rate: %d\n", __func__,
-				ret);
+			dev_err(dev, "%s: failed to set clk rate: %lu %d\n",
+				__func__, new_freq, ret);
 			goto restore_rm;
 		}
 		ret = rockchip_cpufreq_set_volt(dev, vdd_reg, new_supply_vdd,
@@ -406,6 +517,9 @@ static int cpu_opp_helper(struct dev_pm_set_opp_data *data)
 		if (ret)
 			goto restore_freq;
 	}
+
+	cluster->volt = new_supply_vdd->u_volt;
+	cluster->mem_volt = new_supply_mem->u_volt;
 
 	return 0;
 
@@ -444,6 +558,8 @@ static int rockchip_cpufreq_cluster_init(int cpu, struct cluster_info *cluster)
 	if (!dev)
 		return -ENODEV;
 
+	opp_info->dev = dev;
+
 	if (of_find_property(dev->of_node, "cpu-supply", NULL))
 		reg_name = "cpu";
 	else if (of_find_property(dev->of_node, "cpu0-supply", NULL))
@@ -457,22 +573,24 @@ static int rockchip_cpufreq_cluster_init(int cpu, struct cluster_info *cluster)
 		return -ENOENT;
 	}
 
+	opp_info->grf = syscon_regmap_lookup_by_phandle(np,
+							"rockchip,grf");
+	if (IS_ERR(opp_info->grf))
+		opp_info->grf = NULL;
+
 	ret = dev_pm_opp_of_get_sharing_cpus(dev, &cluster->cpus);
 	if (ret) {
 		dev_err(dev, "Failed to get sharing cpus\n");
 		goto np_err;
 	}
 
+	cluster->is_opp_shared_dsu = of_property_read_bool(np, "rockchip,opp-shared-dsu");
 	if (!of_property_read_u32(np, "rockchip,idle-threshold-freq", &freq))
 		cluster->idle_threshold_freq = freq;
 	rockchip_get_opp_data(rockchip_cpufreq_of_match, opp_info);
 	if (opp_info->data && opp_info->data->set_read_margin) {
 		opp_info->current_rm = UINT_MAX;
 		opp_info->target_rm = UINT_MAX;
-		opp_info->grf = syscon_regmap_lookup_by_phandle(np,
-								"rockchip,grf");
-		if (IS_ERR(opp_info->grf))
-			opp_info->grf = NULL;
 		opp_info->dsu_grf =
 			syscon_regmap_lookup_by_phandle(np, "rockchip,dsu-grf");
 		if (IS_ERR(opp_info->dsu_grf))
@@ -483,19 +601,19 @@ static int rockchip_cpufreq_cluster_init(int cpu, struct cluster_info *cluster)
 				     &opp_info->low_rm);
 		if (!of_property_read_u32(np, "intermediate-threshold-freq", &freq))
 			opp_info->intermediate_threshold_freq = freq * 1000;
+		rockchip_init_read_margin(dev, opp_info, reg_name);
 	}
 	if (opp_info->data && opp_info->data->get_soc_info)
 		opp_info->data->get_soc_info(dev, np, &bin, &process);
 	rockchip_get_scale_volt_sel(dev, "cpu_leakage", reg_name, bin, process,
 				    &cluster->scale, &volt_sel);
+	if (opp_info->data && opp_info->data->set_soc_info)
+		opp_info->data->set_soc_info(dev, np, bin, process, volt_sel);
 	pname_table = rockchip_set_opp_prop_name(dev, process, volt_sel);
-	if (IS_ERR(pname_table)) {
-		ret = PTR_ERR(pname_table);
-		goto np_err;
-	}
 
 	if (of_find_property(dev->of_node, "cpu-supply", NULL) &&
 	    of_find_property(dev->of_node, "mem-supply", NULL)) {
+		cluster->regulator_count = 2;
 		reg_table = dev_pm_opp_set_regulators(dev, reg_names,
 						      ARRAY_SIZE(reg_names));
 		if (IS_ERR(reg_table)) {
@@ -508,6 +626,8 @@ static int rockchip_cpufreq_cluster_init(int cpu, struct cluster_info *cluster)
 			ret = PTR_ERR(opp_table);
 			goto reg_opp_table;
 		}
+	} else {
+		cluster->regulator_count = 1;
 	}
 
 	of_node_put(np);
@@ -518,7 +638,7 @@ reg_opp_table:
 	if (reg_table)
 		dev_pm_opp_put_regulators(reg_table);
 pname_opp_table:
-	if (pname_table)
+	if (!IS_ERR_OR_NULL(pname_table))
 		dev_pm_opp_put_prop_name(pname_table);
 np_err:
 	of_node_put(np);
@@ -534,6 +654,8 @@ int rockchip_cpufreq_adjust_power_scale(struct device *dev)
 	if (!cluster)
 		return -EINVAL;
 	rockchip_adjust_power_scale(dev, cluster->scale);
+	rockchip_pvtpll_calibrate_opp(&cluster->opp_info);
+	rockchip_pvtpll_add_length(&cluster->opp_info);
 
 	return 0;
 }
@@ -542,6 +664,8 @@ EXPORT_SYMBOL_GPL(rockchip_cpufreq_adjust_power_scale);
 int rockchip_cpufreq_opp_set_rate(struct device *dev, unsigned long target_freq)
 {
 	struct cluster_info *cluster;
+	struct dev_pm_opp *opp;
+	unsigned long freq;
 	int ret = 0;
 
 	cluster = rockchip_cluster_info_lookup(dev->id);
@@ -550,6 +674,17 @@ int rockchip_cpufreq_opp_set_rate(struct device *dev, unsigned long target_freq)
 
 	rockchip_monitor_volt_adjust_lock(cluster->mdev_info);
 	ret = dev_pm_opp_set_rate(dev, target_freq);
+	if (!ret) {
+		cluster->rate = target_freq;
+		if (cluster->regulator_count == 1) {
+			freq = target_freq;
+			opp = dev_pm_opp_find_freq_ceil(cluster->opp_info.dev, &freq);
+			if (!IS_ERR(opp)) {
+				cluster->volt = dev_pm_opp_get_voltage(opp);
+				dev_pm_opp_put(opp);
+			}
+		}
+	}
 	rockchip_monitor_volt_adjust_unlock(cluster->mdev_info);
 
 	return ret;
@@ -567,48 +702,113 @@ static int rockchip_cpufreq_suspend(struct cpufreq_policy *policy)
 	return ret;
 }
 
-static int rockchip_cpufreq_notifier(struct notifier_block *nb,
-				     unsigned long event, void *data)
+static int rockchip_cpufreq_add_monitor(struct cluster_info *cluster,
+					struct cpufreq_policy *policy)
 {
-	struct device *dev;
-	struct cpufreq_policy *policy = data;
-	struct cluster_info *cluster;
+	struct device *dev = cluster->opp_info.dev;
 	struct monitor_dev_profile *mdevp = NULL;
 	struct monitor_dev_info *mdev_info = NULL;
 
-	dev = get_cpu_device(policy->cpu);
-	if (!dev)
-		return NOTIFY_BAD;
+	mdevp = kzalloc(sizeof(*mdevp), GFP_KERNEL);
+	if (!mdevp)
+		return -ENOMEM;
+
+	mdevp->type = MONITOR_TYPE_CPU;
+	mdevp->low_temp_adjust = rockchip_monitor_cpu_low_temp_adjust;
+	mdevp->high_temp_adjust = rockchip_monitor_cpu_high_temp_adjust;
+	mdevp->update_volt = rockchip_monitor_check_rate_volt;
+	mdevp->data = (void *)policy;
+	mdevp->opp_info = &cluster->opp_info;
+	cpumask_copy(&mdevp->allowed_cpus, policy->cpus);
+	mdev_info = rockchip_system_monitor_register(dev, mdevp);
+	if (IS_ERR(mdev_info)) {
+		kfree(mdevp);
+		dev_err(dev, "failed to register system monitor\n");
+		return -EINVAL;
+	}
+	mdev_info->devp = mdevp;
+	cluster->mdev_info = mdev_info;
+
+	return 0;
+}
+
+static int rockchip_cpufreq_remove_monitor(struct cluster_info *cluster)
+{
+	if (cluster->mdev_info) {
+		kfree(cluster->mdev_info->devp);
+		rockchip_system_monitor_unregister(cluster->mdev_info);
+		cluster->mdev_info = NULL;
+	}
+
+	return 0;
+}
+
+static int rockchip_cpufreq_remove_dsu_qos(struct cluster_info *cluster)
+{
+	struct cluster_info *ci;
+
+	if (!cluster->is_opp_shared_dsu)
+		return 0;
+
+	list_for_each_entry(ci, &cluster_info_list, list_head) {
+		if (ci->is_opp_shared_dsu)
+			continue;
+		if (freq_qos_request_active(&ci->dsu_qos_req))
+			freq_qos_remove_request(&ci->dsu_qos_req);
+	}
+
+	return 0;
+}
+
+static int rockchip_cpufreq_add_dsu_qos_req(struct cluster_info *cluster,
+					    struct cpufreq_policy *policy)
+{
+	struct device *dev = cluster->opp_info.dev;
+	struct cluster_info *ci;
+	int ret;
+
+	if (!cluster->is_opp_shared_dsu)
+		return 0;
+
+	list_for_each_entry(ci, &cluster_info_list, list_head) {
+		if (ci->is_opp_shared_dsu)
+			continue;
+		ret = freq_qos_add_request(&policy->constraints,
+					   &ci->dsu_qos_req,
+					   FREQ_QOS_MIN,
+					   FREQ_QOS_MIN_DEFAULT_VALUE);
+		if (ret < 0) {
+			dev_err(dev, "failed to add dsu freq constraint\n");
+			goto error;
+		}
+	}
+
+	return 0;
+
+error:
+	rockchip_cpufreq_remove_dsu_qos(cluster);
+
+	return ret;
+}
+
+static int rockchip_cpufreq_notifier(struct notifier_block *nb,
+				     unsigned long event, void *data)
+{
+	struct cpufreq_policy *policy = data;
+	struct cluster_info *cluster;
 
 	cluster = rockchip_cluster_info_lookup(policy->cpu);
 	if (!cluster)
 		return NOTIFY_BAD;
 
 	if (event == CPUFREQ_CREATE_POLICY) {
-		mdevp = kzalloc(sizeof(*mdevp), GFP_KERNEL);
-		if (!mdevp)
+		if (rockchip_cpufreq_add_monitor(cluster, policy))
 			return NOTIFY_BAD;
-		mdevp->type = MONITOR_TPYE_CPU;
-		mdevp->low_temp_adjust = rockchip_monitor_cpu_low_temp_adjust;
-		mdevp->high_temp_adjust = rockchip_monitor_cpu_high_temp_adjust;
-		mdevp->update_volt = rockchip_monitor_check_rate_volt;
-		mdevp->data = (void *)policy;
-		mdevp->opp_info = &cluster->opp_info;
-		cpumask_copy(&mdevp->allowed_cpus, policy->cpus);
-		mdev_info = rockchip_system_monitor_register(dev, mdevp);
-		if (IS_ERR(mdev_info)) {
-			kfree(mdevp);
-			dev_err(dev, "failed to register system monitor\n");
+		if (rockchip_cpufreq_add_dsu_qos_req(cluster, policy))
 			return NOTIFY_BAD;
-		}
-		mdev_info->devp = mdevp;
-		cluster->mdev_info = mdev_info;
 	} else if (event == CPUFREQ_REMOVE_POLICY) {
-		if (cluster->mdev_info) {
-			kfree(cluster->mdev_info->devp);
-			rockchip_system_monitor_unregister(cluster->mdev_info);
-			cluster->mdev_info = NULL;
-		}
+		rockchip_cpufreq_remove_monitor(cluster);
+		rockchip_cpufreq_remove_dsu_qos(cluster);
 	}
 
 	return NOTIFY_OK;
@@ -618,6 +818,31 @@ static struct notifier_block rockchip_cpufreq_notifier_block = {
 	.notifier_call = rockchip_cpufreq_notifier,
 };
 
+#ifdef MODULE
+static struct pm_qos_request idle_pm_qos;
+static int idle_disable_refcnt;
+static DEFINE_MUTEX(idle_disable_lock);
+
+static int rockchip_cpufreq_idle_state_disable(struct cpumask *cpumask,
+					       int index, bool disable)
+{
+	mutex_lock(&idle_disable_lock);
+
+	if (disable) {
+		if (idle_disable_refcnt == 0)
+			cpu_latency_qos_update_request(&idle_pm_qos, 0);
+		idle_disable_refcnt++;
+	} else {
+		if (--idle_disable_refcnt == 0)
+			cpu_latency_qos_update_request(&idle_pm_qos,
+						       PM_QOS_DEFAULT_VALUE);
+	}
+
+	mutex_unlock(&idle_disable_lock);
+
+	return 0;
+}
+#else
 static int rockchip_cpufreq_idle_state_disable(struct cpumask *cpumask,
 					       int index, bool disable)
 {
@@ -644,6 +869,24 @@ static int rockchip_cpufreq_idle_state_disable(struct cpumask *cpumask,
 	}
 
 	return 0;
+}
+#endif
+
+#define cpu_to_dsu_freq(freq)  ((freq) * 4 / 5)
+
+static int rockchip_cpufreq_update_dsu_req(struct cluster_info *cluster,
+					   unsigned int freq)
+{
+	struct device *dev = cluster->opp_info.dev;
+	unsigned int dsu_freq = rounddown(cpu_to_dsu_freq(freq), 100000);
+
+	if (cluster->is_opp_shared_dsu ||
+	    !freq_qos_request_active(&cluster->dsu_qos_req))
+		return 0;
+
+	dev_dbg(dev, "cpu to dsu: %u -> %u\n", freq, dsu_freq);
+
+	return freq_qos_update_request(&cluster->dsu_qos_req, dsu_freq);
 }
 
 static int rockchip_cpufreq_transition_notifier(struct notifier_block *nb,
@@ -673,6 +916,7 @@ static int rockchip_cpufreq_transition_notifier(struct notifier_block *nb,
 							    false);
 			cluster->is_idle_disabled = false;
 		}
+		rockchip_cpufreq_update_dsu_req(cluster, freqs->new);
 	}
 
 	return NOTIFY_OK;
@@ -680,6 +924,30 @@ static int rockchip_cpufreq_transition_notifier(struct notifier_block *nb,
 
 static struct notifier_block rockchip_cpufreq_transition_notifier_block = {
 	.notifier_call = rockchip_cpufreq_transition_notifier,
+};
+
+static int rockchip_cpufreq_panic_notifier(struct notifier_block *nb,
+					   unsigned long v, void *p)
+{
+	struct cluster_info *ci;
+	struct device *dev;
+
+	list_for_each_entry(ci, &cluster_info_list, list_head) {
+		dev = ci->opp_info.dev;
+
+		if (ci->regulator_count == 1)
+			dev_info(dev, "cur_freq: %lu Hz, volt: %lu uV\n",
+				 ci->rate, ci->volt);
+		else
+			dev_info(dev, "cur_freq: %lu Hz, volt_vdd: %lu uV, volt_mem: %lu uV\n",
+				 ci->rate, ci->volt, ci->mem_volt);
+	}
+
+	return 0;
+}
+
+static struct notifier_block rockchip_cpufreq_panic_notifier_block = {
+	.notifier_call = rockchip_cpufreq_panic_notifier,
 };
 
 static int __init rockchip_cpufreq_driver_init(void)
@@ -726,7 +994,15 @@ static int __init rockchip_cpufreq_driver_init(void)
 			pr_err("failed to register cpufreq notifier\n");
 			goto release_cluster_info;
 		}
+#ifdef MODULE
+		cpu_latency_qos_add_request(&idle_pm_qos, PM_QOS_DEFAULT_VALUE);
+#endif
 	}
+
+	ret = atomic_notifier_chain_register(&panic_notifier_list,
+					     &rockchip_cpufreq_panic_notifier_block);
+	if (ret)
+		pr_err("failed to register cpufreq panic notifier\n");
 
 	return PTR_ERR_OR_ZERO(platform_device_register_data(NULL, "cpufreq-dt",
 			       -1, (void *)&pdata,

@@ -24,6 +24,10 @@
 #include <linux/of_reserved_mem.h>
 #include "internal.h"
 
+#if IS_REACHABLE(CONFIG_ROCKCHIP_MINIDUMP)
+#include <soc/rockchip/rk_minidump.h>
+#endif
+
 #define RAMOOPS_KERNMSG_HDR "===="
 #define MIN_MEM_SIZE 4096UL
 
@@ -81,6 +85,9 @@ struct ramoops_context {
 	struct persistent_ram_zone *cprz;	/* Console zone */
 	struct persistent_ram_zone **fprzs;	/* Ftrace zones */
 	struct persistent_ram_zone *mprz;	/* PMSG zone */
+#ifdef CONFIG_PSTORE_BOOT_LOG
+	struct persistent_ram_zone **boot_przs;	/* BOOT log zones */
+#endif
 	phys_addr_t phys_addr;
 	unsigned long size;
 	unsigned int memtype;
@@ -88,6 +95,9 @@ struct ramoops_context {
 	size_t console_size;
 	size_t ftrace_size;
 	size_t pmsg_size;
+#ifdef CONFIG_PSTORE_BOOT_LOG
+	size_t boot_log_size;
+#endif
 	u32 flags;
 	struct persistent_ram_ecc_info ecc_info;
 	unsigned int max_dump_cnt;
@@ -98,6 +108,10 @@ struct ramoops_context {
 	unsigned int max_ftrace_cnt;
 	unsigned int ftrace_read_cnt;
 	unsigned int pmsg_read_cnt;
+#ifdef CONFIG_PSTORE_BOOT_LOG
+	unsigned int boot_log_read_cnt;
+	unsigned int max_boot_log_cnt;
+#endif
 	struct pstore_info pstore;
 };
 
@@ -173,6 +187,28 @@ static bool prz_ok(struct persistent_ram_zone *prz)
 	return !!prz && !!(persistent_ram_old_size(prz) +
 			   persistent_ram_ecc_string(prz, NULL, 0));
 }
+
+#ifdef CONFIG_PSTORE_BOOT_LOG
+ssize_t ramoops_pstore_read_for_boot_log(struct pstore_record *record)
+{
+	struct ramoops_context *cxt = record->psi->data;
+	struct persistent_ram_zone *prz;
+
+	if (!cxt)
+		return 0;
+
+	prz = cxt->boot_przs[record->id];
+
+	if (!prz)
+		return 0;
+
+	persistent_ram_free_old(prz);
+	persistent_ram_save_old(prz);
+	record->buf = prz->old_log;
+	record->size = prz->old_log_size;
+	return record->size;
+}
+#endif
 
 static ssize_t ramoops_pstore_read(struct pstore_record *record)
 {
@@ -258,10 +294,27 @@ static ssize_t ramoops_pstore_read(struct pstore_record *record)
 		}
 	}
 
+#ifdef CONFIG_PSTORE_BOOT_LOG
+	if (!prz_ok(prz)) {
+		while (cxt->boot_log_read_cnt < cxt->max_boot_log_cnt && !prz) {
+			prz = ramoops_get_next_prz(cxt->boot_przs, cxt->boot_log_read_cnt++, record);
+			if (!prz_ok(prz))
+				continue;
+		}
+	}
+#endif
+
 	if (!prz_ok(prz)) {
 		size = 0;
 		goto out;
 	}
+
+#ifdef CONFIG_PSTORE_BOOT_LOG
+	if (record->type == PSTORE_TYPE_BOOT_LOG) {
+		persistent_ram_free_old(prz);
+		persistent_ram_save_old(prz);
+	}
+#endif
 
 	size = persistent_ram_old_size(prz) - header_length;
 
@@ -468,6 +521,15 @@ static void ramoops_free_przs(struct ramoops_context *cxt)
 		kfree(cxt->fprzs);
 		cxt->max_ftrace_cnt = 0;
 	}
+#ifdef CONFIG_PSTORE_BOOT_LOG
+	/* Free boot log PRZs */
+	if (cxt->boot_przs) {
+		for (i = 0; i < cxt->max_boot_log_cnt; i++)
+			persistent_ram_free(cxt->boot_przs[i]);
+		kfree(cxt->boot_przs);
+		cxt->max_boot_log_cnt = 0;
+	}
+#endif
 }
 
 static int ramoops_init_przs(const char *name,
@@ -679,7 +741,7 @@ static int ramoops_parse_dt(struct platform_device *pdev,
 		field = value;						\
 	}
 
-	parse_u32("mem-type", pdata->record_size, pdata->mem_type);
+	parse_u32("mem-type", pdata->mem_type, pdata->mem_type);
 	parse_u32("record-size", pdata->record_size, 0);
 	parse_u32("console-size", pdata->console_size, 0);
 	parse_u32("ftrace-size", pdata->ftrace_size, 0);
@@ -687,6 +749,10 @@ static int ramoops_parse_dt(struct platform_device *pdev,
 	parse_u32("ecc-size", pdata->ecc_info.ecc_size, 0);
 	parse_u32("flags", pdata->flags, 0);
 	parse_u32("max-reason", pdata->max_reason, pdata->max_reason);
+#ifdef CONFIG_PSTORE_BOOT_LOG
+	parse_u32("boot-log-size", pdata->boot_log_size, 0);
+	parse_u32("boot-log-count", pdata->max_boot_log_cnt, 0);
+#endif
 
 #undef parse_u32
 
@@ -713,6 +779,49 @@ static int ramoops_parse_dt(struct platform_device *pdev,
 	return 0;
 }
 
+#if IS_REACHABLE(CONFIG_ROCKCHIP_MINIDUMP)
+static void _ramoops_register_ram_zone_info_to_minidump(struct persistent_ram_zone *prz)
+{
+	struct md_region md_entry = {};
+
+	strscpy(md_entry.name, prz->label, sizeof(md_entry.name));
+
+	md_entry.virt_addr = (u64)prz->vaddr;
+	md_entry.phys_addr = prz->paddr;
+	md_entry.size = prz->size;
+
+	if (rk_minidump_add_region(&md_entry) < 0)
+		pr_err("Failed to add %s in Minidump\n", prz->label);
+}
+
+static void ramoops_register_ram_zone_info_to_minidump(struct ramoops_context *cxt)
+{
+	int i = 0;
+	struct persistent_ram_zone *prz = NULL;
+
+	for (i = 0; i < cxt->max_boot_log_cnt; i++) {
+		prz = cxt->boot_przs[i];
+		_ramoops_register_ram_zone_info_to_minidump(prz);
+	}
+
+	for (i = 0; i < cxt->max_dump_cnt; i++) {
+		prz = cxt->dprzs[i];
+		_ramoops_register_ram_zone_info_to_minidump(prz);
+	}
+
+	for (i = 0; i < cxt->max_ftrace_cnt; i++) {
+		prz = cxt->fprzs[i];
+		_ramoops_register_ram_zone_info_to_minidump(prz);
+	}
+
+	prz = cxt->cprz;
+	_ramoops_register_ram_zone_info_to_minidump(prz);
+
+	prz = cxt->mprz;
+	_ramoops_register_ram_zone_info_to_minidump(prz);
+}
+#endif
+
 static int ramoops_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -722,6 +831,7 @@ static int ramoops_probe(struct platform_device *pdev)
 	size_t dump_mem_sz;
 	phys_addr_t paddr;
 	int err = -EINVAL;
+	int i = 0;
 
 	/*
 	 * Only a single ramoops area allowed at a time, so fail extra
@@ -747,13 +857,23 @@ static int ramoops_probe(struct platform_device *pdev)
 		goto fail_out;
 	}
 
+#ifdef CONFIG_PSTORE_BOOT_LOG
+	if (!pdata->mem_size || (!pdata->record_size && !pdata->console_size &&
+			!pdata->ftrace_size && !pdata->pmsg_size && !pdata->boot_log_size)) {
+		pr_err("The memory size and the record/console size must be "
+			"non-zero\n");
+		goto fail_out;
+	}
+#else
 	if (!pdata->mem_size || (!pdata->record_size && !pdata->console_size &&
 			!pdata->ftrace_size && !pdata->pmsg_size)) {
 		pr_err("The memory size and the record/console size must be "
 			"non-zero\n");
 		goto fail_out;
 	}
+#endif
 
+#ifndef CONFIG_ARCH_ROCKCHIP
 	if (pdata->record_size && !is_power_of_2(pdata->record_size))
 		pdata->record_size = rounddown_pow_of_two(pdata->record_size);
 	if (pdata->console_size && !is_power_of_2(pdata->console_size))
@@ -762,6 +882,7 @@ static int ramoops_probe(struct platform_device *pdev)
 		pdata->ftrace_size = rounddown_pow_of_two(pdata->ftrace_size);
 	if (pdata->pmsg_size && !is_power_of_2(pdata->pmsg_size))
 		pdata->pmsg_size = rounddown_pow_of_two(pdata->pmsg_size);
+#endif
 
 	cxt->size = pdata->mem_size;
 	cxt->phys_addr = pdata->mem_address;
@@ -772,21 +893,45 @@ static int ramoops_probe(struct platform_device *pdev)
 	cxt->pmsg_size = pdata->pmsg_size;
 	cxt->flags = pdata->flags;
 	cxt->ecc_info = pdata->ecc_info;
+#ifdef CONFIG_PSTORE_BOOT_LOG
+	cxt->boot_log_size = pdata->boot_log_size;
+	cxt->max_boot_log_cnt = pdata->max_boot_log_cnt;
+#endif
 
 	paddr = cxt->phys_addr;
 
 	dump_mem_sz = cxt->size - cxt->console_size - cxt->ftrace_size
 			- cxt->pmsg_size;
+#ifdef CONFIG_PSTORE_BOOT_LOG
+	dump_mem_sz -= cxt->boot_log_size;
+#endif
+
+#ifdef CONFIG_PSTORE_BOOT_LOG
+	err = ramoops_init_przs("boot-log", dev, cxt, &cxt->boot_przs, &paddr,
+				cxt->boot_log_size, -1,
+				&cxt->max_boot_log_cnt, 0, 0);
+	if (err)
+		goto fail_clear;
+	if (cxt->boot_log_size > 0)
+		for (i = 0; i < cxt->max_boot_log_cnt; i++)
+			pr_info("boot-log-%d\t0x%zx@%pa\n", i, cxt->boot_przs[i]->size, &cxt->boot_przs[i]->paddr);
+#endif
+
 	err = ramoops_init_przs("dmesg", dev, cxt, &cxt->dprzs, &paddr,
 				dump_mem_sz, cxt->record_size,
 				&cxt->max_dump_cnt, 0, 0);
 	if (err)
 		goto fail_out;
+	if (cxt->record_size > 0)
+		for (i = 0; i < cxt->max_dump_cnt; i++)
+			pr_info("dmesg-%d\t0x%zx@%pa\n", i, cxt->dprzs[i]->size, &cxt->dprzs[i]->paddr);
 
 	err = ramoops_init_prz("console", dev, cxt, &cxt->cprz, &paddr,
 			       cxt->console_size, 0);
 	if (err)
 		goto fail_init_cprz;
+	if (cxt->console_size > 0)
+		pr_info("console\t0x%zx@%pa\n", cxt->cprz->size, &cxt->cprz->paddr);
 
 	cxt->max_ftrace_cnt = (cxt->flags & RAMOOPS_FLAG_FTRACE_PER_CPU)
 				? nr_cpu_ids
@@ -798,11 +943,16 @@ static int ramoops_probe(struct platform_device *pdev)
 					? PRZ_FLAG_NO_LOCK : 0);
 	if (err)
 		goto fail_init_fprz;
+	if (cxt->ftrace_size > 0)
+		for (i = 0; i < cxt->max_ftrace_cnt; i++)
+			pr_info("ftrace-%d\t0x%zx@%pa\n", i, cxt->fprzs[i]->size, &cxt->fprzs[i]->paddr);
 
 	err = ramoops_init_prz("pmsg", dev, cxt, &cxt->mprz, &paddr,
 				cxt->pmsg_size, 0);
 	if (err)
 		goto fail_init_mprz;
+	if (cxt->pmsg_size > 0)
+		pr_info("pmsg\t0x%zx@%pa\n", cxt->mprz->size, &cxt->mprz->paddr);
 
 	cxt->pstore.data = cxt;
 	/*
@@ -822,6 +972,10 @@ static int ramoops_probe(struct platform_device *pdev)
 		cxt->pstore.flags |= PSTORE_FLAGS_FTRACE;
 	if (cxt->pmsg_size)
 		cxt->pstore.flags |= PSTORE_FLAGS_PMSG;
+#ifdef CONFIG_PSTORE_BOOT_LOG
+	if (cxt->boot_log_size)
+		cxt->pstore.flags |= PSTORE_FLAGS_BOOT_LOG;
+#endif
 
 	/*
 	 * Since bufsize is only used for dmesg crash dumps, it
@@ -855,7 +1009,9 @@ static int ramoops_probe(struct platform_device *pdev)
 	ramoops_console_size = pdata->console_size;
 	ramoops_pmsg_size = pdata->pmsg_size;
 	ramoops_ftrace_size = pdata->ftrace_size;
-
+#if IS_REACHABLE(CONFIG_ROCKCHIP_MINIDUMP)
+	ramoops_register_ram_zone_info_to_minidump(cxt);
+#endif
 	pr_info("using 0x%lx@0x%llx, ecc: %d\n",
 		cxt->size, (unsigned long long)cxt->phys_addr,
 		cxt->ecc_info.ecc_size);

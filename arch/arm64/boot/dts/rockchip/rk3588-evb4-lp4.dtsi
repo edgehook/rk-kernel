@@ -14,6 +14,14 @@
 		compatible = "pwm-fan";
 		#cooling-cells = <2>;
 		pwms = <&pwm14 0 50000 0>;
+		cooling-levels = <0 50 100 150 200 255>;
+		rockchip,temp-trips = <
+			50000	1
+			55000	2
+			60000	3
+			65000	4
+			70000	5
+		>;
 	};
 
 	pcie30_avdd1v8: pcie30-avdd1v8 {
@@ -190,6 +198,8 @@
 
 &i2c0 {
 	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c0m2_xfer>;
 
 	vdd_cpu_big0_s0: vdd_cpu_big0_mem_s0: rk8602@42 {
 		compatible = "rockchip,rk8602";
@@ -371,7 +381,7 @@
 		touch_gpio: touch-gpio {
 			rockchip,pins =
 				<0 RK_PD5 RK_FUNC_GPIO &pcfg_pull_up>,
-				<0 RK_PC6 RK_FUNC_GPIO &pcfg_pull_none>;
+				<0 RK_PC6 RK_FUNC_GPIO &pcfg_pull_up>;
 		};
 	};
 

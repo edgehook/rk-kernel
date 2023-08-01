@@ -26,18 +26,28 @@ void rkisp_unregister_stream_v32(struct rkisp_device *dev);
 void rkisp_mi_v32_isr(u32 mis_val, struct rkisp_device *dev);
 void rkisp_mipi_v32_isr(u32 phy, u32 packet, u32 overflow, u32 state, struct rkisp_device *dev);
 
+void rkisp_rockit_buf_state_clear(struct rkisp_stream *stream);
 int rkisp_rockit_buf_free(struct rkisp_stream *stream);
 void rkisp_rockit_dev_init(struct rkisp_device *dev);
-int rkisp_rockit_buf_done(struct rkisp_stream *stream);
+void rkisp_rockit_dev_deinit(void);
+bool rkisp_rockit_ctrl_fps(struct rkisp_stream *stream);
+int rkisp_rockit_fps_set(int *dst_fps, struct rkisp_stream *stream);
+int rkisp_rockit_fps_get(int *dst_fps, struct rkisp_stream *stream);
+int rkisp_rockit_buf_done(struct rkisp_stream *stream, int cmd);
 #else
 static inline int rkisp_register_stream_v32(struct rkisp_device *dev) { return -EINVAL; }
 static inline void rkisp_unregister_stream_v32(struct rkisp_device *dev) {}
 static inline void rkisp_mi_v32_isr(u32 mis_val, struct rkisp_device *dev) {}
 static inline void rkisp_mipi_v32_isr(u32 phy, u32 packet, u32 overflow, u32 state, struct rkisp_device *dev) {}
 
+static inline void rkisp_rockit_buf_state_clear(struct rkisp_stream *stream) { return; }
 static inline int rkisp_rockit_buf_free(struct rkisp_stream *stream) { return -EINVAL; }
 static inline void rkisp_rockit_dev_init(struct rkisp_device *dev) { return; }
-static inline int rkisp_rockit_buf_done(struct rkisp_stream *stream) { return -EINVAL; }
+static inline void rkisp_rockit_dev_deinit(void) {}
+static inline bool rkisp_rockit_ctrl_fps(struct rkisp_stream *stream) { return false; }
+static inline int rkisp_rockit_fps_set(int *dst_fps, struct rkisp_stream *stream) { return -EINVAL; }
+static inline int rkisp_rockit_fps_get(int *dst_fps, struct rkisp_stream *stream) { return -EINVAL; }
+static inline int rkisp_rockit_buf_done(struct rkisp_stream *stream, int cmd) { return -EINVAL; }
 #endif
 
 #if IS_ENABLED(CONFIG_ROCKCHIP_DVBM)

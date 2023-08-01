@@ -609,9 +609,7 @@ static int gc5035_g_frame_interval(struct v4l2_subdev *sd,
 	struct gc5035 *gc5035 = to_gc5035(sd);
 	const struct gc5035_mode *mode = gc5035->cur_mode;
 
-	mutex_lock(&gc5035->mutex);
 	fi->interval = mode->max_fps;
-	mutex_unlock(&gc5035->mutex);
 
 	return 0;
 }
@@ -698,8 +696,11 @@ static long gc5035_compat_ioctl32(struct v4l2_subdev *sd,
 		}
 
 		ret = gc5035_ioctl(sd, cmd, inf);
-		if (!ret)
+		if (!ret) {
 			ret = copy_to_user(up, inf, sizeof(*inf));
+			if (ret)
+				ret = -EFAULT;
+		}
 		kfree(inf);
 		break;
 	case RKMODULE_AWB_CFG:
@@ -712,12 +713,17 @@ static long gc5035_compat_ioctl32(struct v4l2_subdev *sd,
 		ret = copy_from_user(cfg, up, sizeof(*cfg));
 		if (!ret)
 			ret = gc5035_ioctl(sd, cmd, cfg);
+		else
+			ret = -EFAULT;
 		kfree(cfg);
 		break;
 	case RKMODULE_SET_QUICK_STREAM:
 		ret = copy_from_user(&stream, up, sizeof(u32));
 		if (!ret)
 			ret = gc5035_ioctl(sd, cmd, &stream);
+		else
+			ret = -EFAULT;
+
 		break;
 	default:
 		ret = -ENOTTY;
@@ -956,8 +962,8 @@ static int gc5035_open(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 }
 #endif
 
-static int sensor_g_mbus_config(struct v4l2_subdev *sd,
-				struct v4l2_mbus_config *config)
+static int sensor_g_mbus_config(struct v4l2_subdev *sd, unsigned int pad_id,
+				 struct v4l2_mbus_config *config)
 {
 	struct gc5035 *sensor = to_gc5035(sd);
 	struct device *dev = &sensor->client->dev;
@@ -965,7 +971,7 @@ static int sensor_g_mbus_config(struct v4l2_subdev *sd,
 	dev_info(dev, "%s(%d) enter!\n", __func__, __LINE__);
 
 	if (2 == sensor->lane_num) {
-		config->type = V4L2_MBUS_CSI2;
+		config->type = V4L2_MBUS_CSI2_DPHY;
 		config->flags = V4L2_MBUS_CSI2_2_LANE |
 						V4L2_MBUS_CSI2_CHANNEL_0 |
 						V4L2_MBUS_CSI2_CONTINUOUS_CLOCK;
@@ -985,8 +991,7 @@ static int gc5035_enum_frame_interval(struct v4l2_subdev *sd,
 	if (fie->index >= gc5035->cfg_num)
 		return -EINVAL;
 
-	if (fie->code != MEDIA_BUS_FMT_SRGGB10_1X10)
-		return -EINVAL;
+	fie->code = MEDIA_BUS_FMT_SRGGB10_1X10;
 
 	fie->width = supported_modes[fie->index].width;
 	fie->height = supported_modes[fie->index].height;
@@ -1014,7 +1019,6 @@ static const struct v4l2_subdev_core_ops gc5035_core_ops = {
 };
 
 static const struct v4l2_subdev_video_ops gc5035_video_ops = {
-	.g_mbus_config = sensor_g_mbus_config,
 	.s_stream = gc5035_s_stream,
 	.g_frame_interval = gc5035_g_frame_interval,
 };
@@ -1025,6 +1029,7 @@ static const struct v4l2_subdev_pad_ops gc5035_pad_ops = {
 	.enum_frame_interval = gc5035_enum_frame_interval,
 	.get_fmt = gc5035_get_fmt,
 	.set_fmt = gc5035_set_fmt,
+	.get_mbus_config = sensor_g_mbus_config,
 };
 
 static const struct v4l2_subdev_ops gc5035_subdev_ops = {
@@ -1039,8 +1044,8 @@ static int gc5035_set_test_pattern(struct gc5035 *gc5035, int value)
 
 	dev_info(&gc5035->client->dev, "Test Pattern!!\n");
 	ret = gc5035_write_reg(gc5035->client, 0xfe, 0x01);
-	ret = gc5035_write_reg(gc5035->client, 0x8c, value);
-	ret = gc5035_write_reg(gc5035->client, 0xfe, 0x00);
+	ret |= gc5035_write_reg(gc5035->client, 0x8c, value);
+	ret |= gc5035_write_reg(gc5035->client, 0xfe, 0x00);
 	return ret;
 }
 

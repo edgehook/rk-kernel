@@ -1835,11 +1835,20 @@ static void connector_bad_edid(struct drm_connector *connector,
 			       u8 *edid, int num_blocks)
 {
 	int i;
-	u8 num_of_ext = edid[0x7e];
+	u8 last_block;
+
+	/*
+	 * 0x7e in the EDID is the number of extension blocks. The EDID
+	 * is 1 (base block) + num_ext_blocks big. That means we can think
+	 * of 0x7e in the EDID of the _index_ of the last block in the
+	 * combined chunk of memory.
+	 */
+	last_block = edid[0x7e];
 
 	/* Calculate real checksum for the last edid extension block data */
-	connector->real_edid_checksum =
-		drm_edid_block_checksum(edid + num_of_ext * EDID_LENGTH);
+	if (last_block < num_blocks)
+		connector->real_edid_checksum =
+			drm_edid_block_checksum(edid + last_block * EDID_LENGTH);
 
 	if (connector->bad_edid_counter++ && !drm_debug_enabled(DRM_UT_KMS))
 		return;
@@ -1906,6 +1915,76 @@ int drm_add_override_edid_modes(struct drm_connector *connector)
 }
 EXPORT_SYMBOL(drm_add_override_edid_modes);
 
+#ifdef CONFIG_NO_GKI
+/*
+ * References:
+ * - CTA-861-H section 7.3.3 CTA Extension Version 3
+ */
+static int cea_db_collection_size(const u8 *cta)
+{
+	u8 d = cta[2];
+
+	if (d < 4 || d > 127)
+		return 0;
+
+	return d - 4;
+}
+
+#define CTA_EXT_DB_HF_EEODB		0x78
+#define CTA_DB_EXTENDED_TAG		7
+
+static int cea_db_tag(const u8 *db);
+static int cea_db_payload_len(const u8 *db);
+static int cea_db_extended_tag(const u8 *db);
+
+static bool cea_db_is_extended_tag(const void *db, int tag)
+{
+	return cea_db_tag(db) == CTA_DB_EXTENDED_TAG &&
+		cea_db_payload_len(db) >= 1 &&
+		cea_db_extended_tag(db) == tag;
+}
+
+static bool cea_db_is_hdmi_forum_eeodb(const void *db)
+{
+	return cea_db_is_extended_tag(db, CTA_EXT_DB_HF_EEODB) &&
+		cea_db_payload_len(db) >= 2;
+}
+
+static int edid_hfeeodb_extension_block_count(const struct edid *edid)
+{
+	const u8 *cta;
+
+	/* No extensions according to base block, no HF-EEODB. */
+	if (!edid->extensions)
+		return 0;
+
+	/* HF-EEODB is always in the first EDID extension block only */
+	cta = (u8 *)edid + EDID_LENGTH * 1;
+	if (cta[0] != CEA_EXT || cta[1] < 3)
+		return 0;
+
+	/* Need to have the data block collection, and at least 3 bytes. */
+	if (cea_db_collection_size(cta) < 3)
+		return 0;
+
+	/*
+	 * Sinks that include the HF-EEODB in their E-EDID shall include one and
+	 * only one instance of the HF-EEODB in the E-EDID, occupying bytes 4
+	 * through 6 of Block 1 of the E-EDID.
+	 */
+	if (!cea_db_is_hdmi_forum_eeodb(&cta[4]))
+		return 0;
+
+	return cta[4 + 2];
+}
+
+static int edid_hfeeodb_block_count(const struct edid *edid)
+{
+	int eeodb = edid_hfeeodb_extension_block_count(edid);
+
+	return eeodb ? eeodb + 1 : 0;
+}
+
 /**
  * drm_do_get_edid - get EDID data using a custom EDID block read function
  * @connector: connector we're probing
@@ -1926,6 +2005,120 @@ EXPORT_SYMBOL(drm_add_override_edid_modes);
  *
  * Return: Pointer to valid EDID or NULL if we couldn't find any.
  */
+struct edid *drm_do_get_edid(struct drm_connector *connector,
+	int (*get_edid_block)(void *data, u8 *buf, unsigned int block,
+			      size_t len),
+	void *data)
+{
+	int i, j = 0, valid_extensions = 0, num_blocks, invalid_blocks = 0;
+	u8 *edid, *new;
+	struct edid *override;
+
+	override = drm_get_override_edid(connector);
+	if (override)
+		return override;
+
+	edid = kmalloc(EDID_LENGTH, GFP_KERNEL);
+	if (!edid)
+		return NULL;
+
+	/* base block fetch */
+	for (i = 0; i < 4; i++) {
+		if (get_edid_block(data, edid, 0, EDID_LENGTH))
+			goto out;
+		if (drm_edid_block_valid(edid, 0, false,
+					 &connector->edid_corrupt))
+			break;
+		if (i == 0 && drm_edid_is_zero(edid, EDID_LENGTH)) {
+			connector->null_edid_counter++;
+			goto out;
+		}
+	}
+	if (i == 4)
+		goto out;
+
+	/* if there's no extensions, we're done */
+	valid_extensions = edid[0x7e];
+	if (valid_extensions == 0)
+		return (struct edid *)edid;
+
+	new = krealloc(edid, (valid_extensions + 1) * EDID_LENGTH, GFP_KERNEL);
+	if (!new)
+		goto out;
+	edid = new;
+
+	num_blocks = edid[0x7e] + 1;
+
+	for (j = 1; j < num_blocks; j++) {
+		u8 *block = edid + j * EDID_LENGTH;
+
+		for (i = 0; i < 4; i++) {
+			if (get_edid_block(data, block, j, EDID_LENGTH))
+				goto out;
+			if (drm_edid_block_valid(block, j, false, NULL))
+				break;
+		}
+
+		if (i == 4)
+			invalid_blocks++;
+
+		if (j == 1) {
+			/*
+			 * If the first EDID extension is a CTA extension, and
+			 * the first Data Block is HF-EEODB, override the
+			 * extension block count.
+			 *
+			 * Note: HF-EEODB could specify a smaller extension
+			 * count too, but we can't risk allocating a smaller
+			 * amount.
+			 */
+			int eeodb = edid_hfeeodb_block_count((const struct edid *)edid);
+
+			if (eeodb > num_blocks) {
+				num_blocks = eeodb;
+				new = krealloc(edid, num_blocks * EDID_LENGTH, GFP_KERNEL);
+				if (!new)
+					goto out;
+				edid = new;
+			}
+		}
+	}
+
+	if (invalid_blocks) {
+		u8 *base;
+
+		connector_bad_edid(connector, edid, edid[0x7e] + 1);
+
+		new = kmalloc_array(valid_extensions + 1, EDID_LENGTH,
+				    GFP_KERNEL);
+		if (!new)
+			goto out;
+
+		base = new;
+		for (i = 0; i <= edid[0x7e]; i++) {
+			u8 *block = edid + i * EDID_LENGTH;
+
+			if (!drm_edid_block_valid(block, i, false, NULL))
+				continue;
+
+			memcpy(base, block, EDID_LENGTH);
+			base += EDID_LENGTH;
+		}
+
+		new[EDID_LENGTH - 1] += new[0x7e] - valid_extensions;
+		new[0x7e] = valid_extensions;
+
+		kfree(edid);
+		edid = new;
+	}
+
+	return (struct edid *)edid;
+
+out:
+	kfree(edid);
+	return NULL;
+}
+#else
 struct edid *drm_do_get_edid(struct drm_connector *connector,
 	int (*get_edid_block)(void *data, u8 *buf, unsigned int block,
 			      size_t len),
@@ -1986,9 +2179,6 @@ struct edid *drm_do_get_edid(struct drm_connector *connector,
 
 		connector_bad_edid(connector, edid, edid[0x7e] + 1);
 
-		edid[EDID_LENGTH-1] += edid[0x7e] - valid_extensions;
-		edid[0x7e] = valid_extensions;
-
 		new = kmalloc_array(valid_extensions + 1, EDID_LENGTH,
 				    GFP_KERNEL);
 		if (!new)
@@ -2005,6 +2195,9 @@ struct edid *drm_do_get_edid(struct drm_connector *connector,
 			base += EDID_LENGTH;
 		}
 
+		new[EDID_LENGTH - 1] += new[0x7e] - valid_extensions;
+		new[0x7e] = valid_extensions;
+
 		kfree(edid);
 		edid = new;
 	}
@@ -2017,6 +2210,7 @@ out:
 	kfree(edid);
 	return NULL;
 }
+#endif
 EXPORT_SYMBOL_GPL(drm_do_get_edid);
 
 /**
@@ -3236,6 +3430,39 @@ add_detailed_modes(struct drm_connector *connector, struct edid *edid,
 /*
  * Search EDID for CEA extension block.
  */
+#ifdef CONFIG_NO_GKI
+static u8 *drm_find_edid_extension(const struct edid *edid,
+				   int ext_id, int *ext_index)
+{
+	u8 *edid_ext = NULL;
+	int i;
+	int len;
+
+	/* No EDID or EDID extensions */
+	if (edid == NULL || edid->extensions == 0)
+		return NULL;
+
+	if (edid_hfeeodb_extension_block_count(edid))
+		len = edid_hfeeodb_extension_block_count(edid);
+	else
+		len = edid->extensions;
+
+	/* Find CEA extension */
+	for (i = *ext_index; i < len; i++) {
+		edid_ext = (u8 *)edid + EDID_LENGTH * (i + 1);
+
+		if (edid_ext[0] == ext_id)
+			break;
+	}
+
+	if (i >= len)
+		return NULL;
+
+	*ext_index = i + 1;
+
+	return edid_ext;
+}
+#else
 static u8 *drm_find_edid_extension(const struct edid *edid,
 				   int ext_id, int *ext_index)
 {
@@ -3260,7 +3487,7 @@ static u8 *drm_find_edid_extension(const struct edid *edid,
 
 	return edid_ext;
 }
-
+#endif
 
 static u8 *drm_find_displayid_extension(const struct edid *edid,
 					int *length, int *idx,
@@ -4256,6 +4483,68 @@ static void drm_parse_y420cmdb_bitmap(struct drm_connector *connector,
 	hdmi->y420_cmdb_map = map;
 }
 
+#ifdef CONFIG_NO_GKI
+
+static int
+add_cea_modes(struct drm_connector *connector, struct edid *edid)
+{
+	const u8 *cea;
+	const u8 *db, *hdmi = NULL, *video = NULL;
+	u8 dbl, hdmi_len, video_len = 0;
+	int i, count = 0, modes = 0;
+	int ext_index = 0;
+
+	if (edid_hfeeodb_extension_block_count(edid))
+		count = edid_hfeeodb_extension_block_count(edid);
+	else
+		count = edid->extensions;
+
+	for (i = 0; i < count; i++) {
+		ext_index = i;
+
+		cea = drm_find_edid_extension(edid, CEA_EXT, &ext_index);
+		if (cea && cea_revision(cea) >= 3) {
+			int i, start, end;
+
+			if (cea_db_offsets(cea, &start, &end))
+				return 0;
+
+			for_each_cea_db(cea, i, start, end) {
+				db = &cea[i];
+				dbl = cea_db_payload_len(db);
+
+				if (cea_db_tag(db) == VIDEO_BLOCK) {
+					video = db + 1;
+					video_len = dbl;
+					modes += do_cea_modes(connector, video, dbl);
+				} else if (cea_db_is_hdmi_vsdb(db)) {
+					hdmi = db;
+					hdmi_len = dbl;
+				} else if (cea_db_is_y420vdb(db)) {
+					const u8 *vdb420 = &db[2];
+
+					/* Add 4:2:0(only) modes present in EDID */
+					modes += do_y420vdb_modes(connector,
+								  vdb420,
+								  dbl - 1);
+				}
+			}
+		}
+
+		/*
+		 * We parse the HDMI VSDB after having added the cea modes as we will
+		 * be patching their flags when the sink supports stereo 3D.
+		 */
+		if (hdmi)
+			modes += do_hdmi_vsdb_modes(connector, hdmi, hdmi_len, video,
+						    video_len);
+	}
+
+	return modes;
+}
+
+#else
+
 static int
 add_cea_modes(struct drm_connector *connector, struct edid *edid)
 {
@@ -4302,6 +4591,7 @@ add_cea_modes(struct drm_connector *connector, struct edid *edid)
 
 	return modes;
 }
+#endif
 
 static void fixup_detailed_cea_mode_clock(struct drm_display_mode *mode)
 {
@@ -4797,7 +5087,8 @@ bool drm_detect_monitor_audio(struct edid *edid)
 	if (!edid_ext)
 		goto end;
 
-	has_audio = ((edid_ext[3] & EDID_BASIC_AUDIO) != 0);
+	has_audio = (edid_ext[0] == CEA_EXT &&
+		    (edid_ext[3] & EDID_BASIC_AUDIO) != 0);
 
 	if (has_audio) {
 		DRM_DEBUG_KMS("Monitor has basic audio support\n");
@@ -5057,16 +5348,8 @@ static void drm_parse_hdmi_deep_color_info(struct drm_connector *connector,
 		  connector->name, dc_bpc);
 	info->bpc = dc_bpc;
 
-	/*
-	 * Deep color support mandates RGB444 support for all video
-	 * modes and forbids YCRCB422 support for all video modes per
-	 * HDMI 1.3 spec.
-	 */
-	info->color_formats = DRM_COLOR_FORMAT_RGB444;
-
 	/* YCRCB444 is optional according to spec. */
 	if (hdmi[6] & DRM_EDID_HDMI_DC_Y444) {
-		info->color_formats |= DRM_COLOR_FORMAT_YCRCB444;
 		DRM_DEBUG("%s: HDMI sink does YCRCB444 in deep color.\n",
 			  connector->name);
 	}
@@ -5230,6 +5513,7 @@ u32 drm_add_display_info(struct drm_connector *connector, const struct edid *edi
 	if (!(edid->input & DRM_EDID_INPUT_DIGITAL))
 		return quirks;
 
+	info->color_formats |= DRM_COLOR_FORMAT_RGB444;
 	drm_parse_cea_ext(connector, edid);
 
 	/*
@@ -5278,7 +5562,6 @@ u32 drm_add_display_info(struct drm_connector *connector, const struct edid *edi
 	DRM_DEBUG("%s: Assigning EDID-1.4 digital sink color depth as %d bpc.\n",
 			  connector->name, info->bpc);
 
-	info->color_formats |= DRM_COLOR_FORMAT_RGB444;
 	if (edid->features & DRM_EDID_FEATURE_RGB_YCRCB444)
 		info->color_formats |= DRM_COLOR_FORMAT_YCRCB444;
 	if (edid->features & DRM_EDID_FEATURE_RGB_YCRCB422)

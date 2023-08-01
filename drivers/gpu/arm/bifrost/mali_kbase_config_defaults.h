@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *
- * (C) COPYRIGHT 2013-2022 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2013-2023 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -90,9 +90,7 @@ enum {
 #define IPA_CONTROL_TIMER_DEFAULT_VALUE_MS ((u32)10) /* 10 milliseconds */
 #endif /* MALI_USE_CSF */
 
-/**
- * Default period for DVFS sampling (can be overridden by platform header)
- */
+/* Default period for DVFS sampling (can be overridden by platform header) */
 #ifndef DEFAULT_PM_DVFS_PERIOD
 #define DEFAULT_PM_DVFS_PERIOD 100 /* 100ms */
 #endif
@@ -161,11 +159,6 @@ enum {
  */
 #define DEFAULT_JS_RESET_TICKS_DUMPING   (15020) /* 1502s */
 
-/* Default number of milliseconds given for other jobs on the GPU to be
- * soft-stopped when the GPU needs to be reset.
- */
-#define DEFAULT_RESET_TIMEOUT_MS (3000) /* 3s */
-
 /* Nominal reference frequency that was used to obtain all following
  * <...>_TIMEOUT_CYCLES macros, in kHz.
  *
@@ -183,7 +176,7 @@ enum {
  * Based on 75000ms timeout at nominal 100MHz, as is required for Android - based
  * on scaling from a 50MHz GPU system.
  */
-#define CSF_FIRMWARE_TIMEOUT_CYCLES (7500000000)
+#define CSF_FIRMWARE_TIMEOUT_CYCLES (7500000000ull)
 
 /* Timeout in clock cycles for GPU Power Management to reach the desired
  * Shader, L2 and MCU state.
@@ -194,9 +187,27 @@ enum {
 
 /* Waiting timeout in clock cycles for GPU reset to complete.
  *
- * Based on 2500ms timeout at 100MHz, scaled from a 50MHz GPU system.
+ * Based on 2500ms timeout at 100MHz, scaled from a 50MHz GPU system
  */
 #define CSF_GPU_RESET_TIMEOUT_CYCLES (250000000)
+
+/* Waiting timeout in clock cycles for all active CSGs to be suspended.
+ *
+ * Based on 1500ms timeout at 100MHz, scaled from a 50MHz GPU system.
+ */
+#define CSF_CSG_SUSPEND_TIMEOUT_CYCLES (150000000)
+
+/* Waiting timeout in clock cycles for GPU firmware to boot.
+ *
+ * Based on 250ms timeout at 100MHz, scaled from a 50MHz GPU system.
+ */
+#define CSF_FIRMWARE_BOOT_TIMEOUT_CYCLES (25000000)
+
+/* Waiting timeout for a ping request to be acknowledged, in clock cycles.
+ *
+ * Based on 6000ms timeout at 100MHz, scaled from a 50MHz GPU system.
+ */
+#define CSF_FIRMWARE_PING_TIMEOUT_CYCLES (600000000ull)
 
 #else /* MALI_USE_CSF */
 
@@ -204,6 +215,21 @@ enum {
  * selector is used to retrieve the timeout, on JM GPUs.
  */
 #define JM_DEFAULT_TIMEOUT_CYCLES (150000000)
+
+/* Default number of milliseconds given for other jobs on the GPU to be
+ * soft-stopped when the GPU needs to be reset.
+ */
+#define JM_DEFAULT_RESET_TIMEOUT_MS (1) /* 1 ms */
+
+/* Default timeout in clock cycles to be used when checking if JS_COMMAND_NEXT
+ * is updated on HW side so a Job Slot is considered free.
+ * This timeout will only take effect on GPUs with low value for the minimum
+ * GPU clock frequency (<= 100MHz).
+ *
+ * Based on 1ms timeout at 100MHz. Will default to 0ms on GPUs with higher
+ * value for minimum GPU clock frequency.
+ */
+#define JM_DEFAULT_JS_FREE_TIMEOUT_CYCLES (100000)
 
 #endif /* MALI_USE_CSF */
 
@@ -241,5 +267,12 @@ enum {
  */
 #define DEFAULT_IR_THRESHOLD (192)
 
+/* Waiting time in clock cycles for the completion of a MMU operation.
+ *
+ * Ideally 1.6M GPU cycles required for the L2 cache (512KiB slice) flush.
+ *
+ * As a pessimistic value, 50M GPU cycles ( > 30 times bigger ) is chosen.
+ * It corresponds to 0.5s in GPU @ 100Mhz.
+ */
+#define MMU_AS_INACTIVE_WAIT_TIMEOUT_CYCLES ((u64)50 * 1024 * 1024)
 #endif /* _KBASE_CONFIG_DEFAULTS_H_ */
-

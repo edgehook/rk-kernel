@@ -77,6 +77,32 @@
 		default-brightness-level = <200>;
 	};
 
+	battery: battery {
+		compatible = "simple-battery";
+		charge-full-design-microamp-hours = <4500000>;
+	};
+
+	bt_sco: bt-sco {
+		status = "disabled";
+		compatible = "delta,dfbmcs320";
+		#sound-dai-cells = <1>;
+	};
+
+	bt_sound: bt-sound {
+		status = "disabled";
+		compatible = "simple-audio-card";
+		simple-audio-card,format = "dsp_a";
+		simple-audio-card,bitclock-inversion = <0>;
+		simple-audio-card,mclk-fs = <256>;
+		simple-audio-card,name = "rockchip,bt";
+		simple-audio-card,cpu {
+			sound-dai = <&i2s2_2ch>;
+		};
+		simple-audio-card,codec {
+			sound-dai = <&bt_sco 1>;
+		};
+	};
+
 	charge-animation {
 		compatible = "rockchip,uboot-charge";
 		rockchip,uboot-charge-on = <1>;
@@ -84,8 +110,36 @@
 		rockchip,uboot-low-power-voltage = <6800>;
 		rockchip,screen-on-voltage = <6900>;
 		rockchip,uboot-exit-charge-level = <2>;
-		rockchip,uboot-exit-charge-auto = <1>;
+		rockchip,uboot-exit-charge-auto = <0>;
+		rockchip,system-suspend = <1>;
+		regulator-on-in-mem = <&vdd_log_s0>, <&vcc_2v0_pldo_s3>,
+		      <&vdd2_ddr_s3>, <&vcc_1v1_nldo_s3>,
+		      <&vdd1_1v8_ddr_s3>, <&vcc_1v8_s3>,
+		      <&master_pldo6_s3>, <&vdd_0v75_s3>,
+		      <&vdd2l_0v9_ddr_s3>, <&vdd_1v8_pll_s0>, <&pldo6_s3>;
+
+		regulator-off-in-mem = <&vdd_gpu_s0>, <&vdd_npu_s0>,
+		       <&vdd_vdenc_s0>, <&vdd_gpu_mem_s0>, <&vdd_npu_mem_s0>,
+		       <&vdd_vdenc_mem_s0>, <&avcc_1v8_s0>, <&vcc_3v3_s0>,
+		       <&vccio_sd_s0>, <&master_nldo3>, <&avdd_0v75_s0>,
+		       <&vdd_0v85_s0>, <&vdd_cpu_big1_s0>, <&vdd_cpu_big0_s0>,
+		       <&vdd_cpu_lit_s0>, <&vdd_cpu_big1_mem_s0>, <&vdd_cpu_big0_mem_s0>,
+		       <&vcc_1v8_s0>, <&vdd_cpu_lit_mem_s0>, <&vddq_ddr_s0>,
+		       <&vdd_ddr_s0>, <&vcc_1v8_cam_s0>, <&avdd1v8_ddr_pll_s0>,
+		       <&vcc_3v3_sd_s0>, <&vcc_2v8_cam_s0>, <&vdd_0v75_pll_s0>,
+		       <&vdd_ddr_pll_s0>, <&slave_nldo3>, <&avdd_1v2_cam_s0>,
+		       <&avdd_1v2_s0>, <&vcc_3v3_s3>;
 		status = "okay";
+	};
+
+	dp0_sound: dp0-sound {
+		status = "okay";
+		compatible = "rockchip,hdmi";
+		rockchip,card-name= "rockchip-dp0";
+		rockchip,mclk-fs = <512>;
+		rockchip,cpu = <&spdif_tx2>;
+		rockchip,codec = <&dp0 1>;
+		rockchip,jack-det;
 	};
 
 	es7202_sound_micarray: es7202-sound-micarray {
@@ -180,7 +234,7 @@
 
 		port {
 			panel_in_edp: endpoint {
-				remote-endpoint = <&edp_out_panel>;
+				remote-endpoint = <&edp0_out>;
 			};
 		};
 	};
@@ -295,6 +349,10 @@
 	status = "okay";
 };
 
+&dp0_out {
+	link-frequencies = /bits/ 64 <5400000000>;
+};
+
 &dp0_in_vp1 {
 	status = "okay";
 };
@@ -303,20 +361,14 @@
 	support-psr;
 	force-hpd;
 	status = "okay";
-
-	ports {
-		port@1 {
-			reg = <1>;
-
-			edp_out_panel: endpoint {
-				remote-endpoint = <&panel_in_edp>;
-			};
-		};
-	};
 };
 
 &edp0_in_vp2 {
 	status = "okay";
+};
+
+&edp0_out {
+	remote-endpoint = <&panel_in_edp>;
 };
 
 &fiq_debugger {
@@ -330,6 +382,23 @@
 };
 
 &hdptxphy0 {
+	/* Single Vdiff Training Table for power reduction (optional) */
+	training-table = /bits/ 8 <
+		/* voltage swing 0, pre-emphasis 0->3 */
+		0x0d 0x00 0x00 0x00 0x00 0x00
+		0x0d 0x00 0x00 0x00 0x00 0x00
+		0x0d 0x00 0x00 0x00 0x00 0x00
+		0x0d 0x00 0x00 0x00 0x00 0x00
+		/* voltage swing 1, pre-emphasis 0->2 */
+		0x0d 0x00 0x00 0x00 0x00 0x00
+		0x0d 0x00 0x00 0x00 0x00 0x00
+		0x0d 0x00 0x00 0x00 0x00 0x00
+		/* voltage swing 2, pre-emphasis 0->1 */
+		0x0d 0x00 0x00 0x00 0x00 0x00
+		0x0d 0x00 0x00 0x00 0x00 0x00
+		/* voltage swing 3, pre-emphasis 0 */
+		0x0d 0x00 0x00 0x00 0x00 0x00
+	>;
 	status = "okay";
 };
 
@@ -365,6 +434,7 @@
 			 0x2F 0x00 0x64 0xA5 0xB5 0x00 0xF8 0x39>;
 		cellwise,dual-cell = <1>;
 		cellwise,monitor-interval-ms = <5000>;
+		monitored-battery = <&battery>;
 		power-supplies = <&bq25703>;
 	};
 
@@ -409,9 +479,9 @@
 		#sound-dai-cells = <0>;
 		compatible = "everest,es8388", "everest,es8323";
 		reg = <0x11>;
-		clocks = <&cru I2S0_8CH_MCLKOUT>;
+		clocks = <&mclkout_i2s0>;
 		clock-names = "mclk";
-		assigned-clocks = <&cru I2S0_8CH_MCLKOUT>;
+		assigned-clocks = <&mclkout_i2s0>;
 		assigned-clock-rates = <12288000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2s0_mclk>;
@@ -547,14 +617,6 @@
 	};
 };
 
-&csi2_dcphy0_hw {
-	status = "okay";
-};
-
-&csi2_dcphy1_hw {
-	status = "okay";
-};
-
 &csi2_dcphy0 {
 	status = "okay";
 
@@ -613,6 +675,14 @@
 			};
 		};
 	};
+};
+
+&mipi_dcphy0 {
+	status = "okay";
+};
+
+&mipi_dcphy1 {
+	status = "okay";
 };
 
 &mipi0_csi2 {
@@ -761,6 +831,12 @@
 		     &i2s0_sdo0>;
 };
 
+&i2s2_2ch {
+	pinctrl-0 = <&i2s2m1_lrck &i2s2m1_sclk &i2s2m1_sdi &i2s2m1_sdo>;
+	rockchip,bclk-fs = <32>;
+	status = "disabled";
+};
+
 &iep {
 	status = "okay";
 };
@@ -869,7 +945,7 @@
 		touch_gpio: touch-gpio {
 			rockchip,pins =
 				<1 RK_PB4 RK_FUNC_GPIO &pcfg_pull_up>,
-				<1 RK_PB5 RK_FUNC_GPIO &pcfg_pull_none>;
+				<1 RK_PB5 RK_FUNC_GPIO &pcfg_pull_up>;
 		};
 	};
 
@@ -1053,6 +1129,8 @@
 };
 
 &rkvenc0 {
+	venc-supply = <&vdd_vdenc_s0>;
+	mem-supply = <&vdd_vdenc_mem_s0>;
 	status = "okay";
 };
 
@@ -1061,6 +1139,8 @@
 };
 
 &rkvenc1 {
+	venc-supply = <&vdd_vdenc_s0>;
+	mem-supply = <&vdd_vdenc_mem_s0>;
 	status = "okay";
 };
 
@@ -1107,7 +1187,11 @@
 	vqmmc-supply = <&vccio_sd_s0>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&sdmmc_bus4 &sdmmc_clk &sdmmc_cmd &sdmmc_det>;
-	status = "disabled";
+	status = "okay";
+};
+
+&spdif_tx2 {
+	status = "okay";
 };
 
 &tsadc {
@@ -1208,6 +1292,10 @@
 };
 
 &vdpu_mmu {
+	status = "okay";
+};
+
+&vepu {
 	status = "okay";
 };
 

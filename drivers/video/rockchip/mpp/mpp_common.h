@@ -25,7 +25,8 @@
 #include <linux/platform_device.h>
 #include <soc/rockchip/pm_domains.h>
 
-#define MHZ			(1000 * 1000)
+#define MHZ				(1000 * 1000)
+#define MPP_WORK_TIMEOUT_DELAY		(500)
 
 #define MPP_MAX_MSG_NUM			(16)
 #define MPP_MAX_REG_TRANS_NUM		(60)
@@ -57,14 +58,16 @@ enum MPP_DEVICE_TYPE {
 	MPP_DEVICE_HEVC_DEC	= 8, /* 0x00000100 */
 	MPP_DEVICE_RKVDEC	= 9, /* 0x00000200 */
 	MPP_DEVICE_AVSPLUS_DEC	= 12, /* 0x00001000 */
-	MPP_DEVICE_JPGDEC	= 13, /* 0x00002000 */
+	MPP_DEVICE_RKJPEGD	= 13, /* 0x00002000 */
 
 	MPP_DEVICE_RKVENC	= 16, /* 0x00010000 */
 	MPP_DEVICE_VEPU1	= 17, /* 0x00020000 */
 	MPP_DEVICE_VEPU2	= 18, /* 0x00040000 */
+	MPP_DEVICE_VEPU2_JPEG	= 19, /* 0x00080000 */
 	MPP_DEVICE_VEPU22	= 24, /* 0x01000000 */
 
 	MPP_DEVICE_IEP2		= 28, /* 0x10000000 */
+	MPP_DEVICE_VDPP		= 29, /* 0x20000000 */
 	MPP_DEVICE_BUTT,
 };
 
@@ -86,6 +89,7 @@ enum MPP_DRIVER_TYPE {
 	MPP_DRIVER_RKVDEC2,
 	MPP_DRIVER_RKVENC2,
 	MPP_DRIVER_AV1DEC,
+	MPP_DRIVER_VDPP,
 	MPP_DRIVER_BUTT,
 };
 
@@ -189,6 +193,7 @@ struct mpp_task;
 struct mpp_session;
 struct mpp_dma_session;
 struct mpp_taskqueue;
+struct iommu_domain;
 
 /* data common struct for parse out */
 struct mpp_request {
@@ -244,6 +249,7 @@ struct mpp_hw_info {
 	u32 reg_end;
 	/* register of enable hardware */
 	int reg_en;
+	void *link_info;
 };
 
 struct mpp_trans_info {
@@ -281,6 +287,7 @@ struct mpp_clk_info {
 	u32 reduce_rate_hz;
 	/* record last used rate */
 	u32 used_rate_hz;
+	u32 real_rate_hz;
 };
 
 struct mpp_dev_var {
@@ -333,11 +340,15 @@ struct mpp_dev {
 	u32 msgs_cap;
 
 	int irq;
+	bool is_irq_startup;
 	u32 irq_status;
 
 	void __iomem *reg_base;
 	struct mpp_grf_info *grf_info;
 	struct mpp_iommu_info *iommu_info;
+	int (*fault_handler)(struct iommu_domain *iommu, struct device *iommu_dev,
+			     unsigned long iova, int status, void *arg);
+	resource_size_t io_base;
 
 	atomic_t reset_request;
 	atomic_t session_index;
@@ -355,6 +366,10 @@ struct mpp_dev {
 	/* multi-core data */
 	struct list_head queue_link;
 	s32 core_id;
+
+	/* common per-device procfs */
+	u32 disable;
+	u32 timing_check;
 };
 
 struct mpp_session {
@@ -418,6 +433,18 @@ enum mpp_task_state {
 	TASK_STATE_ABORT	= 9,
 	TASK_STATE_ABORT_READY	= 10,
 	TASK_STATE_PROC_DONE	= 11,
+
+	/* timing debug state */
+	TASK_TIMING_CREATE	= 16,
+	TASK_TIMING_CREATE_END	= 17,
+	TASK_TIMING_PENDING	= 18,
+	TASK_TIMING_RUN		= 19,
+	TASK_TIMING_TO_SCHED	= 20,
+	TASK_TIMING_RUN_END	= 21,
+	TASK_TIMING_IRQ		= 22,
+	TASK_TIMING_TO_CANCEL	= 23,
+	TASK_TIMING_ISR		= 24,
+	TASK_TIMING_FINISH	= 25,
 };
 
 /* The context for the a task */
@@ -446,6 +473,19 @@ struct mpp_task {
 	/* record context running start time */
 	ktime_t start;
 	ktime_t part;
+
+	/* debug timing */
+	ktime_t on_create;
+	ktime_t on_create_end;
+	ktime_t on_pending;
+	ktime_t on_run;
+	ktime_t on_sched_timeout;
+	ktime_t on_run_end;
+	ktime_t on_irq;
+	ktime_t on_cancel_timeout;
+	ktime_t on_isr;
+	ktime_t on_finish;
+
 	/* hardware info for current task */
 	struct mpp_hw_info *hw_info;
 	u32 task_index;
@@ -457,6 +497,8 @@ struct mpp_task {
 	/* for multi-core */
 	struct mpp_dev *mpp;
 	s32 core_id;
+	/* hw cycles */
+	u32 hw_cycles;
 };
 
 struct mpp_taskqueue {
@@ -471,7 +513,7 @@ struct mpp_taskqueue {
 	struct list_head session_attach;
 	/* link to session session_link for detached sessions */
 	struct list_head session_detach;
-	u32 detach_count;
+	atomic_t detach_count;
 
 	atomic_t task_id;
 	/* lock for pending list */
@@ -499,7 +541,10 @@ struct mpp_taskqueue {
 	atomic_t reset_request;
 	struct mpp_dev *cores[MPP_MAX_CORE_NUM];
 	unsigned long core_idle;
+	u32 core_id_max;
 	u32 core_count;
+	unsigned long dev_active_flags;
+	u32 iommu_fault;
 };
 
 struct mpp_reset_group {
@@ -536,6 +581,9 @@ struct mpp_service {
 	struct mutex session_lock;
 	struct list_head session_list;
 	u32 session_count;
+
+	/* global timing record flag */
+	u32 timing_en;
 };
 
 /*
@@ -626,6 +674,8 @@ int mpp_task_init(struct mpp_session *session,
 		  struct mpp_task *task);
 int mpp_task_finish(struct mpp_session *session,
 		    struct mpp_task *task);
+void mpp_task_run_begin(struct mpp_task *task, u32 timing_en, u32 timeout);
+void mpp_task_run_end(struct mpp_task *task, u32 timing_en);
 int mpp_task_finalize(struct mpp_session *session,
 		      struct mpp_task *task);
 int mpp_task_dump_mem_region(struct mpp_dev *mpp,
@@ -633,9 +683,17 @@ int mpp_task_dump_mem_region(struct mpp_dev *mpp,
 int mpp_task_dump_reg(struct mpp_dev *mpp,
 		      struct mpp_task *task);
 int mpp_task_dump_hw_reg(struct mpp_dev *mpp);
+void mpp_task_dump_timing(struct mpp_task *task, s64 time_diff);
+
+void mpp_reg_show(struct mpp_dev *mpp, u32 offset);
+void mpp_reg_show_range(struct mpp_dev *mpp, u32 start, u32 end);
 void mpp_free_task(struct kref *ref);
 
-int mpp_session_deinit(struct mpp_session *session);
+void mpp_session_deinit(struct mpp_session *session);
+void mpp_session_cleanup_detach(struct mpp_taskqueue *queue,
+				struct kthread_work *work);
+
+int mpp_taskqueue_pending_to_run(struct mpp_taskqueue *queue, struct mpp_task *task);
 
 int mpp_dev_probe(struct mpp_dev *mpp,
 		  struct platform_device *pdev);
@@ -660,6 +718,7 @@ int mpp_set_grf(struct mpp_grf_info *grf_info);
 
 int mpp_time_record(struct mpp_task *task);
 int mpp_time_diff(struct mpp_task *task);
+int mpp_time_diff_with_hw_time(struct mpp_task *task, u32 clk_hz);
 int mpp_time_part_diff(struct mpp_task *task);
 
 int mpp_write_req(struct mpp_dev *mpp, u32 *regs,
@@ -807,12 +866,16 @@ mpp_get_task_used_device(const struct mpp_task *task,
 struct proc_dir_entry *
 mpp_procfs_create_u32(const char *name, umode_t mode,
 		      struct proc_dir_entry *parent, void *data);
+void mpp_procfs_create_common(struct proc_dir_entry *parent, struct mpp_dev *mpp);
 #else
 static inline struct proc_dir_entry *
 mpp_procfs_create_u32(const char *name, umode_t mode,
 		      struct proc_dir_entry *parent, void *data)
 {
 	return 0;
+}
+void mpp_procfs_create_common(struct proc_dir_entry *parent, struct mpp_dev *mpp)
+{
 }
 #endif
 
@@ -837,8 +900,9 @@ extern struct platform_driver rockchip_rkvenc2_driver;
 extern struct platform_driver rockchip_av1dec_driver;
 extern struct platform_driver rockchip_av1_iommu_driver;
 
-extern struct platform_device *av1dec_device_create(void);
 extern int av1dec_driver_register(struct platform_driver *drv);
+extern void av1dec_driver_unregister(struct platform_driver *drv);
 extern struct bus_type av1dec_bus;
+extern struct platform_driver rockchip_vdpp_driver;
 
 #endif

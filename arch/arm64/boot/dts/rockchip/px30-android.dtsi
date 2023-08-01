@@ -6,7 +6,7 @@
 
 / {
 	chosen: chosen {
-		bootargs = "earlycon=uart8250,mmio32,0xff160000 console=ttyFIQ0 androidboot.baseband=N/A androidboot.veritymode=enforcing androidboot.hardware=rk30board androidboot.console=ttyFIQ0 init=/init kpti=0";
+		bootargs = "earlycon=uart8250,mmio32,0xff160000 console=ttyFIQ0 init=/init kpti=0";
 	};
 
 	fiq-debugger {
@@ -14,7 +14,7 @@
 		rockchip,serial-id = <2>;
 		rockchip,wake-irq = <0>;
 		/* If enable uart uses irq instead of fiq */
-		rockchip,irq-mode-enable = <0>;
+		rockchip,irq-mode-enable = <1>;
 		rockchip,baudrate = <1500000>;  /* Only 115200 and 1500000 */
 		interrupts = <GIC_SPI 127 IRQ_TYPE_LEVEL_LOW>;
 		pinctrl-names = "default";
@@ -49,6 +49,17 @@
 			ftrace-size = <0x00000>;
 			pmsg-size = <0x50000>;
 		};
+
+		vendor_storage_rm: vendor-storage-rm@00000000 {
+			compatible = "rockchip,vendor-storage-rm";
+			reg = <0x0 0x0 0x0 0x0>;
+		};
+	};
+
+	vendor_storage: vendor-storage {
+		compatible = "rockchip,ram-vendor-storage";
+		memory-region = <&vendor_storage_rm>;
+		status = "okay";
 	};
 };
 
@@ -58,7 +69,6 @@
 
 &display_subsystem {
 	status = "disabled";
-	ports = <&vopb_out>, <&vopl_out>;
 	logo-memory-region = <&drm_logo>;
 
 	route {

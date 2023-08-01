@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) Fuzhou Rockchip Electronics Co.Ltd
+ * Copyright (C) Rockchip Electronics Co.Ltd
  * Author: Felix Zeng <felix.zeng@rock-chips.com>
  */
 
@@ -14,13 +14,17 @@
 #define __user
 #endif
 
+#ifndef __packed
+#define __packed __attribute__((packed))
+#endif
+
 #define RKNPU_OFFSET_VERSION 0x0
+#define RKNPU_OFFSET_VERSION_NUM 0x4
 #define RKNPU_OFFSET_PC_OP_EN 0x8
 #define RKNPU_OFFSET_PC_DATA_ADDR 0x10
 #define RKNPU_OFFSET_PC_DATA_AMOUNT 0x14
 #define RKNPU_OFFSET_PC_TASK_CONTROL 0x30
 #define RKNPU_OFFSET_PC_DMA_BASE_ADDR 0x34
-#define RKNPU_OFFSET_PC_TASK_STATUS 0x3c
 
 #define RKNPU_OFFSET_INT_MASK 0x20
 #define RKNPU_OFFSET_INT_CLEAR 0x24
@@ -35,6 +39,8 @@
 #define RKNPU_OFFSET_ENABLE_MASK 0xf008
 
 #define RKNPU_INT_CLEAR 0x1ffff
+
+#define RKNPU_PC_DATA_EXTRA_AMOUNT 4
 
 #define RKNPU_STR_HELPER(x) #x
 
@@ -69,10 +75,15 @@ enum e_rknpu_mem_type {
 	RKNPU_MEM_SECURE = 1 << 6,
 	/* allocate from non-dma32 zone */
 	RKNPU_MEM_NON_DMA32 = 1 << 7,
+	/* request SRAM */
+	RKNPU_MEM_TRY_ALLOC_SRAM = 1 << 8,
+	/* request NBUF */
+	RKNPU_MEM_TRY_ALLOC_NBUF = 1 << 9,
 	RKNPU_MEM_MASK = RKNPU_MEM_NON_CONTIGUOUS | RKNPU_MEM_CACHEABLE |
 			 RKNPU_MEM_WRITE_COMBINE | RKNPU_MEM_KERNEL_MAPPING |
 			 RKNPU_MEM_IOMMU | RKNPU_MEM_ZEROING |
-			 RKNPU_MEM_SECURE | RKNPU_MEM_NON_DMA32
+			 RKNPU_MEM_SECURE | RKNPU_MEM_NON_DMA32 |
+			 RKNPU_MEM_TRY_ALLOC_SRAM | RKNPU_MEM_TRY_ALLOC_NBUF
 };
 
 /* sync mode definitions. */
@@ -119,6 +130,10 @@ enum e_rknpu_action {
 	RKNPU_GET_TOTAL_RW_AMOUNT = 17,
 	RKNPU_GET_IOMMU_EN = 18,
 	RKNPU_SET_PROC_NICE = 19,
+	RKNPU_POWER_ON = 20,
+	RKNPU_POWER_OFF = 21,
+	RKNPU_GET_TOTAL_SRAM_SIZE = 22,
+	RKNPU_GET_FREE_SRAM_SIZE = 23,
 };
 
 /**
@@ -130,6 +145,8 @@ enum e_rknpu_action {
  *	- this size value would be page-aligned internally.
  * @obj_addr: address of RKNPU memory object.
  * @dma_addr: dma address that access by rknpu.
+ * @sram_size: user-desired sram memory allocation size.
+ *  - this size value would be page-aligned internally.
  */
 struct rknpu_mem_create {
 	__u32 handle;
@@ -137,6 +154,7 @@ struct rknpu_mem_create {
 	__u64 size;
 	__u64 obj_addr;
 	__u64 dma_addr;
+	__u64 sram_size;
 };
 
 /**
@@ -157,10 +175,12 @@ struct rknpu_mem_map {
  *
  * @handle:	handle of the buffer.
  * @reserved: reserved for padding.
+ * @obj_addr: rknpu_mem_object addr.
  */
 struct rknpu_mem_destroy {
 	__u32 handle;
 	__u32 reserved;
+	__u64 obj_addr;
 };
 
 /**
@@ -192,7 +212,7 @@ struct rknpu_mem_sync {
  * @int_status: interrupt status
  * @regcfg_amount: register config number
  * @regcfg_offset: offset for register config
- * @regcmd_data: data for register command
+ * @regcmd_addr: address for register command
  *
  */
 struct rknpu_task {
@@ -204,7 +224,7 @@ struct rknpu_task {
 	__u32 int_status;
 	__u32 regcfg_amount;
 	__u32 regcfg_offset;
-	__u64 regcmd_data;
+	__u64 regcmd_addr;
 } __packed;
 
 /**
@@ -217,7 +237,6 @@ struct rknpu_task {
 struct rknpu_subcore_task {
 	__u32 task_start;
 	__u32 task_number;
-	__u32 task_end;
 };
 
 /**
@@ -231,10 +250,11 @@ struct rknpu_subcore_task {
  * @priority: submit priority
  * @task_obj_addr: address of task object
  * @regcfg_obj_addr: address of register config object
+ * @task_base_addr: task base address
  * @user_data: (optional) user data
- * @sequence: submit sequence
  * @core_mask: core mask of rknpu
  * @fence_fd: dma fence fd
+ * @subcore_task: subcore task
  *
  */
 struct rknpu_submit {
@@ -246,8 +266,8 @@ struct rknpu_submit {
 	__s32 priority;
 	__u64 task_obj_addr;
 	__u64 regcfg_obj_addr;
+	__u64 task_base_addr;
 	__u64 user_data;
-	__u64 sequence;
 	__u32 core_mask;
 	__s32 fence_fd;
 	struct rknpu_subcore_task subcore_task[5];
@@ -272,7 +292,10 @@ struct rknpu_action {
 #define RKNPU_MEM_DESTROY 0x04
 #define RKNPU_MEM_SYNC 0x05
 
-#if defined(__arm__) || defined(__aarch64__)
+#define RKNPU_IOC_MAGIC 'r'
+#define RKNPU_IOW(nr, type) _IOW(RKNPU_IOC_MAGIC, nr, type)
+#define RKNPU_IOR(nr, type) _IOR(RKNPU_IOC_MAGIC, nr, type)
+#define RKNPU_IOWR(nr, type) _IOWR(RKNPU_IOC_MAGIC, nr, type)
 
 #include <drm/drm.h>
 
@@ -289,6 +312,13 @@ struct rknpu_action {
 #define DRM_IOCTL_RKNPU_MEM_SYNC                                               \
 	DRM_IOWR(DRM_COMMAND_BASE + RKNPU_MEM_SYNC, struct rknpu_mem_sync)
 
-#endif
+#define IOCTL_RKNPU_ACTION RKNPU_IOWR(RKNPU_ACTION, struct rknpu_action)
+#define IOCTL_RKNPU_SUBMIT RKNPU_IOWR(RKNPU_SUBMIT, struct rknpu_submit)
+#define IOCTL_RKNPU_MEM_CREATE                                                 \
+	RKNPU_IOWR(RKNPU_MEM_CREATE, struct rknpu_mem_create)
+#define IOCTL_RKNPU_MEM_MAP RKNPU_IOWR(RKNPU_MEM_MAP, struct rknpu_mem_map)
+#define IOCTL_RKNPU_MEM_DESTROY                                                \
+	RKNPU_IOWR(RKNPU_MEM_DESTROY, struct rknpu_mem_destroy)
+#define IOCTL_RKNPU_MEM_SYNC RKNPU_IOWR(RKNPU_MEM_SYNC, struct rknpu_mem_sync)
 
 #endif

@@ -44,7 +44,7 @@ out:
 
 int dwc3_host_init(struct dwc3 *dwc)
 {
-	struct property_entry	props[4];
+	struct property_entry	props[5];
 	struct platform_device	*xhci;
 	int			ret, irq;
 	struct resource		*res;
@@ -107,6 +107,9 @@ int dwc3_host_init(struct dwc3 *dwc)
 	if (DWC3_VER_IS_WITHIN(DWC3, ANY, 300A))
 		props[prop_idx++] = PROPERTY_ENTRY_BOOL("quirk-broken-port-ped");
 
+	if (!dwc->dis_u2_susphy_quirk)
+		props[prop_idx++] = PROPERTY_ENTRY_BOOL("xhci-u2-broken-suspend");
+
 	if (prop_idx) {
 		ret = platform_device_add_properties(xhci, props);
 		if (ret) {
@@ -130,4 +133,5 @@ err:
 void dwc3_host_exit(struct dwc3 *dwc)
 {
 	platform_device_unregister(dwc->xhci);
+	dwc->xhci = NULL;
 }

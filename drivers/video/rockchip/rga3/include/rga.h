@@ -15,11 +15,10 @@
 #define RGA_IOC_GET_HW_VERSION		RGA_IOR(0x2, struct rga_hw_versions_t)
 #define RGA_IOC_IMPORT_BUFFER		RGA_IOWR(0x3, struct rga_buffer_pool)
 #define RGA_IOC_RELEASE_BUFFER		RGA_IOW(0x4, struct rga_buffer_pool)
-
-#define RGA_START_CONFIG		RGA_IOR(0x5, uint32_t)
-#define RGA_END_CONFIG			RGA_IOWR(0x6, struct rga_user_ctx_t)
-#define RGA_CMD_CONFIG			RGA_IOWR(0x7, struct rga_user_ctx_t)
-#define RGA_CANCEL_CONFIG		RGA_IOWR(0x8, uint32_t)
+#define RGA_IOC_REQUEST_CREATE		RGA_IOR(0x5, uint32_t)
+#define RGA_IOC_REQUEST_SUBMIT		RGA_IOWR(0x6, struct rga_user_request)
+#define RGA_IOC_REQUEST_CONFIG		RGA_IOWR(0x7, struct rga_user_request)
+#define RGA_IOC_REQUEST_CANCEL		RGA_IOWR(0x8, uint32_t)
 
 #define RGA_BLIT_SYNC			0x5017
 #define RGA_BLIT_ASYNC			0x5018
@@ -32,7 +31,7 @@
 #define RGA_IMPORT_DMA			0x601d
 #define RGA_RELEASE_DMA			0x601e
 
-#define RGA_CMD_NUM_MAX 1
+#define RGA_TASK_NUM_MAX		50
 
 #define RGA_OUT_OF_RESOURCES		-10
 #define RGA_MALLOC_ERROR		-11
@@ -102,6 +101,11 @@ enum {
 	RGA_RASTER_MODE			 = 0x1 << 0,
 	RGA_FBC_MODE			 = 0x1 << 1,
 	RGA_TILE_MODE			 = 0x1 << 2,
+};
+
+enum {
+	RGA_10BIT_COMPACT		= 0x0,
+	RGA_10BIT_INCOMPACT		= 0x1,
 };
 
 enum {
@@ -221,6 +225,8 @@ struct rga_memory_parm {
 	uint32_t width;
 	uint32_t height;
 	uint32_t format;
+
+	uint32_t size;
 };
 
 struct rga_external_buffer {
@@ -230,7 +236,7 @@ struct rga_external_buffer {
 	uint32_t handle;
 	struct rga_memory_parm memory_parm;
 
-	uint8_t reserve[256];
+	uint8_t reserve[252];
 };
 
 struct rga_buffer_pool {
@@ -495,7 +501,7 @@ struct rga_img_info_t {
 	uint16_t rotate_mode;
 	uint16_t rd_mode;
 
-	uint16_t is_10b_compact;
+	uint16_t compact_mode;
 	uint16_t is_10b_endian;
 
 	uint16_t enable;
@@ -846,16 +852,18 @@ struct rga_mpi_job_t {
 	int ctx_id;
 };
 
-struct rga_user_ctx_t {
-	uint64_t cmd_ptr;
-	uint32_t cmd_num;
+struct rga_user_request {
+	uint64_t task_ptr;
+	uint32_t task_num;
 	uint32_t id;
 	uint32_t sync_mode;
-	uint32_t out_fence_fd;
+	uint32_t release_fence_fd;
 
 	uint32_t mpi_config_flags;
 
-	uint8_t reservr[124];
+	uint32_t acquire_fence_fd;
+
+	uint8_t reservr[120];
 };
 
 int rga_mpi_commit(struct rga_mpi_job_t *mpi_job);

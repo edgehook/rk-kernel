@@ -8,6 +8,8 @@
 #ifndef _PHY_ROCKCHIP_CSI2_DPHY_COMMON_H_
 #define _PHY_ROCKCHIP_CSI2_DPHY_COMMON_H_
 
+#include <linux/rk-camera-module.h>
+
 #define PHY_MAX 16
 #define MAX_DEV_NAME_LEN 32
 
@@ -17,6 +19,7 @@ enum csi2_dphy_chip_id {
 	CHIP_ID_RK3588 = 0x1,
 	CHIP_ID_RK3588_DCPHY = 0x2,
 	CHIP_ID_RV1106 = 0x3,
+	CHIP_ID_RK3562 = 0x4,
 };
 
 enum csi2_dphy_rx_pads {
@@ -52,15 +55,18 @@ struct csi2_sensor {
 };
 
 struct csi2_dphy_hw;
+struct samsung_mipi_dcphy;
 
 struct dphy_drv_data {
 	const char dev_name[MAX_DEV_NAME_LEN];
+	enum csi2_dphy_vendor vendor;
 };
 
 struct csi2_dphy {
 	struct device *dev;
 	struct list_head list;
 	struct csi2_dphy_hw *dphy_hw;
+	struct samsung_mipi_dcphy *samsung_phy;
 	struct v4l2_async_notifier notifier;
 	struct v4l2_subdev sd;
 	struct mutex mutex; /* lock for updating protection */
@@ -72,6 +78,7 @@ struct csi2_dphy {
 	bool is_streaming;
 	enum csi2_dphy_lane_mode lane_mode;
 	const struct dphy_drv_data *drv_data;
+	struct rkmodule_csi_dphy_param dphy_param;
 };
 
 struct dphy_hw_drv_data {
@@ -110,6 +117,11 @@ struct csi2_dphy_hw {
 
 	int (*stream_on)(struct csi2_dphy *dphy, struct v4l2_subdev *sd);
 	int (*stream_off)(struct csi2_dphy *dphy, struct v4l2_subdev *sd);
+	int (*ttl_mode_enable)(struct csi2_dphy_hw *hw);
+	void (*ttl_mode_disable)(struct csi2_dphy_hw *hw);
 };
+
+int rockchip_csi2_dphy_hw_init(void);
+int rockchip_csi2_dphy_init(void);
 
 #endif

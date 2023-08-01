@@ -702,16 +702,28 @@ static int __kprobes do_translation_fault(unsigned long far,
 	return 0;
 }
 
+#ifdef CONFIG_ROCKCHIP_ARM64_ALIGN_FAULT_FIX
+extern int alignment_fixup_helper(unsigned long addr, unsigned int esr,
+				  struct pt_regs *regs);
+#endif
 static int do_alignment_fault(unsigned long far, unsigned int esr,
 			      struct pt_regs *regs)
 {
+#ifdef CONFIG_ROCKCHIP_ARM64_ALIGN_FAULT_FIX
+	if (!alignment_fixup_helper(far, esr, regs))
+		return 0;
+#endif
 	do_bad_area(far, esr, regs);
 	return 0;
 }
 
 static int do_bad(unsigned long far, unsigned int esr, struct pt_regs *regs)
 {
-	return 1; /* "fault" */
+	unsigned long addr = untagged_addr(far);
+	int ret = 1;
+
+	trace_android_vh_handle_tlb_conf(addr, esr, &ret);
+	return ret;
 }
 
 static int do_sea(unsigned long far, unsigned int esr, struct pt_regs *regs)

@@ -47,6 +47,7 @@ extern void lru_cache_enable(void);
 
 struct cma cma_areas[MAX_CMA_AREAS];
 unsigned cma_area_count;
+static DEFINE_MUTEX(cma_mutex);
 
 phys_addr_t cma_get_base(const struct cma *cma)
 {
@@ -181,7 +182,9 @@ int __init cma_init_reserved_mem(phys_addr_t base, phys_addr_t size,
 				 struct cma **res_cma)
 {
 	struct cma *cma;
+#if !IS_ENABLED(CONFIG_CMA_INACTIVE)
 	phys_addr_t alignment;
+#endif
 
 	/* Sanity checks */
 	if (cma_area_count == ARRAY_SIZE(cma_areas)) {
@@ -192,6 +195,7 @@ int __init cma_init_reserved_mem(phys_addr_t base, phys_addr_t size,
 	if (!size || !memblock_is_region_reserved(base, size))
 		return -EINVAL;
 
+#if !IS_ENABLED(CONFIG_CMA_INACTIVE)
 	/* ensure minimal alignment required by mm core */
 	alignment = PAGE_SIZE <<
 			max_t(unsigned long, MAX_ORDER - 1, pageblock_order);
@@ -202,6 +206,7 @@ int __init cma_init_reserved_mem(phys_addr_t base, phys_addr_t size,
 
 	if (ALIGN(base, alignment) != base || ALIGN(size, alignment) != size)
 		return -EINVAL;
+#endif
 
 	/*
 	 * Each reserved area must be initialised later, when more kernel
@@ -275,6 +280,7 @@ int __init cma_declare_contiguous_nid(phys_addr_t base,
 	if (alignment && !is_power_of_2(alignment))
 		return -EINVAL;
 
+#if !IS_ENABLED(CONFIG_CMA_INACTIVE)
 	/*
 	 * Sanitise input arguments.
 	 * Pages both ends in CMA area could be merged into adjacent unmovable
@@ -289,6 +295,7 @@ int __init cma_declare_contiguous_nid(phys_addr_t base,
 			&base, &alignment);
 		goto err;
 	}
+#endif
 	base = ALIGN(base, alignment);
 	size = ALIGN(size, alignment);
 	limit &= ~(alignment - 1);
@@ -386,14 +393,23 @@ int __init cma_declare_contiguous_nid(phys_addr_t base,
 	if (ret)
 		goto free_mem;
 
+#if !IS_ENABLED(CONFIG_CMA_INACTIVE)
 	pr_info("Reserved %ld MiB at %pa\n", (unsigned long)size / SZ_1M,
 		&base);
+#else
+	pr_info("Reserved %ld KiB at %pa\n", (unsigned long)size / SZ_1K,
+		&base);
+#endif
 	return 0;
 
 free_mem:
 	memblock_free(base, size);
 err:
+#if !IS_ENABLED(CONFIG_CMA_INACTIVE)
 	pr_err("Failed to reserve %ld MiB\n", (unsigned long)size / SZ_1M);
+#else
+	pr_err("Failed to reserve %ld KiB\n", (unsigned long)size / SZ_1K);
+#endif
 	return ret;
 }
 
@@ -519,7 +535,9 @@ struct page *cma_alloc(struct cma *cma, size_t count, unsigned int align,
 			lru_cache_enable();
 			goto out;
 		}
+		mutex_lock(&cma_mutex);
 		ret = alloc_contig_range(pfn, pfn + count, MIGRATE_CMA, gfp_mask, &info);
+		mutex_unlock(&cma_mutex);
 		cma_info.nr_migrated += info.nr_migrated;
 		cma_info.nr_reclaimed += info.nr_reclaimed;
 		cma_info.nr_mapped += info.nr_mapped;
@@ -626,6 +644,26 @@ bool cma_release(struct cma *cma, const struct page *pages, unsigned int count)
 	return true;
 }
 EXPORT_SYMBOL_GPL(cma_release);
+
+#ifdef CONFIG_NO_GKI
+unsigned long cma_used_pages(void)
+{
+	struct cma *cma;
+	unsigned long used;
+	unsigned long val = 0;
+	int i;
+
+	for (i = 0; i < cma_area_count; i++) {
+		cma = &cma_areas[i];
+		mutex_lock(&cma->lock);
+		used = bitmap_weight(cma->bitmap, (int)cma_bitmap_maxno(cma));
+		mutex_unlock(&cma->lock);
+		val += used << cma->order_per_bit;
+	}
+	return val;
+}
+EXPORT_SYMBOL_GPL(cma_used_pages);
+#endif
 
 int cma_for_each_area(int (*it)(struct cma *cma, void *data), void *data)
 {

@@ -4,7 +4,7 @@
 #ifndef _RKISP_ISP_STATS_H
 #define _RKISP_ISP_STATS_H
 
-#include <linux/rkisp1-config.h>
+#include <linux/rk-isp1-config.h>
 #include <linux/interrupt.h>
 #include <linux/kfifo.h>
 #include "common.h"
@@ -65,6 +65,7 @@ struct rkisp_isp_stats_vdev {
 	u32 wr_buf_idx;
 	bool rd_stats_from_ddr;
 
+	bool rdbk_drop;
 	bool rdbk_mode;
 	u32 isp_rdbk;
 	u32 isp3a_rdbk;
@@ -72,6 +73,9 @@ struct rkisp_isp_stats_vdev {
 	struct rkisp_dummy_buffer tmp_statsbuf;
 	struct rkisp_buffer *cur_buf;
 	struct rkisp_buffer *nxt_buf;
+
+	bool af_meas_done_next;
+	bool ae_meas_done_next;
 };
 
 void rkisp_stats_rdbk_enable(struct rkisp_isp_stats_vdev *stats_vdev, bool en);
